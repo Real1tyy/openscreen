@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { SourceSelector } from "./components/launch/SourceSelector";
 import { Toaster } from "./components/ui/sonner";
@@ -7,6 +7,8 @@ import { ShortcutsConfigDialog } from "./components/video-editor/ShortcutsConfig
 import VideoEditor from "./components/video-editor/VideoEditor";
 import { ShortcutsProvider } from "./contexts/ShortcutsContext";
 import { loadAllCustomFonts } from "./lib/customFonts";
+
+const HeadlessExport = lazy(() => import("./components/HeadlessExport"));
 
 export default function App() {
 	const [windowType, setWindowType] = useState("");
@@ -40,6 +42,8 @@ export default function App() {
 						<ShortcutsConfigDialog />
 					</ShortcutsProvider>
 				);
+			case "headless-export":
+				return <HeadlessExport />;
 			default:
 				return (
 					<div className="w-full h-full bg-background text-foreground">

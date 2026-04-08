@@ -321,6 +321,20 @@ export default function VideoEditor() {
 	useEffect(() => {
 		async function loadInitialData() {
 			try {
+				// Check if a file was provided via CLI argument
+				const cliFile = await window.electronAPI.getCliInputFile();
+				if (cliFile) {
+					setVideoSourcePath(cliFile);
+					setVideoPath(toFileUrl(cliFile));
+					setWebcamVideoSourcePath(null);
+					setWebcamVideoPath(null);
+					setCurrentProjectPath(null);
+					setLastSavedSnapshot(
+						createProjectSnapshot({ screenVideoPath: cliFile }, INITIAL_EDITOR_STATE),
+					);
+					return;
+				}
+
 				const currentProjectResult = await window.electronAPI.loadCurrentProjectFile();
 				if (currentProjectResult.success && currentProjectResult.project) {
 					const restored = await applyLoadedProject(

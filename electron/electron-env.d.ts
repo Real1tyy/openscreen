@@ -139,7 +139,32 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;
 		setLocale: (locale: string) => Promise<void>;
+
+		// CLI support
+		getCliInputFile: () => Promise<string | null>;
+		getHeadlessExportConfig: () => Promise<HeadlessExportConfig | null>;
+		sendHeadlessExportProgress: (percentage: number) => void;
+		sendHeadlessExportDone: (result: {
+			success: boolean;
+			data?: ArrayBuffer;
+			error?: string;
+		}) => Promise<void>;
 	};
+}
+
+interface HeadlessExportConfig {
+	inputFile: string;
+	outputFile: string;
+	blur: boolean;
+	shadow: boolean;
+	shadowIntensity: number;
+	motionBlur: number;
+	roundness: number;
+	padding: number;
+	background: string;
+	resolution: { width: number; height: number } | null;
+	bitrate: number | null;
+	fps: number;
 }
 
 interface ProcessedDesktopSource {

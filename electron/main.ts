@@ -12,6 +12,7 @@ import {
 	systemPreferences,
 	Tray,
 } from "electron";
+import { type CliOptions, parseCliArgs } from "./cli";
 import { mainT, setMainLocale } from "./i18n";
 import { registerIpcHandlers } from "./ipc/handlers";
 import { createEditorWindow, createHudOverlayWindow, createSourceSelectorWindow } from "./windows";
@@ -26,6 +27,22 @@ if (process.platform === "darwin") {
 }
 
 export const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
+
+// --- CLI argument parsing ---
+// Commander handles --help and --version automatically (exits the process).
+// Invalid options throw with a helpful message.
+const cliOptions: CliOptions = parseCliArgs(process.argv);
+
+if (cliOptions.export && !cliOptions.inputFile) {
+	console.error("Error: --export requires an input video file.");
+	console.error("Usage: openscreen --export /path/to/video.mp4 -o output.mp4");
+	process.exit(1);
+}
+
+// When in headless export mode, disable GPU compositing to avoid EGL/Ozone issues
+if (cliOptions.export) {
+	process.env["HEADLESS"] = "true";
+}
 
 async function ensureRecordingsDir() {
 	try {
@@ -396,5 +413,129 @@ app.whenReady().then(async () => {
 		},
 		switchToHudWrapper,
 	);
-	createWindow();
+
+	// Always register the CLI input file handler so the renderer can query it
+	ipcMain.handle("get-cli-input-file", () => cliOptions.inputFile);
+
+	if (cliOptions.export && cliOptions.inputFile) {
+		// Feature 2: Headless export mode
+		await runHeadlessExport(cliOptions);
+	} else if (cliOptions.inputFile) {
+		// Feature 1: Open file directly in editor
+		await openFileInEditor(cliOptions.inputFile);
+	} else {
+		// Default: show HUD overlay
+		createWindow();
+	}
 });
+
+// --- Feature 1: Open a video file directly in the editor ---
+
+async function openFileInEditor(filePath: string) {
+	try {
+		await fs.access(filePath);
+	} catch {
+		console.error(`Error: File not found: ${filePath}`);
+		app.quit();
+		return;
+	}
+
+	createEditorWindowWrapper();
+}
+
+// --- Feature 2: Headless export (hidden window, export, write to disk, exit) ---
+
+async function runHeadlessExport(opts: CliOptions) {
+	const inputFile = opts.inputFile!;
+	const outputFile = opts.output!;
+
+	try {
+		await fs.access(inputFile);
+	} catch {
+		console.error(`Error: File not found: ${inputFile}`);
+		process.exit(1);
+	}
+
+	console.log(`[CLI] Exporting: ${inputFile}`);
+	console.log(`[CLI] Output:    ${outputFile}`);
+
+	const exportConfig = {
+		inputFile,
+		outputFile,
+		blur: opts.blur,
+		shadow: opts.shadow,
+		shadowIntensity: opts.shadowIntensity,
+		motionBlur: opts.motionBlur,
+		roundness: opts.roundness,
+		padding: opts.padding,
+		background: opts.background,
+		resolution: opts.resolution,
+		bitrate: opts.bitrate,
+		fps: opts.fps,
+	};
+
+	// Create a hidden BrowserWindow to run the export in renderer context
+	// (WebCodecs APIs require Chromium's renderer process)
+	const exportWindow = new BrowserWindow({
+		show: false,
+		width: 800,
+		height: 600,
+		webPreferences: {
+			preload: path.join(path.dirname(fileURLToPath(import.meta.url)), "preload.mjs"),
+			nodeIntegration: false,
+			contextIsolation: true,
+			webSecurity: false,
+			backgroundThrottling: false,
+		},
+	});
+
+	// IPC: send export config when renderer is ready
+	ipcMain.handle("get-headless-export-config", () => exportConfig);
+
+	// IPC: receive export progress
+	ipcMain.on("headless-export-progress", (_, percentage: number) => {
+		process.stdout.write(`\r[CLI] Export progress: ${Math.round(percentage)}%`);
+	});
+
+	// IPC: receive export result
+	const exportPromise = new Promise<void>((resolve, reject) => {
+		ipcMain.handle(
+			"headless-export-done",
+			async (_, result: { success: boolean; data?: ArrayBuffer; error?: string }) => {
+				if (result.success && result.data) {
+					try {
+						await fs.writeFile(outputFile, Buffer.from(result.data));
+						console.log(`\n[CLI] Export complete: ${outputFile}`);
+						resolve();
+					} catch (writeError) {
+						console.error(`\n[CLI] Failed to write output: ${writeError}`);
+						reject(writeError);
+					}
+				} else {
+					console.error(`\n[CLI] Export failed: ${result.error || "Unknown error"}`);
+					reject(new Error(result.error || "Export failed"));
+				}
+			},
+		);
+	});
+
+	// Load the headless export page
+	const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+	if (VITE_DEV_SERVER_URL) {
+		exportWindow.loadURL(`${VITE_DEV_SERVER_URL}?windowType=headless-export`);
+	} else {
+		const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
+		exportWindow.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { windowType: "headless-export" },
+		});
+	}
+
+	try {
+		await exportPromise;
+	} catch {
+		// Error already logged
+	} finally {
+		exportWindow.close();
+		app.quit();
+	}
+}

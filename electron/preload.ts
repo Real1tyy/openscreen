@@ -142,4 +142,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("request-save-before-close", listener);
 		return () => ipcRenderer.removeListener("request-save-before-close", listener);
 	},
+
+	// CLI support
+	getCliInputFile: () => {
+		return ipcRenderer.invoke("get-cli-input-file");
+	},
+	getHeadlessExportConfig: () => {
+		return ipcRenderer.invoke("get-headless-export-config");
+	},
+	sendHeadlessExportProgress: (percentage: number) => {
+		ipcRenderer.send("headless-export-progress", percentage);
+	},
+	sendHeadlessExportDone: (result: { success: boolean; data?: ArrayBuffer; error?: string }) => {
+		return ipcRenderer.invoke("headless-export-done", result);
+	},
 });
