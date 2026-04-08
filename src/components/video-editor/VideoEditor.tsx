@@ -73,6 +73,13 @@ import {
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 
+function formatTrimMs(ms: number): string {
+	const totalSec = ms / 1000;
+	const min = Math.floor(totalSec / 60);
+	const sec = totalSec % 60;
+	return min > 0 ? `${min}:${sec.toFixed(1).padStart(4, "0")}` : `${sec.toFixed(1)}s`;
+}
+
 export default function VideoEditor() {
 	const {
 		state: editorState,
@@ -147,6 +154,11 @@ export default function VideoEditor() {
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
+
+	// Quick-trim: Y marks start, O marks end and creates trim region
+	const [trimMarkStartMs, setTrimMarkStartMs] = useState<number | null>(null);
+	const trimMarkStartMsRef = useRef(trimMarkStartMs);
+	trimMarkStartMsRef.current = trimMarkStartMs;
 
 	const { shortcuts, isMac } = useShortcuts();
 	const t = useScopedT("editor");
@@ -1089,11 +1101,36 @@ export default function VideoEditor() {
 					playback.video.paused ? playback.play().catch(console.error) : playback.pause();
 				}
 			}
+
+			// Quick-trim shortcuts: I = mark start, O = mark end & apply trim
+			if (isInput) return;
+			if (key === "i" && !mod && !e.shiftKey && !e.altKey) {
+				e.preventDefault();
+				setTrimMarkStartMs(Math.round(currentTimeRef.current * 1000));
+			}
+			if (key === "o" && !mod && !e.shiftKey && !e.altKey) {
+				e.preventDefault();
+				const startMs = trimMarkStartMsRef.current;
+				if (startMs == null) return;
+				const endMs = Math.round(currentTimeRef.current * 1000);
+				if (endMs <= startMs) return;
+				const id = `trim-${nextTrimIdRef.current++}`;
+				pushState((prev) => ({
+					trimRegions: [
+						...prev.trimRegions,
+						{ id, startMs, endMs },
+					],
+				}));
+				setSelectedTrimId(id);
+				setSelectedZoomId(null);
+				setSelectedAnnotationId(null);
+				setTrimMarkStartMs(null);
+			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [undo, redo, shortcuts, isMac]);
+	}, [undo, redo, shortcuts, isMac, pushState]);
 
 	useEffect(() => {
 		if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {
@@ -1641,6 +1678,13 @@ export default function VideoEditor() {
 										: "w-full h-full flex flex-col items-center justify-center bg-black/40 rounded-2xl border border-white/5 shadow-2xl overflow-hidden relative"
 								}
 							>
+								{/* Quick-trim mark indicator */}
+								{trimMarkStartMs != null && (
+									<div className="absolute top-2 right-2 z-50 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500/90 text-white text-xs font-medium shadow-lg">
+										<span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+										Trim start: {formatTrimMs(trimMarkStartMs)} — press O to trim
+									</div>
+								)}
 								{/* Video preview */}
 								<div className="w-full flex justify-center items-center flex-auto mt-1.5">
 									<div
