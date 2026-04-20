@@ -14,7 +14,7 @@ import {
 } from "electron";
 import { type CliOptions, parseCliArgs } from "./cli";
 import { mainT, setMainLocale } from "./i18n";
-import { registerIpcHandlers } from "./ipc/handlers";
+import { approveFilePath, registerIpcHandlers } from "./ipc/handlers";
 import { createEditorWindow, createHudOverlayWindow, createSourceSelectorWindow } from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -440,6 +440,7 @@ async function openFileInEditor(filePath: string) {
 		return;
 	}
 
+	approveFilePath(filePath);
 	createEditorWindowWrapper();
 }
 
@@ -456,6 +457,7 @@ async function runHeadlessExport(opts: CliOptions) {
 		process.exit(1);
 	}
 
+	approveFilePath(inputFile);
 	console.log(`[CLI] Exporting: ${inputFile}`);
 	console.log(`[CLI] Output:    ${outputFile}`);
 

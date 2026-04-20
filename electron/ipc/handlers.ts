@@ -32,7 +32,7 @@ const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([".webm", ".mp4", ".mov", ".avi"
  */
 const approvedPaths = new Set<string>();
 
-function approveFilePath(filePath: string): void {
+export function approveFilePath(filePath: string): void {
 	approvedPaths.add(path.resolve(filePath));
 }
 

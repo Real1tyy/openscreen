@@ -105,11 +105,15 @@ Examples:
   $ openscreen --export input.mp4 -o polished.mp4 --background "#1a1a2e" --shadow`,
 	);
 
+// Chromium/Electron flags that leak into process.argv
+const CHROMIUM_FLAGS = new Set(["--no-sandbox", "--disable-gpu", "--enable-logging"]);
+
 export function parseCliArgs(argv: string[]): CliOptions {
-	// Commander needs the first two elements to be node binary + script path.
-	// In Electron packaged apps argv[0] is the app binary itself, so we
-	// prepend a dummy element to keep commander happy.
-	const normalizedArgv = argv[0]?.includes("electron") ? argv : ["electron", ".", ...argv.slice(1)];
+	// Strip Electron binary + script path, then filter out Chromium flags
+	const userArgs = (argv[0]?.includes("electron") ? argv.slice(2) : argv.slice(1)).filter(
+		(arg) => !CHROMIUM_FLAGS.has(arg) && !arg.startsWith("--type="),
+	);
+	const normalizedArgv = ["electron", ".", ...userArgs];
 
 	program.parse(normalizedArgv);
 
