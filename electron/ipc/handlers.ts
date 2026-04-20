@@ -949,4 +949,14 @@ export function registerIpcHandlers(
 			return { success: false, error: String(error) };
 		}
 	});
+
+	ipcMain.handle("write-text-file", async (_, filePath: string, content: string) => {
+		try {
+			await fs.writeFile(filePath, content, "utf-8");
+			return { success: true };
+		} catch (error) {
+			console.error("Failed to write text file:", error);
+			return { success: false, error: String(error) };
+		}
+	});
 }

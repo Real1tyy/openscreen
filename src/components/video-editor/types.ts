@@ -47,6 +47,12 @@ export interface TrimRegion {
 	endMs: number;
 }
 
+export interface ChapterMarker {
+	id: string;
+	timestampMs: number;
+	name: string;
+}
+
 export type AnnotationType = "text" | "image" | "figure";
 
 export type ArrowDirection =

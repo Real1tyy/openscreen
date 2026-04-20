@@ -139,6 +139,7 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;
 		setLocale: (locale: string) => Promise<void>;
+		writeTextFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
 
 		// CLI support
 		getCliInputFile: () => Promise<string | null>;

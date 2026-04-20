@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type {
 	AnnotationRegion,
+	ChapterMarker,
 	CropRegion,
 	SpeedRegion,
 	TrimRegion,
@@ -26,6 +27,7 @@ export interface EditorState {
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
+	chapters: ChapterMarker[];
 	cropRegion: CropRegion;
 	wallpaper: string;
 	shadowIntensity: number;
@@ -45,6 +47,7 @@ export const INITIAL_EDITOR_STATE: EditorState = {
 	trimRegions: [],
 	speedRegions: [],
 	annotationRegions: [],
+	chapters: [],
 	cropRegion: DEFAULT_CROP_REGION,
 	wallpaper: "/wallpapers/wallpaper1.jpg",
 	shadowIntensity: 0,

@@ -54,6 +54,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
 	type AnnotationRegion,
+	type ChapterMarker,
 	type CursorTelemetryPoint,
 	clampFocusToDepth,
 	DEFAULT_ANNOTATION_POSITION,
@@ -80,6 +81,38 @@ function formatTrimMs(ms: number): string {
 	return min > 0 ? `${min}:${sec.toFixed(1).padStart(4, "0")}` : `${sec.toFixed(1)}s`;
 }
 
+function formatChaptersForExport(
+	chapters: ChapterMarker[],
+	trimRegions: TrimRegion[],
+): string {
+	const sorted = [...chapters].sort((a, b) => a.timestampMs - b.timestampMs);
+	const sortedTrims = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
+
+	return sorted
+		.map((ch) => {
+			// Adjust timestamp for trimmed regions before this chapter
+			let adjustedMs = ch.timestampMs;
+			for (const trim of sortedTrims) {
+				if (trim.endMs <= ch.timestampMs) {
+					adjustedMs -= trim.endMs - trim.startMs;
+				} else if (trim.startMs < ch.timestampMs) {
+					adjustedMs -= ch.timestampMs - trim.startMs;
+				}
+			}
+			adjustedMs = Math.max(0, adjustedMs);
+			const totalSec = Math.floor(adjustedMs / 1000);
+			const hours = Math.floor(totalSec / 3600);
+			const min = Math.floor((totalSec % 3600) / 60);
+			const sec = totalSec % 60;
+			const ts =
+				hours > 0
+					? `${hours}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+					: `${min}:${String(sec).padStart(2, "0")}`;
+			return `${ts} ${ch.name || "Untitled"}`;
+		})
+		.join("\n");
+}
+
 export default function VideoEditor() {
 	const {
 		state: editorState,
@@ -95,6 +128,7 @@ export default function VideoEditor() {
 		trimRegions,
 		speedRegions,
 		annotationRegions,
+		chapters,
 		cropRegion,
 		wallpaper,
 		shadowIntensity,
@@ -154,6 +188,10 @@ export default function VideoEditor() {
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
+	const nextChapterIdRef = useRef(1);
+	const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+	const chaptersRef = useRef(chapters);
+	chaptersRef.current = chapters;
 
 	// Quick-trim: Y marks start, O marks end and creates trim region
 	const [trimMarkStartMs, setTrimMarkStartMs] = useState<number | null>(null);
@@ -723,6 +761,34 @@ export default function VideoEditor() {
 		[pushState],
 	);
 
+	const handleAddChapter = useCallback(() => {
+		const timestampMs = Math.round(currentTimeRef.current * 1000);
+		const id = `chapter-${nextChapterIdRef.current++}`;
+		pushState((prev) => ({
+			chapters: [...prev.chapters, { id, timestampMs, name: "" }],
+		}));
+		setEditingChapterId(id);
+	}, [pushState]);
+
+	const handleRenameChapter = useCallback(
+		(id: string, name: string) => {
+			pushState((prev) => ({
+				chapters: prev.chapters.map((ch) => (ch.id === id ? { ...ch, name } : ch)),
+			}));
+			setEditingChapterId(null);
+		},
+		[pushState],
+	);
+
+	const handleDeleteChapter = useCallback(
+		(id: string) => {
+			pushState((prev) => ({
+				chapters: prev.chapters.filter((ch) => ch.id !== id),
+			}));
+		},
+		[pushState],
+	);
+
 	const handleZoomSpanChange = useCallback(
 		(id: string, span: Span) => {
 			pushState((prev) => ({
@@ -1126,11 +1192,37 @@ export default function VideoEditor() {
 				setSelectedAnnotationId(null);
 				setTrimMarkStartMs(null);
 			}
+
+			// Chapter shortcuts: C = add chapter, [ / ] = navigate between chapters
+			if (key === "c" && !mod && !e.shiftKey && !e.altKey) {
+				e.preventDefault();
+				handleAddChapter();
+			}
+			if (key === "[" && !mod && !e.shiftKey && !e.altKey) {
+				e.preventDefault();
+				const nowMs = Math.round(currentTimeRef.current * 1000);
+				const sorted = [...chaptersRef.current].sort((a, b) => a.timestampMs - b.timestampMs);
+				const prev = [...sorted].reverse().find((ch) => ch.timestampMs < nowMs - 100);
+				if (prev) {
+					const playback = videoPlaybackRef.current;
+					if (playback?.video) playback.video.currentTime = prev.timestampMs / 1000;
+				}
+			}
+			if (key === "]" && !mod && !e.shiftKey && !e.altKey) {
+				e.preventDefault();
+				const nowMs = Math.round(currentTimeRef.current * 1000);
+				const sorted = [...chaptersRef.current].sort((a, b) => a.timestampMs - b.timestampMs);
+				const next = sorted.find((ch) => ch.timestampMs > nowMs + 100);
+				if (next) {
+					const playback = videoPlaybackRef.current;
+					if (playback?.video) playback.video.currentTime = next.timestampMs / 1000;
+				}
+			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [undo, redo, shortcuts, isMac, pushState]);
+	}, [undo, redo, shortcuts, isMac, pushState, handleAddChapter]);
 
 	useEffect(() => {
 		if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {
@@ -1433,6 +1525,11 @@ export default function VideoEditor() {
 						} else if (saveResult.success && saveResult.path) {
 							setUnsavedExport(null);
 							handleExportSaved("Video", saveResult.path);
+							if (chapters.length > 0) {
+								const chaptersText = formatChaptersForExport(chapters, trimRegions);
+								const chaptersPath = saveResult.path.replace(/\.mp4$/i, "-chapters.txt");
+								window.electronAPI.writeTextFile(chaptersPath, chaptersText).catch(() => {});
+							}
 						} else {
 							setExportError(saveResult.message || "Failed to save video");
 							toast.error(saveResult.message || "Failed to save video");
@@ -1796,6 +1893,12 @@ export default function VideoEditor() {
 									onAnnotationDelete={handleAnnotationDelete}
 									selectedAnnotationId={selectedAnnotationId}
 									onSelectAnnotation={handleSelectAnnotation}
+									chapters={chapters}
+									onAddChapter={handleAddChapter}
+									onRenameChapter={handleRenameChapter}
+									onDeleteChapter={handleDeleteChapter}
+									editingChapterId={editingChapterId}
+									onEditChapter={setEditingChapterId}
 									aspectRatio={aspectRatio}
 									onAspectRatioChange={(ar) =>
 										pushState({

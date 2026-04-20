@@ -1,6 +1,7 @@
 import type { Range, Span } from "dnd-timeline";
 import { useTimelineContext } from "dnd-timeline";
 import {
+	BookMarked,
 	Check,
 	ChevronDown,
 	Gauge,
@@ -29,6 +30,7 @@ import { formatShortcut } from "@/utils/platformUtils";
 import { TutorialHelp } from "../TutorialHelp";
 import type {
 	AnnotationRegion,
+	ChapterMarker,
 	CursorTelemetryPoint,
 	SpeedRegion,
 	TrimRegion,
@@ -45,6 +47,7 @@ const ZOOM_ROW_ID = "row-zoom";
 const TRIM_ROW_ID = "row-trim";
 const ANNOTATION_ROW_ID = "row-annotation";
 const SPEED_ROW_ID = "row-speed";
+const CHAPTER_ROW_ID = "row-chapter";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
 const SUGGESTION_SPACING_MS = 1800;
@@ -79,6 +82,12 @@ interface TimelineEditorProps {
 	onSpeedDelete?: (id: string) => void;
 	selectedSpeedId?: string | null;
 	onSelectSpeed?: (id: string | null) => void;
+	chapters?: ChapterMarker[];
+	onAddChapter?: () => void;
+	onRenameChapter?: (id: string, name: string) => void;
+	onDeleteChapter?: (id: string) => void;
+	editingChapterId?: string | null;
+	onEditChapter?: (id: string | null) => void;
 	aspectRatio: AspectRatio;
 	onAspectRatioChange: (aspectRatio: AspectRatio) => void;
 }
@@ -531,6 +540,12 @@ function Timeline({
 	selectedAnnotationId,
 	selectedSpeedId,
 	keyframes = [],
+	chapters = [],
+	onDeleteChapter,
+	onRenameChapter,
+	editingChapterId,
+	onEditChapter,
+	onSeekToChapter,
 }: {
 	items: TimelineRenderItem[];
 	videoDurationMs: number;
@@ -546,6 +561,12 @@ function Timeline({
 	selectedAnnotationId?: string | null;
 	selectedSpeedId?: string | null;
 	keyframes?: { id: string; time: number }[];
+	chapters?: ChapterMarker[];
+	onDeleteChapter?: (id: string) => void;
+	onRenameChapter?: (id: string, name: string) => void;
+	editingChapterId?: string | null;
+	onEditChapter?: (id: string | null) => void;
+	onSeekToChapter?: (timestampMs: number) => void;
 }) {
 	const t = useScopedT("timeline");
 	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
@@ -727,6 +748,53 @@ function Timeline({
 					</Item>
 				))}
 			</Row>
+
+			<Row id={CHAPTER_ROW_ID} isEmpty={chapters.length === 0} hint="Press C to add chapter">
+				{chapters
+					.slice()
+					.sort((a, b) => a.timestampMs - b.timestampMs)
+					.map((ch) => {
+						const pct = videoDurationMs > 0 ? (ch.timestampMs / videoDurationMs) * 100 : 0;
+						return (
+							<div
+								key={ch.id}
+								className="absolute top-0 bottom-0 z-30 flex flex-col items-center"
+								style={{ left: `${pct}%`, transform: "translateX(-50%)" }}
+							>
+								<div className="w-0.5 h-full bg-purple-500/60" />
+								{editingChapterId === ch.id ? (
+									<input
+										autoFocus
+										className="absolute -top-0.5 left-2 w-24 text-[10px] bg-[#1a1a1a] text-white border border-purple-500/50 rounded px-1 py-0.5 outline-none"
+										defaultValue={ch.name}
+										onBlur={(e) => onRenameChapter?.(ch.id, e.target.value)}
+										onKeyDown={(e) => {
+											if (e.key === "Enter") {
+												onRenameChapter?.(ch.id, (e.target as HTMLInputElement).value);
+											}
+											if (e.key === "Escape") onEditChapter?.(null);
+											e.stopPropagation();
+										}}
+									/>
+								) : (
+									<button
+										type="button"
+										className="absolute -top-0.5 left-2 text-[10px] text-purple-300 bg-purple-500/20 rounded px-1.5 py-0.5 whitespace-nowrap hover:bg-purple-500/30 cursor-pointer max-w-[100px] truncate"
+										onClick={() => onSeekToChapter?.(ch.timestampMs)}
+										onDoubleClick={() => onEditChapter?.(ch.id)}
+										onContextMenu={(e) => {
+											e.preventDefault();
+											onDeleteChapter?.(ch.id);
+										}}
+										title={`${ch.name || "Untitled"} — double-click to rename, right-click to delete`}
+									>
+										{ch.name || "Untitled"}
+									</button>
+								)}
+							</div>
+						);
+					})}
+			</Row>
 		</div>
 	);
 }
@@ -761,6 +829,12 @@ export default function TimelineEditor({
 	onSpeedDelete,
 	selectedSpeedId,
 	onSelectSpeed,
+	chapters = [],
+	onAddChapter,
+	onRenameChapter,
+	onDeleteChapter,
+	editingChapterId,
+	onEditChapter,
 	aspectRatio,
 	onAspectRatioChange,
 }: TimelineEditorProps) {
@@ -1412,6 +1486,15 @@ export default function TimelineEditor({
 					>
 						<Gauge className="w-4 h-4" />
 					</Button>
+					<Button
+						onClick={onAddChapter}
+						variant="ghost"
+						size="icon"
+						className="h-7 w-7 text-slate-400 hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all"
+						title="Add chapter (C)"
+					>
+						<BookMarked className="w-4 h-4" />
+					</Button>
 				</div>
 				<div className="flex items-center gap-2">
 					<DropdownMenu>
@@ -1495,6 +1578,12 @@ export default function TimelineEditor({
 						selectedAnnotationId={selectedAnnotationId}
 						selectedSpeedId={selectedSpeedId}
 						keyframes={keyframes}
+						chapters={chapters}
+						onDeleteChapter={onDeleteChapter}
+						onRenameChapter={onRenameChapter}
+						editingChapterId={editingChapterId}
+						onEditChapter={onEditChapter}
+						onSeekToChapter={onSeek ? (ms) => onSeek(ms / 1000) : undefined}
 					/>
 				</TimelineWrapper>
 			</div>
