@@ -457,6 +457,16 @@ async function runHeadlessExport(opts: CliOptions) {
 		process.exit(1);
 	}
 
+	// Suppress EPIPE errors when stdout pipe is closed (common in headless/piped mode)
+	process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+		if (err.code === "EPIPE") return;
+		throw err;
+	});
+	process.stderr.on("error", (err: NodeJS.ErrnoException) => {
+		if (err.code === "EPIPE") return;
+		throw err;
+	});
+
 	approveFilePath(inputFile);
 	console.log(`[CLI] Exporting: ${inputFile}`);
 	console.log(`[CLI] Output:    ${outputFile}`);
@@ -496,7 +506,11 @@ async function runHeadlessExport(opts: CliOptions) {
 
 	// IPC: receive export progress
 	ipcMain.on("headless-export-progress", (_, percentage: number) => {
-		process.stdout.write(`\r[CLI] Export progress: ${Math.round(percentage)}%`);
+		try {
+			process.stdout.write(`\r[CLI] Export progress: ${Math.round(percentage)}%`);
+		} catch {
+			// stdout pipe may be closed
+		}
 	});
 
 	// IPC: receive export result
