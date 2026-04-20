@@ -143,6 +143,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		return () => ipcRenderer.removeListener("request-save-before-close", listener);
 	},
 
+	writeTextFile: (filePath: string, content: string) => {
+		return ipcRenderer.invoke("write-text-file", filePath, content);
+	},
+
 	// CLI support
 	getCliInputFile: () => {
 		return ipcRenderer.invoke("get-cli-input-file");
