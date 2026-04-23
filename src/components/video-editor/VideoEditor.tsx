@@ -380,6 +380,19 @@ export default function VideoEditor() {
 					setWebcamVideoSourcePath(null);
 					setWebcamVideoPath(null);
 					setCurrentProjectPath(null);
+
+					const cliConfig = await window.electronAPI.getCliEditorConfig();
+					if (cliConfig) {
+						updateState({
+							shadowIntensity: cliConfig.shadowIntensity,
+							showBlur: cliConfig.showBlur,
+							motionBlurAmount: cliConfig.motionBlurAmount,
+							borderRadius: cliConfig.borderRadius,
+							padding: cliConfig.padding,
+							wallpaper: cliConfig.wallpaper,
+						});
+					}
+
 					setLastSavedSnapshot(
 						createProjectSnapshot({ screenVideoPath: cliFile }, INITIAL_EDITOR_STATE),
 					);

@@ -143,6 +143,7 @@ interface Window {
 
 		// CLI support
 		getCliInputFile: () => Promise<string | null>;
+		getCliEditorConfig: () => Promise<CliEditorConfig | null>;
 		getHeadlessExportConfig: () => Promise<HeadlessExportConfig | null>;
 		sendHeadlessExportProgress: (percentage: number) => void;
 		sendHeadlessExportDone: (result: {
@@ -151,6 +152,15 @@ interface Window {
 			error?: string;
 		}) => Promise<void>;
 	};
+}
+
+interface CliEditorConfig {
+	shadowIntensity: number;
+	showBlur: boolean;
+	motionBlurAmount: number;
+	borderRadius: number;
+	padding: number;
+	wallpaper: string;
 }
 
 interface HeadlessExportConfig {

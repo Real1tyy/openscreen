@@ -417,6 +417,18 @@ app.whenReady().then(async () => {
 	// Always register the CLI input file handler so the renderer can query it
 	ipcMain.handle("get-cli-input-file", () => cliOptions.inputFile);
 
+	ipcMain.handle("get-cli-editor-config", () => {
+		if (!cliOptions.inputFile || cliOptions.export) return null;
+		return {
+			shadowIntensity: cliOptions.shadowIntensity,
+			showBlur: cliOptions.blur,
+			motionBlurAmount: cliOptions.motionBlur,
+			borderRadius: cliOptions.roundness,
+			padding: cliOptions.padding,
+			wallpaper: cliOptions.background,
+		};
+	});
+
 	if (cliOptions.export && cliOptions.inputFile) {
 		// Feature 2: Headless export mode
 		await runHeadlessExport(cliOptions);

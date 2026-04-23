@@ -151,6 +151,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getCliInputFile: () => {
 		return ipcRenderer.invoke("get-cli-input-file");
 	},
+	getCliEditorConfig: () => {
+		return ipcRenderer.invoke("get-cli-editor-config");
+	},
 	getHeadlessExportConfig: () => {
 		return ipcRenderer.invoke("get-headless-export-config");
 	},
