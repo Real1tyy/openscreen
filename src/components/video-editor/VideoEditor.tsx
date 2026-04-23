@@ -763,13 +763,15 @@ export default function VideoEditor() {
 	);
 
 	const handleAddChapter = useCallback(() => {
-		const startMs = Math.round(currentTimeRef.current * 1000);
 		const totalMs = Math.round(durationRef.current * 1000);
+		if (totalMs <= 0) return;
+		const startMs = Math.max(0, Math.min(Math.round(currentTimeRef.current * 1000), totalMs - 100));
 		const id = `chapter-${nextChapterIdRef.current++}`;
 		pushState((prev) => {
 			const sorted = [...prev.chapters].sort((a, b) => a.startMs - b.startMs);
 			const nextChapter = sorted.find((ch) => ch.startMs > startMs);
-			const endMs = nextChapter ? nextChapter.startMs : totalMs;
+			const maxEnd = nextChapter ? nextChapter.startMs : totalMs;
+			const endMs = Math.max(startMs + 100, maxEnd);
 			return {
 				chapters: [...prev.chapters, { id, startMs, endMs, name: "" }],
 			};

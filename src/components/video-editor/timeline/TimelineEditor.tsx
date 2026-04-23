@@ -594,6 +594,7 @@ function Timeline({
 			onSelectTrim?.(null);
 			onSelectAnnotation?.(null);
 			onSelectSpeed?.(null);
+			onSelectChapter?.(null);
 
 			const rect = e.currentTarget.getBoundingClientRect();
 			const clickX = e.clientX - rect.left - sidebarWidth;
@@ -612,6 +613,7 @@ function Timeline({
 			onSelectTrim,
 			onSelectAnnotation,
 			onSelectSpeed,
+			onSelectChapter,
 			videoDurationMs,
 			sidebarWidth,
 			range.start,
@@ -630,6 +632,15 @@ function Timeline({
 				return;
 			}
 
+			// If the container has vertical overflow and this is a vertical-dominant scroll,
+			// let the browser handle native vertical scrolling instead of panning.
+			const el = event.currentTarget;
+			const hasVerticalOverflow = el.scrollHeight > el.clientHeight + 4;
+			const isVerticalDominant = Math.abs(event.deltaY) > Math.abs(event.deltaX) * 2;
+			if (hasVerticalOverflow && isVerticalDominant) {
+				return;
+			}
+
 			const dominantDelta =
 				Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
 			if (dominantDelta === 0) {
@@ -638,7 +649,7 @@ function Timeline({
 
 			event.preventDefault();
 
-			const pageWidthPx = Math.max(event.currentTarget.clientWidth - sidebarWidth, 1);
+			const pageWidthPx = Math.max(el.clientWidth - sidebarWidth, 1);
 			const normalizedDeltaPx = normalizeWheelDelta(dominantDelta, event.deltaMode, pageWidthPx);
 			const shiftMs = pixelsToValue(normalizedDeltaPx);
 
@@ -923,9 +934,11 @@ export default function TimelineEditor({
 	const zoomRegionsRef = useRef(zoomRegions);
 	const trimRegionsRef = useRef(trimRegions);
 	const speedRegionsRef = useRef(speedRegions);
+	const chaptersRef = useRef(chapters);
 	zoomRegionsRef.current = zoomRegions;
 	trimRegionsRef.current = trimRegions;
 	speedRegionsRef.current = speedRegions;
+	chaptersRef.current = chapters;
 
 	useEffect(() => {
 		if (totalMs === 0 || safeMinDurationMs <= 0) {
@@ -967,8 +980,19 @@ export default function TimelineEditor({
 				onSpeedSpanChange?.(region.id, { start: normalizedStart, end: normalizedEnd });
 			}
 		});
-		// Only re-run when the timeline scale changes, not on every region edit
-	}, [totalMs, safeMinDurationMs, onZoomSpanChange, onTrimSpanChange, onSpeedSpanChange]);
+
+		chaptersRef.current.forEach((ch) => {
+			const clampedStart = Math.max(0, Math.min(ch.startMs, totalMs));
+			const minEnd = clampedStart + safeMinDurationMs;
+			const clampedEnd = Math.min(totalMs, Math.max(minEnd, ch.endMs));
+			const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs));
+			const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+
+			if (normalizedStart !== ch.startMs || normalizedEnd !== ch.endMs) {
+				onChapterSpanChange?.(ch.id, { start: normalizedStart, end: normalizedEnd });
+			}
+		});
+	}, [totalMs, safeMinDurationMs, onZoomSpanChange, onTrimSpanChange, onSpeedSpanChange, onChapterSpanChange]);
 
 	const hasOverlap = useCallback(
 		(newSpan: Span, excludeId?: string): boolean => {
@@ -1386,14 +1410,16 @@ export default function TimelineEditor({
 			variant: "speed",
 		}));
 
-		const chapterItems: TimelineRenderItem[] = chapters.map((ch, index) => ({
-			id: ch.id,
-			rowId: CHAPTER_ROW_ID,
-			span: { start: ch.startMs, end: ch.endMs },
-			label: t("labels.chapterItem", { index: String(index + 1) }),
-			chapterName: ch.name,
-			variant: "chapter",
-		}));
+		const chapterItems: TimelineRenderItem[] = chapters
+			.filter((ch) => ch.endMs > ch.startMs)
+			.map((ch, index) => ({
+				id: ch.id,
+				rowId: CHAPTER_ROW_ID,
+				span: { start: ch.startMs, end: ch.endMs },
+				label: t("labels.chapterItem", { index: String(index + 1) }),
+				chapterName: ch.name,
+				variant: "chapter",
+			}));
 
 		return [...zooms, ...trims, ...annotations, ...speeds, ...chapterItems];
 	}, [zoomRegions, trimRegions, annotationRegions, speedRegions, chapters, t]);
@@ -1553,7 +1579,7 @@ export default function TimelineEditor({
 			</div>
 			<div
 				ref={timelineContainerRef}
-				className="flex-1 overflow-hidden bg-[#09090b] relative"
+				className="flex-1 overflow-x-hidden overflow-y-auto bg-[#09090b] relative"
 				onClick={() => setSelectedKeyframeId(null)}
 			>
 				<TimelineWrapper
