@@ -632,15 +632,6 @@ function Timeline({
 				return;
 			}
 
-			// If the container has vertical overflow and this is a vertical-dominant scroll,
-			// let the browser handle native vertical scrolling instead of panning.
-			const el = event.currentTarget;
-			const hasVerticalOverflow = el.scrollHeight > el.clientHeight + 4;
-			const isVerticalDominant = Math.abs(event.deltaY) > Math.abs(event.deltaX) * 2;
-			if (hasVerticalOverflow && isVerticalDominant) {
-				return;
-			}
-
 			const dominantDelta =
 				Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
 			if (dominantDelta === 0) {
@@ -649,7 +640,7 @@ function Timeline({
 
 			event.preventDefault();
 
-			const pageWidthPx = Math.max(el.clientWidth - sidebarWidth, 1);
+			const pageWidthPx = Math.max(event.currentTarget.clientWidth - sidebarWidth, 1);
 			const normalizedDeltaPx = normalizeWheelDelta(dominantDelta, event.deltaMode, pageWidthPx);
 			const shiftMs = pixelsToValue(normalizedDeltaPx);
 
@@ -676,6 +667,61 @@ function Timeline({
 	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
 	const chapterItems = items.filter((item) => item.rowId === CHAPTER_ROW_ID);
 
+	const renderRow = (
+		rowId: string,
+		rowItems: TimelineRenderItem[],
+		selectedId: string | null | undefined,
+		onSelect: ((id: string | null) => void) | undefined,
+		hint: string,
+	) => (
+		<Row id={rowId} isEmpty={rowItems.length === 0} hint={hint}>
+			{rowItems.map((item) => (
+				<Item
+					id={item.id}
+					key={item.id}
+					rowId={item.rowId}
+					span={item.span}
+					isSelected={item.id === selectedId}
+					onSelect={() => onSelect?.(item.id)}
+					variant={item.variant}
+					zoomDepth={item.zoomDepth}
+					speedValue={item.speedValue}
+				>
+					{item.label}
+				</Item>
+			))}
+		</Row>
+	);
+
+	const renderChapterRow = () => (
+		<Row id={CHAPTER_ROW_ID} isEmpty={chapterItems.length === 0} hint="Press C to add chapter">
+			{chapterItems.map((item) => (
+				<Item
+					id={item.id}
+					key={item.id}
+					rowId={item.rowId}
+					span={item.span}
+					isSelected={item.id === selectedChapterId}
+					onSelect={() => {
+						onSelectChapter?.(item.id);
+						if (onSeek) onSeek(item.span.start / 1000);
+					}}
+					onDoubleClick={() => onEditChapter?.(item.id)}
+					onContextMenu={(e) => {
+						e.preventDefault();
+						onDeleteChapter?.(item.id);
+					}}
+					variant="chapter"
+					isEditing={editingChapterId === item.id}
+					onRenameCommit={(name) => onRenameChapter?.(item.id, name)}
+					onRenameCancel={() => onEditChapter?.(null)}
+				>
+					{item.chapterName}
+				</Item>
+			))}
+		</Row>
+	);
+
 	return (
 		<div
 			ref={setRefs}
@@ -695,102 +741,11 @@ function Timeline({
 				keyframes={keyframes}
 			/>
 
-			<Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint={t("hints.pressZoom")}>
-				{zoomItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedZoomId}
-						onSelect={() => onSelectZoom?.(item.id)}
-						zoomDepth={item.zoomDepth}
-						variant="zoom"
-					>
-						{item.label}
-					</Item>
-				))}
-			</Row>
-
-			<Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint={t("hints.pressTrim")}>
-				{trimItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedTrimId}
-						onSelect={() => onSelectTrim?.(item.id)}
-						variant="trim"
-					>
-						{item.label}
-					</Item>
-				))}
-			</Row>
-
-			<Row
-				id={ANNOTATION_ROW_ID}
-				isEmpty={annotationItems.length === 0}
-				hint={t("hints.pressAnnotation")}
-			>
-				{annotationItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedAnnotationId}
-						onSelect={() => onSelectAnnotation?.(item.id)}
-						variant="annotation"
-					>
-						{item.label}
-					</Item>
-				))}
-			</Row>
-
-			<Row id={SPEED_ROW_ID} isEmpty={speedItems.length === 0} hint={t("hints.pressSpeed")}>
-				{speedItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedSpeedId}
-						onSelect={() => onSelectSpeed?.(item.id)}
-						variant="speed"
-						speedValue={item.speedValue}
-					>
-						{item.label}
-					</Item>
-				))}
-			</Row>
-
-			<Row id={CHAPTER_ROW_ID} isEmpty={chapterItems.length === 0} hint="Press C to add chapter">
-				{chapterItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedChapterId}
-						onSelect={() => {
-							onSelectChapter?.(item.id);
-							if (onSeek) onSeek(item.span.start / 1000);
-						}}
-						onDoubleClick={() => onEditChapter?.(item.id)}
-						onContextMenu={(e) => {
-							e.preventDefault();
-							onDeleteChapter?.(item.id);
-						}}
-						variant="chapter"
-						isEditing={editingChapterId === item.id}
-						onRenameCommit={(name) => onRenameChapter?.(item.id, name)}
-						onRenameCancel={() => onEditChapter?.(null)}
-					>
-						{item.chapterName}
-					</Item>
-				))}
-			</Row>
+			{renderRow(ZOOM_ROW_ID, zoomItems, selectedZoomId, onSelectZoom, t("hints.pressZoom"))}
+			{renderRow(TRIM_ROW_ID, trimItems, selectedTrimId, onSelectTrim, t("hints.pressTrim"))}
+			{renderChapterRow()}
+			{renderRow(ANNOTATION_ROW_ID, annotationItems, selectedAnnotationId, onSelectAnnotation, t("hints.pressAnnotation"))}
+			{renderRow(SPEED_ROW_ID, speedItems, selectedSpeedId, onSelectSpeed, t("hints.pressSpeed"))}
 		</div>
 	);
 }
@@ -1579,7 +1534,7 @@ export default function TimelineEditor({
 			</div>
 			<div
 				ref={timelineContainerRef}
-				className="flex-1 overflow-x-hidden overflow-y-auto bg-[#09090b] relative"
+				className="flex-1 overflow-y-auto overflow-x-hidden bg-[#09090b] relative"
 				onClick={() => setSelectedKeyframeId(null)}
 			>
 				<TimelineWrapper
