@@ -1,7 +1,7 @@
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
-import { Gauge, MessageSquare, Scissors, ZoomIn } from "lucide-react";
-import { useMemo } from "react";
+import { BookMarked, Gauge, MessageSquare, Scissors, ZoomIn } from "lucide-react";
+import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import glassStyles from "./ItemGlass.module.css";
 
@@ -14,10 +14,14 @@ interface ItemProps {
 	onSelect?: () => void;
 	zoomDepth?: number;
 	speedValue?: number;
-	variant?: "zoom" | "trim" | "annotation" | "speed";
+	variant?: "zoom" | "trim" | "annotation" | "speed" | "chapter";
+	isEditing?: boolean;
+	onRenameCommit?: (name: string) => void;
+	onRenameCancel?: () => void;
+	onContextMenu?: (e: React.MouseEvent) => void;
+	onDoubleClick?: () => void;
 }
 
-// Map zoom depth to multiplier labels
 const ZOOM_LABELS: Record<number, string> = {
 	1: "1.25×",
 	2: "1.5×",
@@ -46,6 +50,11 @@ export default function Item({
 	zoomDepth = 1,
 	speedValue,
 	variant = "zoom",
+	isEditing = false,
+	onRenameCommit,
+	onRenameCancel,
+	onContextMenu,
+	onDoubleClick,
 	children,
 }: ItemProps) {
 	const { setNodeRef, attributes, listeners, itemStyle, itemContentStyle } = useItem({
@@ -53,10 +62,12 @@ export default function Item({
 		span,
 		data: { rowId },
 	});
+	const inputRef = useRef<HTMLInputElement>(null);
 
 	const isZoom = variant === "zoom";
 	const isTrim = variant === "trim";
 	const isSpeed = variant === "speed";
+	const isChapter = variant === "chapter";
 
 	const glassClass = isZoom
 		? glassStyles.glassGreen
@@ -64,18 +75,22 @@ export default function Item({
 			? glassStyles.glassRed
 			: isSpeed
 				? glassStyles.glassAmber
-				: glassStyles.glassYellow;
+				: isChapter
+					? glassStyles.glassPurple
+					: glassStyles.glassYellow;
 
-	const endCapColor = isZoom ? "#21916A" : isTrim ? "#ef4444" : isSpeed ? "#d97706" : "#B4A046";
+	const endCapColor = isZoom
+		? "#21916A"
+		: isTrim
+			? "#ef4444"
+			: isSpeed
+				? "#d97706"
+				: isChapter
+					? "#a855f7"
+					: "#B4A046";
 
-	const timeLabel = useMemo(
-		() => `${formatMs(span.start)} – ${formatMs(span.end)}`,
-		[span.start, span.end],
-	);
+	const timeLabel = `${formatMs(span.start)} – ${formatMs(span.end)}`;
 
-	// Minimum clickable width on the outer wrapper.
-	// Kept small (6px) so items visually distinguish their real positions;
-	// users should zoom in to interact with sub-second items precisely.
 	const MIN_ITEM_PX = 6;
 	const safeItemStyle = { ...itemStyle, minWidth: MIN_ITEM_PX };
 
@@ -99,6 +114,14 @@ export default function Item({
 					onClick={(event) => {
 						event.stopPropagation();
 						onSelect?.();
+					}}
+					onDoubleClick={(event) => {
+						event.stopPropagation();
+						onDoubleClick?.();
+					}}
+					onContextMenu={(event) => {
+						event.stopPropagation();
+						onContextMenu?.(event);
 					}}
 				>
 					<div
@@ -125,44 +148,74 @@ export default function Item({
 					/>
 					{/* Content */}
 					<div className="relative z-10 flex flex-col items-center justify-center text-white/90 opacity-80 group-hover:opacity-100 transition-opacity select-none overflow-hidden">
-						<div className="flex items-center gap-1.5">
-							{isZoom ? (
-								<>
-									<ZoomIn className="w-3.5 h-3.5 shrink-0" />
-									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
-										{ZOOM_LABELS[zoomDepth] || `${zoomDepth}×`}
-									</span>
-								</>
-							) : isTrim ? (
-								<>
-									<Scissors className="w-3.5 h-3.5 shrink-0" />
-									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
-										Trim
-									</span>
-								</>
-							) : isSpeed ? (
-								<>
-									<Gauge className="w-3.5 h-3.5 shrink-0" />
-									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
-										{speedValue !== undefined ? `${speedValue}×` : "Speed"}
-									</span>
-								</>
-							) : (
-								<>
-									<MessageSquare className="w-3.5 h-3.5 shrink-0" />
-									<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
-										{children}
-									</span>
-								</>
-							)}
-						</div>
-						<span
-							className={`text-[9px] tabular-nums tracking-tight whitespace-nowrap transition-opacity ${
-								isSelected ? "opacity-60" : "opacity-0 group-hover:opacity-40"
-							}`}
-						>
-							{timeLabel}
-						</span>
+						{isChapter && isEditing ? (
+							<input
+								ref={inputRef}
+								autoFocus
+								defaultValue={typeof children === "string" ? children : ""}
+								className="w-24 text-[11px] bg-transparent text-white border-b border-purple-400 outline-none text-center font-semibold"
+								onPointerDown={(e) => e.stopPropagation()}
+								onMouseDown={(e) => e.stopPropagation()}
+								onKeyDown={(e) => {
+									e.stopPropagation();
+									if (e.key === "Enter") {
+										onRenameCommit?.(inputRef.current?.value ?? "");
+									}
+									if (e.key === "Escape") {
+										onRenameCancel?.();
+									}
+								}}
+								onBlur={(e) => onRenameCommit?.(e.target.value)}
+							/>
+						) : (
+							<div className="flex items-center gap-1.5">
+								{isZoom ? (
+									<>
+										<ZoomIn className="w-3.5 h-3.5 shrink-0" />
+										<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+											{ZOOM_LABELS[zoomDepth] || `${zoomDepth}×`}
+										</span>
+									</>
+								) : isTrim ? (
+									<>
+										<Scissors className="w-3.5 h-3.5 shrink-0" />
+										<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+											Trim
+										</span>
+									</>
+								) : isSpeed ? (
+									<>
+										<Gauge className="w-3.5 h-3.5 shrink-0" />
+										<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+											{speedValue !== undefined ? `${speedValue}×` : "Speed"}
+										</span>
+									</>
+								) : isChapter ? (
+									<>
+										<BookMarked className="w-3.5 h-3.5 shrink-0" />
+										<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap max-w-[80px] truncate">
+											{children || "Untitled"}
+										</span>
+									</>
+								) : (
+									<>
+										<MessageSquare className="w-3.5 h-3.5 shrink-0" />
+										<span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+											{children}
+										</span>
+									</>
+								)}
+							</div>
+						)}
+						{!isEditing && (
+							<span
+								className={`text-[9px] tabular-nums tracking-tight whitespace-nowrap transition-opacity ${
+									isSelected ? "opacity-60" : "opacity-0 group-hover:opacity-40"
+								}`}
+							>
+								{timeLabel}
+							</span>
+						)}
 					</div>
 				</div>
 			</div>

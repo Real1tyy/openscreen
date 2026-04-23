@@ -85,18 +85,18 @@ function formatChaptersForExport(
 	chapters: ChapterMarker[],
 	trimRegions: TrimRegion[],
 ): string {
-	const sorted = [...chapters].sort((a, b) => a.timestampMs - b.timestampMs);
+	const sorted = [...chapters].sort((a, b) => a.startMs - b.startMs);
 	const sortedTrims = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
 
 	return sorted
 		.map((ch) => {
-			// Adjust timestamp for trimmed regions before this chapter
-			let adjustedMs = ch.timestampMs;
+			// Adjust startMs for trimmed regions before this chapter
+			let adjustedMs = ch.startMs;
 			for (const trim of sortedTrims) {
-				if (trim.endMs <= ch.timestampMs) {
+				if (trim.endMs <= ch.startMs) {
 					adjustedMs -= trim.endMs - trim.startMs;
-				} else if (trim.startMs < ch.timestampMs) {
-					adjustedMs -= ch.timestampMs - trim.startMs;
+				} else if (trim.startMs < ch.startMs) {
+					adjustedMs -= ch.startMs - trim.startMs;
 				}
 			}
 			adjustedMs = Math.max(0, adjustedMs);
@@ -189,6 +189,7 @@ export default function VideoEditor() {
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
 	const nextChapterIdRef = useRef(1);
+	const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
 	const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
 	const chaptersRef = useRef(chapters);
 	chaptersRef.current = chapters;
@@ -762,12 +763,19 @@ export default function VideoEditor() {
 	);
 
 	const handleAddChapter = useCallback(() => {
-		const timestampMs = Math.round(currentTimeRef.current * 1000);
+		const startMs = Math.round(currentTimeRef.current * 1000);
+		const totalMs = Math.round(durationRef.current * 1000);
 		const id = `chapter-${nextChapterIdRef.current++}`;
-		pushState((prev) => ({
-			chapters: [...prev.chapters, { id, timestampMs, name: "" }],
-		}));
+		pushState((prev) => {
+			const sorted = [...prev.chapters].sort((a, b) => a.startMs - b.startMs);
+			const nextChapter = sorted.find((ch) => ch.startMs > startMs);
+			const endMs = nextChapter ? nextChapter.startMs : totalMs;
+			return {
+				chapters: [...prev.chapters, { id, startMs, endMs, name: "" }],
+			};
+		});
 		setEditingChapterId(id);
+		setSelectedChapterId(id);
 	}, [pushState]);
 
 	const handleRenameChapter = useCallback(
@@ -780,11 +788,39 @@ export default function VideoEditor() {
 		[pushState],
 	);
 
+	const handleChapterSpanChange = useCallback(
+		(id: string, span: Span) => {
+			pushState((prev) => ({
+				chapters: prev.chapters.map((ch) =>
+					ch.id === id
+						? { ...ch, startMs: Math.round(span.start), endMs: Math.round(span.end) }
+						: ch,
+				),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleSelectChapter = useCallback(
+		(id: string | null) => {
+			setSelectedChapterId(id);
+			if (id) {
+				const ch = chaptersRef.current.find((c) => c.id === id);
+				if (ch) {
+					const playback = videoPlaybackRef.current;
+					if (playback?.video) playback.video.currentTime = ch.startMs / 1000;
+				}
+			}
+		},
+		[],
+	);
+
 	const handleDeleteChapter = useCallback(
 		(id: string) => {
 			pushState((prev) => ({
 				chapters: prev.chapters.filter((ch) => ch.id !== id),
 			}));
+			setSelectedChapterId((prev) => (prev === id ? null : prev));
 		},
 		[pushState],
 	);
@@ -1201,21 +1237,21 @@ export default function VideoEditor() {
 			if (key === "[" && !mod && !e.shiftKey && !e.altKey) {
 				e.preventDefault();
 				const nowMs = Math.round(currentTimeRef.current * 1000);
-				const sorted = [...chaptersRef.current].sort((a, b) => a.timestampMs - b.timestampMs);
-				const prev = [...sorted].reverse().find((ch) => ch.timestampMs < nowMs - 100);
+				const sorted = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs);
+				const prev = [...sorted].reverse().find((ch) => ch.startMs < nowMs - 100);
 				if (prev) {
 					const playback = videoPlaybackRef.current;
-					if (playback?.video) playback.video.currentTime = prev.timestampMs / 1000;
+					if (playback?.video) playback.video.currentTime = prev.startMs / 1000;
 				}
 			}
 			if (key === "]" && !mod && !e.shiftKey && !e.altKey) {
 				e.preventDefault();
 				const nowMs = Math.round(currentTimeRef.current * 1000);
-				const sorted = [...chaptersRef.current].sort((a, b) => a.timestampMs - b.timestampMs);
-				const next = sorted.find((ch) => ch.timestampMs > nowMs + 100);
+				const sorted = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs);
+				const next = sorted.find((ch) => ch.startMs > nowMs + 100);
 				if (next) {
 					const playback = videoPlaybackRef.current;
-					if (playback?.video) playback.video.currentTime = next.timestampMs / 1000;
+					if (playback?.video) playback.video.currentTime = next.startMs / 1000;
 				}
 			}
 		};
@@ -1250,6 +1286,12 @@ export default function VideoEditor() {
 			setSelectedSpeedId(null);
 		}
 	}, [selectedSpeedId, speedRegions]);
+
+	useEffect(() => {
+		if (selectedChapterId && !chapters.some((ch) => ch.id === selectedChapterId)) {
+			setSelectedChapterId(null);
+		}
+	}, [selectedChapterId, chapters]);
 
 	const handleShowExportedFile = useCallback(async (filePath: string) => {
 		try {
@@ -1895,8 +1937,11 @@ export default function VideoEditor() {
 									onSelectAnnotation={handleSelectAnnotation}
 									chapters={chapters}
 									onAddChapter={handleAddChapter}
+									onChapterSpanChange={handleChapterSpanChange}
 									onRenameChapter={handleRenameChapter}
 									onDeleteChapter={handleDeleteChapter}
+									selectedChapterId={selectedChapterId}
+									onSelectChapter={handleSelectChapter}
 									editingChapterId={editingChapterId}
 									onEditChapter={setEditingChapterId}
 									aspectRatio={aspectRatio}

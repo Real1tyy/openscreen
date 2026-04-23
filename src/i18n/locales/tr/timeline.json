@@ -20,7 +20,8 @@
 		"speedItem": "Hız {{index}}",
 		"annotationItem": "Açıklama",
 		"imageItem": "Görüntü",
-		"emptyText": "Boş metin"
+		"emptyText": "Empty text",
+		"chapterItem": "Chapter {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "Video Yüklenmedi",

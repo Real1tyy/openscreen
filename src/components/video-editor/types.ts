@@ -49,7 +49,8 @@ export interface TrimRegion {
 
 export interface ChapterMarker {
 	id: string;
-	timestampMs: number;
+	startMs: number;
+	endMs: number;
 	name: string;
 }
 

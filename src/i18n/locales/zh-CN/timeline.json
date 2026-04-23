@@ -20,7 +20,8 @@
 		"speedItem": "速度 {{index}}",
 		"annotationItem": "标注",
 		"imageItem": "图片",
-		"emptyText": "空文本"
+		"emptyText": "Empty text",
+		"chapterItem": "Chapter {{index}}"
 	},
 	"emptyState": {
 		"noVideo": "未加载视频",
