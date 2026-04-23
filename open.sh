@@ -29,4 +29,4 @@ fi
   --shadow-intensity 0.3 \
   --roundness 13.5 \
   --padding 7 \
-  --motion-blur 20
+  --motion-blur 0.2

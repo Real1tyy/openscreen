@@ -19,5 +19,5 @@ OUTPUT="${INPUT%.mp4}-openscreen.mp4"
   --shadow-intensity 0.3 \
   --roundness 13.5 \
   --padding 7 \
-  --motion-blur 20 \
+  --motion-blur 0.2 \
   -o "$OUTPUT"
