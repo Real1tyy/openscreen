@@ -1,4 +1,5 @@
-import { Maximize, Minimize, Pause, Play } from "lucide-react";
+import { Maximize, Minimize, Pause, Play, Repeat } from "lucide-react";
+import { useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -11,7 +12,13 @@ interface PlaybackControlsProps {
 	onToggleFullscreen?: () => void;
 	onTogglePlayPause: () => void;
 	onSeek: (time: number) => void;
+	previewSpeed?: number;
+	onPreviewSpeedChange?: (speed: number) => void;
+	isLooping?: boolean;
+	onStopLoop?: () => void;
 }
+
+const PREVIEW_SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];
 
 export default function PlaybackControls({
 	isPlaying,
@@ -21,8 +28,14 @@ export default function PlaybackControls({
 	onToggleFullscreen,
 	onTogglePlayPause,
 	onSeek,
+	previewSpeed = 1,
+	onPreviewSpeedChange,
+	isLooping = false,
+	onStopLoop,
 }: PlaybackControlsProps) {
 	const t = useScopedT("common");
+	const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+	const speedBtnRef = useRef<HTMLButtonElement>(null);
 
 	function formatTime(seconds: number) {
 		if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00";
@@ -56,6 +69,18 @@ export default function PlaybackControls({
 					<Play className="w-3.5 h-3.5 fill-current ml-0.5" />
 				)}
 			</Button>
+
+			{isLooping && onStopLoop && (
+				<Button
+					onClick={onStopLoop}
+					size="icon"
+					className="w-7 h-7 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 transition-all duration-200 animate-pulse"
+					aria-label="Stop loop"
+					title="Stop loop"
+				>
+					<Repeat className="w-3 h-3" />
+				</Button>
+			)}
 
 			<span className="text-[9px] font-medium text-slate-300 tabular-nums w-[30px] text-right">
 				{formatTime(currentTime)}
@@ -91,6 +116,51 @@ export default function PlaybackControls({
 			<span className="text-[9px] font-medium text-slate-500 tabular-nums w-[30px]">
 				{formatTime(duration)}
 			</span>
+
+			{/* Preview speed control */}
+			{onPreviewSpeedChange && (
+				<div className="relative">
+					<button
+						ref={speedBtnRef}
+						type="button"
+						onClick={() => setShowSpeedMenu((v) => !v)}
+						className={cn(
+							"px-1.5 py-0.5 rounded-full text-[9px] font-semibold tabular-nums transition-all duration-200 border",
+							previewSpeed !== 1
+								? "bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30"
+								: "bg-white/5 text-slate-400 border-white/10 hover:bg-white/10 hover:text-slate-300",
+						)}
+						title="Preview playback speed (not applied on export)"
+					>
+						{previewSpeed}×
+					</button>
+					{showSpeedMenu && (
+						<>
+							<div className="fixed inset-0 z-[100]" onClick={() => setShowSpeedMenu(false)} />
+							<div className="absolute bottom-full mb-2 right-0 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl z-[101] py-1 min-w-[80px]">
+								{PREVIEW_SPEED_PRESETS.map((s) => (
+									<button
+										key={s}
+										type="button"
+										onClick={() => {
+											onPreviewSpeedChange(s);
+											setShowSpeedMenu(false);
+										}}
+										className={cn(
+											"w-full px-3 py-1 text-[11px] text-left hover:bg-white/10 transition-colors tabular-nums",
+											s === previewSpeed
+												? "text-amber-300 font-semibold"
+												: "text-slate-300",
+										)}
+									>
+										{s}×
+									</button>
+								))}
+							</div>
+						</>
+					)}
+				</div>
+			)}
 
 			{onToggleFullscreen && (
 				<Button

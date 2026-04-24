@@ -4,9 +4,12 @@ import {
 	BookMarked,
 	Check,
 	ChevronDown,
+	Clock,
 	Gauge,
 	MessageSquare,
+	Play,
 	Plus,
+	Repeat,
 	Scissors,
 	WandSparkles,
 	ZoomIn,
@@ -93,6 +96,16 @@ interface TimelineEditorProps {
 	onEditChapter?: (id: string | null) => void;
 	aspectRatio: AspectRatio;
 	onAspectRatioChange: (aspectRatio: AspectRatio) => void;
+	// Trim context menu actions
+	onTrimSetStartToNow?: (id: string) => void;
+	onTrimSetEndToNow?: (id: string) => void;
+	onTrimSetStartFromAdjacent?: (id: string) => void;
+	onTrimSetEndFromAdjacent?: (id: string) => void;
+	onTrimPlayFromStart?: (id: string) => void;
+	onTrimPlayFromEnd?: (id: string) => void;
+	onTrimToggleLoop?: (id: string) => void;
+	loopingTrimId?: string | null;
+	trimMarkStartMs?: number | null;
 }
 
 interface TimelineScaleConfig {
@@ -529,6 +542,137 @@ function TimelineAxis({
 	);
 }
 
+function TrimContextMenuItems({
+	trimId,
+	onClose,
+	onSetStartToNow,
+	onSetEndToNow,
+	onSetStartFromAdjacent,
+	onSetEndFromAdjacent,
+	onPlayFromStart,
+	onPlayFromEnd,
+	onToggleLoop,
+	onDelete,
+	isLooping,
+	hasAdjacentBefore,
+	hasAdjacentAfter,
+}: {
+	trimId: string;
+	onClose: () => void;
+	onSetStartToNow?: (id: string) => void;
+	onSetEndToNow?: (id: string) => void;
+	onSetStartFromAdjacent?: (id: string) => void;
+	onSetEndFromAdjacent?: (id: string) => void;
+	onPlayFromStart?: (id: string) => void;
+	onPlayFromEnd?: (id: string) => void;
+	onToggleLoop?: (id: string) => void;
+	onDelete?: (id: string) => void;
+	isLooping: boolean;
+	hasAdjacentBefore: boolean;
+	hasAdjacentAfter: boolean;
+}) {
+	const item = (
+		label: string,
+		icon: React.ReactNode,
+		onClick: () => void,
+		disabled = false,
+		accent?: string,
+	) => (
+		<button
+			type="button"
+			disabled={disabled}
+			onClick={() => {
+				onClick();
+				onClose();
+			}}
+			className={cn(
+				"w-full px-3 py-1.5 flex items-center gap-2 text-left transition-colors",
+				disabled
+					? "text-slate-600 cursor-not-allowed"
+					: accent
+						? `${accent} hover:bg-white/10`
+						: "text-slate-300 hover:bg-white/10 hover:text-white",
+			)}
+		>
+			{icon}
+			{label}
+		</button>
+	);
+
+	return (
+		<>
+			{item("Set start to now", <Clock className="w-3.5 h-3.5" />, () => onSetStartToNow?.(trimId))}
+			{item("Set end to now", <Clock className="w-3.5 h-3.5" />, () => onSetEndToNow?.(trimId))}
+			<div className="h-[1px] bg-white/5 my-1" />
+			{item(
+				"Set start from adjacent trim",
+				<Scissors className="w-3.5 h-3.5" />,
+				() => onSetStartFromAdjacent?.(trimId),
+				!hasAdjacentBefore,
+			)}
+			{item(
+				"Set end from adjacent trim",
+				<Scissors className="w-3.5 h-3.5" />,
+				() => onSetEndFromAdjacent?.(trimId),
+				!hasAdjacentAfter,
+			)}
+			<div className="h-[1px] bg-white/5 my-1" />
+			{item("Play from start (−5s)", <Play className="w-3.5 h-3.5" />, () => onPlayFromStart?.(trimId))}
+			{item("Play from end", <Play className="w-3.5 h-3.5" />, () => onPlayFromEnd?.(trimId))}
+			{item(
+				isLooping ? "Stop loop" : "Loop around trim",
+				<Repeat className="w-3.5 h-3.5" />,
+				() => onToggleLoop?.(trimId),
+				false,
+				isLooping ? "text-red-400" : undefined,
+			)}
+			<div className="h-[1px] bg-white/5 my-1" />
+			{item("Delete trim", <Scissors className="w-3.5 h-3.5" />, () => onDelete?.(trimId), false, "text-red-400")}
+		</>
+	);
+}
+
+function TrimMarkIndicator({
+	timeMs,
+	videoDurationMs,
+}: {
+	timeMs: number | null;
+	videoDurationMs: number;
+}) {
+	const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
+	const sideProperty = direction === "rtl" ? "right" : "left";
+
+	if (timeMs == null || videoDurationMs <= 0 || timeMs < range.start || timeMs > range.end) {
+		return null;
+	}
+
+	const offset = valueToPixels(timeMs - range.start);
+
+	return (
+		<div
+			className="absolute top-0 bottom-0 z-40 pointer-events-none"
+			style={{
+				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
+			}}
+		>
+			<div
+				className="absolute top-0 bottom-0 w-[2px] bg-red-500/80 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+				style={{ [sideProperty]: `${offset}px` }}
+			>
+				<div
+					className="absolute -top-1 left-1/2 -translate-x-1/2"
+					style={{ width: "12px", height: "12px" }}
+				>
+					<div className="w-2.5 h-2.5 mx-auto mt-[1px] bg-red-500 rotate-45 rounded-sm shadow-lg border border-white/20 animate-pulse" />
+				</div>
+				<div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-red-500/90 text-[9px] text-white font-medium whitespace-nowrap shadow-lg">
+					I
+				</div>
+			</div>
+		</div>
+	);
+}
+
 function Timeline({
 	items,
 	videoDurationMs,
@@ -550,6 +694,9 @@ function Timeline({
 	onRenameChapter,
 	editingChapterId,
 	onEditChapter,
+	onTrimContextMenu,
+	trimMarkStartMs,
+	loopingTrimId,
 }: {
 	items: TimelineRenderItem[];
 	videoDurationMs: number;
@@ -571,6 +718,9 @@ function Timeline({
 	onRenameChapter?: (id: string, name: string) => void;
 	editingChapterId?: string | null;
 	onEditChapter?: (id: string | null) => void;
+	onTrimContextMenu?: (id: string, event: React.MouseEvent) => void;
+	trimMarkStartMs?: number | null;
+	loopingTrimId?: string | null;
 }) {
 	const t = useScopedT("timeline");
 	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
@@ -693,6 +843,34 @@ function Timeline({
 		</Row>
 	);
 
+	const renderTrimRow = () => (
+		<Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint={t("hints.pressTrim")}>
+			{trimItems.map((item) => (
+				<Item
+					id={item.id}
+					key={item.id}
+					rowId={item.rowId}
+					span={item.span}
+					isSelected={item.id === selectedTrimId}
+					onSelect={() => onSelectTrim?.(item.id)}
+					variant="trim"
+					onContextMenu={(e) => {
+						e.preventDefault();
+						onTrimContextMenu?.(item.id, e);
+					}}
+				>
+					{item.id === loopingTrimId ? (
+						<span className="flex items-center gap-1">
+							{item.label} <Repeat className="w-2.5 h-2.5 text-red-300 animate-spin" style={{ animationDuration: "2s" }} />
+						</span>
+					) : (
+						item.label
+					)}
+				</Item>
+			))}
+		</Row>
+	);
+
 	const renderChapterRow = () => (
 		<Row id={CHAPTER_ROW_ID} isEmpty={chapterItems.length === 0} hint="Press C to add chapter">
 			{chapterItems.map((item) => (
@@ -740,9 +918,10 @@ function Timeline({
 				timelineRef={localTimelineRef}
 				keyframes={keyframes}
 			/>
+			<TrimMarkIndicator timeMs={trimMarkStartMs ?? null} videoDurationMs={videoDurationMs} />
 
 			{renderRow(ZOOM_ROW_ID, zoomItems, selectedZoomId, onSelectZoom, t("hints.pressZoom"))}
-			{renderRow(TRIM_ROW_ID, trimItems, selectedTrimId, onSelectTrim, t("hints.pressTrim"))}
+			{renderTrimRow()}
 			{renderChapterRow()}
 			{renderRow(ANNOTATION_ROW_ID, annotationItems, selectedAnnotationId, onSelectAnnotation, t("hints.pressAnnotation"))}
 			{renderRow(SPEED_ROW_ID, speedItems, selectedSpeedId, onSelectSpeed, t("hints.pressSpeed"))}
@@ -791,6 +970,15 @@ export default function TimelineEditor({
 	onEditChapter,
 	aspectRatio,
 	onAspectRatioChange,
+	onTrimSetStartToNow,
+	onTrimSetEndToNow,
+	onTrimSetStartFromAdjacent,
+	onTrimSetEndFromAdjacent,
+	onTrimPlayFromStart,
+	onTrimPlayFromEnd,
+	onTrimToggleLoop,
+	loopingTrimId,
+	trimMarkStartMs,
 }: TimelineEditorProps) {
 	const t = useScopedT("timeline");
 	const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
@@ -811,6 +999,11 @@ export default function TimelineEditor({
 		pan: "Scroll",
 		zoom: "Ctrl + Scroll",
 	});
+	const [trimContextMenu, setTrimContextMenu] = useState<{
+		trimId: string;
+		x: number;
+		y: number;
+	} | null>(null);
 	const timelineContainerRef = useRef<HTMLDivElement>(null);
 	const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 
@@ -819,6 +1012,23 @@ export default function TimelineEditor({
 			setScrollLabels({ pan: "Scroll", zoom });
 		});
 	}, []);
+
+	const handleTrimContextMenu = useCallback((id: string, event: React.MouseEvent) => {
+		setTrimContextMenu({ trimId: id, x: event.clientX, y: event.clientY });
+	}, []);
+
+	const closeTrimContextMenu = useCallback(() => setTrimContextMenu(null), []);
+
+	useEffect(() => {
+		if (!trimContextMenu) return;
+		const handleClick = () => setTrimContextMenu(null);
+		window.addEventListener("click", handleClick);
+		window.addEventListener("contextmenu", handleClick);
+		return () => {
+			window.removeEventListener("click", handleClick);
+			window.removeEventListener("contextmenu", handleClick);
+		};
+	}, [trimContextMenu]);
 
 	// Add keyframe at current playhead position
 	const addKeyframe = useCallback(() => {
@@ -1576,9 +1786,41 @@ export default function TimelineEditor({
 						onRenameChapter={onRenameChapter}
 						editingChapterId={editingChapterId}
 						onEditChapter={onEditChapter}
+						onTrimContextMenu={handleTrimContextMenu}
+						trimMarkStartMs={trimMarkStartMs}
+						loopingTrimId={loopingTrimId}
 					/>
 				</TimelineWrapper>
 			</div>
+
+			{/* Trim context menu */}
+			{trimContextMenu && (
+				<div
+					className="fixed z-[200] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl py-1 min-w-[200px] text-[12px]"
+					style={{ left: trimContextMenu.x, top: trimContextMenu.y }}
+					onClick={(e) => e.stopPropagation()}
+				>
+					<TrimContextMenuItems
+						trimId={trimContextMenu.trimId}
+						onClose={closeTrimContextMenu}
+						onSetStartToNow={onTrimSetStartToNow}
+						onSetEndToNow={onTrimSetEndToNow}
+						onSetStartFromAdjacent={onTrimSetStartFromAdjacent}
+						onSetEndFromAdjacent={onTrimSetEndFromAdjacent}
+						onPlayFromStart={onTrimPlayFromStart}
+						onPlayFromEnd={onTrimPlayFromEnd}
+						onToggleLoop={onTrimToggleLoop}
+						onDelete={onTrimDelete}
+						isLooping={loopingTrimId === trimContextMenu.trimId}
+						hasAdjacentBefore={trimRegions.some(
+							(r) => r.id !== trimContextMenu.trimId && r.endMs <= (trimRegions.find((t) => t.id === trimContextMenu.trimId)?.startMs ?? 0),
+						)}
+						hasAdjacentAfter={trimRegions.some(
+							(r) => r.id !== trimContextMenu.trimId && r.startMs >= (trimRegions.find((t) => t.id === trimContextMenu.trimId)?.endMs ?? Infinity),
+						)}
+					/>
+				</div>
+			)}
 		</div>
 	);
 }

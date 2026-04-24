@@ -102,6 +102,8 @@ interface VideoPlaybackProps {
 	onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
 	onAnnotationSizeChange?: (id: string, size: { width: number; height: number }) => void;
 	cursorTelemetry?: import("./types").CursorTelemetryPoint[];
+	loopRegion?: { startMs: number; endMs: number } | null;
+	previewSpeed?: number;
 }
 
 export interface VideoPlaybackRef {
@@ -153,6 +155,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			onAnnotationPositionChange,
 			onAnnotationSizeChange,
 			cursorTelemetry = [],
+			loopRegion = null,
+			previewSpeed = 1,
 		},
 		ref,
 	) => {
@@ -205,6 +209,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const layoutVideoContentRef = useRef<(() => void) | null>(null);
 		const trimRegionsRef = useRef<TrimRegion[]>([]);
 		const speedRegionsRef = useRef<SpeedRegion[]>([]);
+		const loopRegionRef = useRef<{ startMs: number; endMs: number } | null>(null);
+		const previewSpeedRef = useRef(previewSpeed);
 		const motionBlurAmountRef = useRef(motionBlurAmount);
 		const motionBlurStateRef = useRef<MotionBlurState>(createMotionBlurState());
 		const onTimeUpdateRef = useRef(onTimeUpdate);
@@ -506,6 +512,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [speedRegions]);
 
 		useEffect(() => {
+			loopRegionRef.current = loopRegion ?? null;
+		}, [loopRegion]);
+
+		useEffect(() => {
+			previewSpeedRef.current = previewSpeed;
+		}, [previewSpeed]);
+
+		useEffect(() => {
 			motionBlurAmountRef.current = motionBlurAmount;
 		}, [motionBlurAmount]);
 
@@ -777,6 +791,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				onTimeUpdate: (time) => onTimeUpdateRef.current(time),
 				trimRegionsRef,
 				speedRegionsRef,
+				loopRegionRef,
+				previewSpeedRef,
 			});
 
 			video.addEventListener("play", handlePlay);

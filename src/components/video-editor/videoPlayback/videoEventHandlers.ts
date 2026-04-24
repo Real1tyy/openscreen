@@ -12,6 +12,8 @@ interface VideoEventHandlersParams {
 	onTimeUpdate: (time: number) => void;
 	trimRegionsRef: React.MutableRefObject<TrimRegion[]>;
 	speedRegionsRef: React.MutableRefObject<SpeedRegion[]>;
+	loopRegionRef: React.MutableRefObject<{ startMs: number; endMs: number } | null>;
+	previewSpeedRef: React.MutableRefObject<number>;
 }
 
 export function createVideoEventHandlers(params: VideoEventHandlersParams) {
@@ -26,6 +28,8 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 		onTimeUpdate,
 		trimRegionsRef,
 		speedRegionsRef,
+		loopRegionRef,
+		previewSpeedRef,
 	} = params;
 
 	const emitTime = (timeValue: number) => {
@@ -56,23 +60,38 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 		if (!video) return;
 
 		const currentTimeMs = video.currentTime * 1000;
+		const loopRegion = loopRegionRef.current;
+
+		// Loop boundary: if past end, seek back to start
+		if (loopRegion && !video.paused && !video.ended && currentTimeMs >= loopRegion.endMs) {
+			video.currentTime = loopRegion.startMs / 1000;
+			emitTime(video.currentTime);
+			timeUpdateAnimationRef.current = requestAnimationFrame(updateTime);
+			return;
+		}
+
 		const activeTrimRegion = findActiveTrimRegion(currentTimeMs);
 
 		// If we're in a trim region during playback, skip to the end of it
 		if (activeTrimRegion && !video.paused && !video.ended) {
-			const skipToTime = activeTrimRegion.endMs / 1000;
+			const skipToMs = activeTrimRegion.endMs;
 
-			// If the skip would take us past the video duration, pause instead
-			if (skipToTime >= video.duration) {
+			// If loop is active and skip would go past loop end, loop back
+			if (loopRegion && skipToMs >= loopRegion.endMs) {
+				video.currentTime = loopRegion.startMs / 1000;
+				emitTime(video.currentTime);
+			} else if (skipToMs / 1000 >= video.duration) {
 				video.pause();
 			} else {
-				video.currentTime = skipToTime;
-				emitTime(skipToTime);
+				video.currentTime = skipToMs / 1000;
+				emitTime(video.currentTime);
 			}
 		} else {
-			// Apply playback speed from active speed region
+			// Apply playback speed: region speed * preview speed multiplier
 			const activeSpeedRegion = findActiveSpeedRegion(currentTimeMs);
-			video.playbackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+			const regionSpeed = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+			const previewSpeed = previewSpeedRef.current;
+			video.playbackRate = regionSpeed * previewSpeed;
 			emitTime(video.currentTime);
 		}
 

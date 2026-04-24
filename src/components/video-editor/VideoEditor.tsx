@@ -50,6 +50,13 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
+import {
+	computeEndFromNow,
+	computeLoopRegion,
+	computeStartFromNow,
+	findAdjacentAfter,
+	findAdjacentBefore,
+} from "./trimActions";
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
@@ -194,10 +201,17 @@ export default function VideoEditor() {
 	const chaptersRef = useRef(chapters);
 	chaptersRef.current = chapters;
 
-	// Quick-trim: Y marks start, O marks end and creates trim region
+	// Quick-trim: I marks start, O marks end and creates trim region
 	const [trimMarkStartMs, setTrimMarkStartMs] = useState<number | null>(null);
 	const trimMarkStartMsRef = useRef(trimMarkStartMs);
 	trimMarkStartMsRef.current = trimMarkStartMs;
+
+	// Loop mode for trim preview
+	const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
+	const [loopingTrimId, setLoopingTrimId] = useState<string | null>(null);
+
+	// Preview playback speed (not applied on export)
+	const [previewSpeed, setPreviewSpeed] = useState(1);
 
 	const { shortcuts, isMac } = useShortcuts();
 	const t = useScopedT("editor");
@@ -840,6 +854,109 @@ export default function VideoEditor() {
 		[pushState],
 	);
 
+	// ── Trim context menu handlers ──────────────────────────────────
+	const handleTrimSetStartToNow = useCallback(
+		(id: string) => {
+			const nowMs = Math.round(currentTimeRef.current * 1000);
+			pushState((prev) => ({
+				trimRegions: prev.trimRegions.map((r) =>
+					r.id === id ? { ...r, startMs: computeStartFromNow(r, nowMs) } : r,
+				),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleTrimSetEndToNow = useCallback(
+		(id: string) => {
+			const nowMs = Math.round(currentTimeRef.current * 1000);
+			pushState((prev) => ({
+				trimRegions: prev.trimRegions.map((r) =>
+					r.id === id ? { ...r, endMs: computeEndFromNow(r, nowMs) } : r,
+				),
+			}));
+		},
+		[pushState],
+	);
+
+	const handleTrimSetStartFromAdjacent = useCallback(
+		(id: string) => {
+			const adjacent = findAdjacentBefore(id, trimRegions);
+			if (!adjacent) return;
+			pushState((prev) => ({
+				trimRegions: prev.trimRegions.map((r) =>
+					r.id === id ? { ...r, startMs: adjacent.endMs } : r,
+				),
+			}));
+		},
+		[trimRegions, pushState],
+	);
+
+	const handleTrimSetEndFromAdjacent = useCallback(
+		(id: string) => {
+			const adjacent = findAdjacentAfter(id, trimRegions);
+			if (!adjacent) return;
+			pushState((prev) => ({
+				trimRegions: prev.trimRegions.map((r) =>
+					r.id === id ? { ...r, endMs: adjacent.startMs } : r,
+				),
+			}));
+		},
+		[trimRegions, pushState],
+	);
+
+	const seekAndPlay = useCallback((seekToSec: number) => {
+		handleSeek(seekToSec);
+		setTimeout(() => {
+			videoPlaybackRef.current?.play().catch(console.error);
+		}, 50);
+	}, []);
+
+	const handleTrimPlayFromStart = useCallback(
+		(id: string) => {
+			const trim = trimRegions.find((r) => r.id === id);
+			if (!trim) return;
+			setLoopRegion(null);
+			setLoopingTrimId(null);
+			seekAndPlay(Math.max(0, trim.startMs - 5000) / 1000);
+		},
+		[trimRegions, seekAndPlay],
+	);
+
+	const handleTrimPlayFromEnd = useCallback(
+		(id: string) => {
+			const trim = trimRegions.find((r) => r.id === id);
+			if (!trim) return;
+			setLoopRegion(null);
+			setLoopingTrimId(null);
+			seekAndPlay(trim.endMs / 1000);
+		},
+		[trimRegions, seekAndPlay],
+	);
+
+	const handleTrimToggleLoop = useCallback(
+		(id: string) => {
+			if (loopingTrimId === id) {
+				setLoopRegion(null);
+				setLoopingTrimId(null);
+				return;
+			}
+			const trim = trimRegions.find((r) => r.id === id);
+			if (!trim) return;
+			const totalMs = Math.round(durationRef.current * 1000);
+			const region = computeLoopRegion(trim, totalMs);
+			setLoopRegion(region);
+			setLoopingTrimId(id);
+			seekAndPlay(region.startMs / 1000);
+		},
+		[loopingTrimId, trimRegions, seekAndPlay],
+	);
+
+	const handleStopLoop = useCallback(() => {
+		setLoopRegion(null);
+		setLoopingTrimId(null);
+	}, []);
+
 	const handleZoomSpanChange = useCallback(
 		(id: string, span: Span) => {
 			pushState((prev) => ({
@@ -1307,6 +1424,13 @@ export default function VideoEditor() {
 			setSelectedChapterId(null);
 		}
 	}, [selectedChapterId, chapters]);
+
+	useEffect(() => {
+		if (loopingTrimId && !trimRegions.some((r) => r.id === loopingTrimId)) {
+			setLoopRegion(null);
+			setLoopingTrimId(null);
+		}
+	}, [loopingTrimId, trimRegions]);
 
 	const handleShowExportedFile = useCallback(async (filePath: string) => {
 		try {
@@ -1893,6 +2017,8 @@ export default function VideoEditor() {
 											onAnnotationPositionChange={handleAnnotationPositionChange}
 											onAnnotationSizeChange={handleAnnotationSizeChange}
 											cursorTelemetry={cursorTelemetry}
+											loopRegion={loopRegion}
+											previewSpeed={previewSpeed}
 										/>
 									</div>
 								</div>
@@ -1907,6 +2033,10 @@ export default function VideoEditor() {
 											onToggleFullscreen={toggleFullscreen}
 											onTogglePlayPause={togglePlayPause}
 											onSeek={handleSeek}
+											previewSpeed={previewSpeed}
+											onPreviewSpeedChange={setPreviewSpeed}
+											isLooping={loopingTrimId != null}
+											onStopLoop={handleStopLoop}
 										/>
 									</div>
 								</div>
@@ -1959,6 +2089,15 @@ export default function VideoEditor() {
 									onSelectChapter={handleSelectChapter}
 									editingChapterId={editingChapterId}
 									onEditChapter={setEditingChapterId}
+									onTrimSetStartToNow={handleTrimSetStartToNow}
+									onTrimSetEndToNow={handleTrimSetEndToNow}
+									onTrimSetStartFromAdjacent={handleTrimSetStartFromAdjacent}
+									onTrimSetEndFromAdjacent={handleTrimSetEndFromAdjacent}
+									onTrimPlayFromStart={handleTrimPlayFromStart}
+									onTrimPlayFromEnd={handleTrimPlayFromEnd}
+									onTrimToggleLoop={handleTrimToggleLoop}
+									loopingTrimId={loopingTrimId}
+									trimMarkStartMs={trimMarkStartMs}
 									aspectRatio={aspectRatio}
 									onAspectRatioChange={(ar) =>
 										pushState({
