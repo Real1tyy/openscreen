@@ -1,4 +1,5 @@
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
+import { clamp } from "@/lib/mathUtils";
 
 export type ZoomDepth = 1 | 2 | 3 | 4 | 5 | 6;
 export type ZoomFocusMode = "manual" | "auto";
@@ -200,7 +201,4 @@ export function clampFocusToDepth(focus: ZoomFocus, _depth: ZoomDepth): ZoomFocu
 	};
 }
 
-function clamp(value: number, min: number, max: number) {
-	if (Number.isNaN(value)) return (min + max) / 2;
-	return Math.min(max, Math.max(min, value));
-}
+

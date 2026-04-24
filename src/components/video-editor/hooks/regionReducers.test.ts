@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { createDeleteHandler, createSpanChangeHandler } from "./regionReducers";
+import { createDeleteHandler, createSpanChangeHandler, deriveNextIdFromList } from "./regionReducers";
 
 describe("createSpanChangeHandler", () => {
 	it("updates the matching region's start/end from span", () => {
@@ -79,5 +79,27 @@ describe("createDeleteHandler", () => {
 		const handler = createDeleteHandler(pushState, "trimRegions", "t2", clearSel);
 		handler("t1");
 		expect(clearSel).not.toHaveBeenCalled();
+	});
+});
+
+describe("deriveNextIdFromList", () => {
+	it("returns 1 for empty list", () => {
+		expect(deriveNextIdFromList("zoom", [])).toBe(1);
+	});
+
+	it("returns max + 1 for sequential ids", () => {
+		expect(deriveNextIdFromList("zoom", ["zoom-1", "zoom-2", "zoom-3"])).toBe(4);
+	});
+
+	it("handles gaps in numbering", () => {
+		expect(deriveNextIdFromList("trim", ["trim-1", "trim-5"])).toBe(6);
+	});
+
+	it("ignores ids with wrong prefix", () => {
+		expect(deriveNextIdFromList("zoom", ["trim-10", "zoom-2"])).toBe(3);
+	});
+
+	it("ignores non-numeric suffixes", () => {
+		expect(deriveNextIdFromList("zoom", ["zoom-abc", "zoom-3"])).toBe(4);
 	});
 });

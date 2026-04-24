@@ -3,6 +3,7 @@ import { useItem } from "dnd-timeline";
 import { BookMarked, Gauge, MessageSquare, Scissors, ZoomIn } from "lucide-react";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
+import { formatMsCompact } from "@/utils/timeUtils";
 import glassStyles from "./ItemGlass.module.css";
 
 interface ItemProps {
@@ -30,16 +31,6 @@ const ZOOM_LABELS: Record<number, string> = {
 	5: "3.5×",
 	6: "5×",
 };
-
-function formatMs(ms: number): string {
-	const totalSeconds = ms / 1000;
-	const minutes = Math.floor(totalSeconds / 60);
-	const seconds = totalSeconds % 60;
-	if (minutes > 0) {
-		return `${minutes}:${seconds.toFixed(1).padStart(4, "0")}`;
-	}
-	return `${seconds.toFixed(1)}s`;
-}
 
 export default function Item({
 	id,
@@ -89,7 +80,7 @@ export default function Item({
 					? "#a855f7"
 					: "#B4A046";
 
-	const timeLabel = `${formatMs(span.start)} – ${formatMs(span.end)}`;
+	const timeLabel = `${formatMsCompact(span.start)} – ${formatMsCompact(span.end)}`;
 
 	const MIN_ITEM_PX = 6;
 	const safeItemStyle = { ...itemStyle, minWidth: MIN_ITEM_PX };

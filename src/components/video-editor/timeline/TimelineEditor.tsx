@@ -29,6 +29,7 @@ import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
+import { formatMsCompact } from "@/utils/timeUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { TutorialHelp } from "../TutorialHelp";
 import type {
@@ -246,14 +247,6 @@ function formatTimeLabel(milliseconds: number, intervalMs: number) {
 	return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
 }
 
-function formatPlayheadTime(ms: number): string {
-	const s = ms / 1000;
-	const min = Math.floor(s / 60);
-	const sec = s % 60;
-	if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, "0")}`;
-	return `${sec.toFixed(1)}s`;
-}
-
 function PlaybackCursor({
 	currentTimeMs,
 	videoDurationMs,
@@ -413,7 +406,7 @@ function PlaybackCursor({
 				</div>
 				{isDragging && (
 					<div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg pointer-events-none">
-						{formatPlayheadTime(clampedTime)}
+						{formatMsCompact(clampedTime)}
 					</div>
 				)}
 			</div>

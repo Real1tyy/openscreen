@@ -217,6 +217,7 @@ export class VideoExporter {
 				this.config.speedRegions,
 				async (videoFrame, _exportTimestampUs, sourceTimestampMs) => {
 					let webcamFrame: VideoFrame | null = null;
+					let exportFrame: VideoFrame | null = null;
 					try {
 						if (this.cancelled) {
 							return;
@@ -243,7 +244,7 @@ export class VideoExporter {
 						// silently, producing empty frames.
 						const canvasCtx = canvas.getContext("2d")!;
 						const imageData = canvasCtx.getImageData(0, 0, canvas.width, canvas.height);
-						const exportFrame = new VideoFrame(imageData.data.buffer, {
+						exportFrame = new VideoFrame(imageData.data.buffer, {
 							format: "RGBA",
 							codedWidth: canvas.width,
 							codedHeight: canvas.height,
@@ -263,7 +264,6 @@ export class VideoExporter {
 							!this.cancelled
 						) {
 							if (Date.now() - this.lastEncoderOutputAt > ENCODER_STALL_TIMEOUT_MS) {
-								exportFrame.close();
 								throw new Error(
 									encoderPreference === "prefer-hardware"
 										? "The hardware video encoder stopped responding. Retrying with a safer encoder."
@@ -282,7 +282,6 @@ export class VideoExporter {
 							);
 						}
 
-						exportFrame.close();
 						frameIndex++;
 
 						this.reportProgress({
@@ -292,6 +291,7 @@ export class VideoExporter {
 							estimatedTimeRemaining: 0,
 						});
 					} finally {
+						exportFrame?.close();
 						videoFrame.close();
 						webcamFrame?.close();
 					}

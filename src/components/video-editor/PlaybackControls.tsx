@@ -2,6 +2,7 @@ import { Maximize, Minimize, Pause, Play, Repeat } from "lucide-react";
 import { useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
+import { formatTimePlayback } from "@/utils/timeUtils";
 import { Button } from "../ui/button";
 
 interface PlaybackControlsProps {
@@ -36,13 +37,6 @@ export default function PlaybackControls({
 	const t = useScopedT("common");
 	const [showSpeedMenu, setShowSpeedMenu] = useState(false);
 	const speedBtnRef = useRef<HTMLButtonElement>(null);
-
-	function formatTime(seconds: number) {
-		if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00";
-		const mins = Math.floor(seconds / 60);
-		const secs = Math.floor(seconds % 60);
-		return `${mins}:${secs.toString().padStart(2, "0")}`;
-	}
 
 	function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
 		onSeek(parseFloat(e.target.value));
@@ -83,7 +77,7 @@ export default function PlaybackControls({
 			)}
 
 			<span className="text-[9px] font-medium text-slate-300 tabular-nums w-[30px] text-right">
-				{formatTime(currentTime)}
+				{formatTimePlayback(currentTime)}
 			</span>
 
 			<div className="flex-1 relative h-6 flex items-center group">
@@ -114,7 +108,7 @@ export default function PlaybackControls({
 			</div>
 
 			<span className="text-[9px] font-medium text-slate-500 tabular-nums w-[30px]">
-				{formatTime(duration)}
+				{formatTimePlayback(duration)}
 			</span>
 
 			{/* Preview speed control */}

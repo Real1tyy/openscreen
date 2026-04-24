@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef } from "react";
 import type { EditorState } from "@/hooks/useEditorHistory";
 import type { ChapterMarker } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
-import { createSpanChangeHandler } from "./regionReducers";
+import { createSpanChangeHandler, resetIdRef } from "./regionReducers";
 
 interface UseChapterHandlersParams {
 	pushState: (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
@@ -105,11 +105,7 @@ export function useChapterHandlers({
 	}, [currentTimeRef, videoPlaybackRef]);
 
 	const resetIdCounter = useCallback((existingIds: string[]) => {
-		const maxNum = existingIds.reduce((max, id) => {
-			const n = Number.parseInt(id.replace("chapter-", ""), 10);
-			return Number.isNaN(n) ? max : Math.max(max, n);
-		}, 0);
-		nextIdRef.current = maxNum + 1;
+		resetIdRef(nextIdRef, "chapter", existingIds);
 	}, []);
 
 	return {

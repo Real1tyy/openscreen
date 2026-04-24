@@ -1,3 +1,5 @@
+import { clamp } from "@/lib/mathUtils";
+
 export interface ParsedGradientStop {
 	color: string;
 	offset: number;
@@ -219,10 +221,6 @@ function normalizeStopOffsets(
 		color: stop.color,
 		offset: clamp(resolved[index] ?? 0, 0, 1),
 	}));
-}
-
-function clamp(value: number, min: number, max: number) {
-	return Math.min(max, Math.max(min, value));
 }
 
 function findLastDefinedIndex(values: Array<number | null>) {

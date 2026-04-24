@@ -9,7 +9,7 @@ import {
 	DEFAULT_FIGURE_DATA,
 	type FigureData,
 } from "../types";
-import { createSpanChangeHandler } from "./regionReducers";
+import { createSpanChangeHandler, deriveNextIdFromList } from "./regionReducers";
 
 interface UseAnnotationHandlersParams {
 	pushState: (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
@@ -132,11 +132,7 @@ export function useAnnotationHandlers({
 	);
 
 	const resetIdCounters = useCallback((existingRegions: AnnotationRegion[]) => {
-		const maxNum = existingRegions.reduce((max, r) => {
-			const n = Number.parseInt(r.id.replace("annotation-", ""), 10);
-			return Number.isNaN(n) ? max : Math.max(max, n);
-		}, 0);
-		nextIdRef.current = maxNum + 1;
+		nextIdRef.current = deriveNextIdFromList("annotation", existingRegions.map((r) => r.id));
 		nextZIndexRef.current = existingRegions.reduce((max, r) => Math.max(max, r.zIndex), 0) + 1;
 	}, []);
 

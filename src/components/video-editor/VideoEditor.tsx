@@ -27,6 +27,7 @@ import {
 	type GifSizePreset,
 	VideoExporter,
 } from "@/lib/exporter";
+import { getAssetPath } from "@/lib/assetPath";
 import { computeFrameStepTime } from "@/lib/frameStep";
 import type { ProjectMedia } from "@/lib/recordingSession";
 import { matchesShortcut } from "@/lib/shortcuts";
@@ -37,6 +38,7 @@ import {
 	isPortraitAspectRatio,
 } from "@/utils/aspectRatioUtils";
 import { ExportDialog } from "./ExportDialog";
+import { formatChaptersForExport } from "./exportUtils";
 import PlaybackControls from "./PlaybackControls";
 import { useAnnotationHandlers } from "./hooks/useAnnotationHandlers";
 import { useChapterHandlers } from "./hooks/useChapterHandlers";
@@ -56,6 +58,7 @@ import {
 } from "./projectPersistence";
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
+import { formatMsCompact } from "@/utils/timeUtils";
 import {
 	type ChapterMarker,
 	type CursorTelemetryPoint,
@@ -63,44 +66,7 @@ import {
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 
-function formatTrimMs(ms: number): string {
-	const totalSec = ms / 1000;
-	const min = Math.floor(totalSec / 60);
-	const sec = totalSec % 60;
-	return min > 0 ? `${min}:${sec.toFixed(1).padStart(4, "0")}` : `${sec.toFixed(1)}s`;
-}
 
-function formatChaptersForExport(
-	chapters: ChapterMarker[],
-	trimRegions: TrimRegion[],
-): string {
-	const sorted = [...chapters].sort((a, b) => a.startMs - b.startMs);
-	const sortedTrims = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
-
-	return sorted
-		.map((ch) => {
-			// Adjust startMs for trimmed regions before this chapter
-			let adjustedMs = ch.startMs;
-			for (const trim of sortedTrims) {
-				if (trim.endMs <= ch.startMs) {
-					adjustedMs -= trim.endMs - trim.startMs;
-				} else if (trim.startMs < ch.startMs) {
-					adjustedMs -= ch.startMs - trim.startMs;
-				}
-			}
-			adjustedMs = Math.max(0, adjustedMs);
-			const totalSec = Math.floor(adjustedMs / 1000);
-			const hours = Math.floor(totalSec / 3600);
-			const min = Math.floor((totalSec % 3600) / 60);
-			const sec = totalSec % 60;
-			const ts =
-				hours > 0
-					? `${hours}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
-					: `${min}:${String(sec).padStart(2, "0")}`;
-			return `${ts} ${ch.name || "Untitled"}`;
-		})
-		.join("\n");
-}
 
 export default function VideoEditor() {
 	const {
@@ -941,6 +907,15 @@ export default function VideoEditor() {
 				const previewWidth = containerElement?.clientWidth || 1920;
 				const previewHeight = containerElement?.clientHeight || 1080;
 
+				// Resolve wallpaper path for Electron (e.g. /wallpapers/x.jpg → file:///abs/path/wallpapers/x.jpg)
+				let resolvedWallpaper = wallpaper;
+				if (
+					wallpaper.startsWith("/") &&
+					!wallpaper.startsWith("//")
+				) {
+					resolvedWallpaper = await getAssetPath(wallpaper.replace(/^\//, ""));
+				}
+
 				if (settings.format === "gif" && settings.gifConfig) {
 					// GIF Export
 					const gifExporter = new GifExporter({
@@ -951,7 +926,7 @@ export default function VideoEditor() {
 						frameRate: settings.gifConfig.frameRate,
 						loop: settings.gifConfig.loop,
 						sizePreset: settings.gifConfig.sizePreset,
-						wallpaper,
+						wallpaper: resolvedWallpaper,
 						zoomRegions,
 						trimRegions,
 						speedRegions,
@@ -1086,7 +1061,7 @@ export default function VideoEditor() {
 						frameRate: 60,
 						bitrate,
 						codec: "avc1.640033",
-						wallpaper,
+						wallpaper: resolvedWallpaper,
 						zoomRegions,
 						trimRegions,
 						speedRegions,
@@ -1380,7 +1355,7 @@ export default function VideoEditor() {
 								{trimMarkStartMs != null && (
 									<div className="absolute top-2 right-2 z-50 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500/90 text-white text-xs font-medium shadow-lg">
 										<span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-										Trim start: {formatTrimMs(trimMarkStartMs)} — press O to trim
+										Trim start: {formatMsCompact(trimMarkStartMs)} — press O to trim
 									</div>
 								)}
 								{/* Video preview */}

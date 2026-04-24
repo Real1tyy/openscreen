@@ -124,6 +124,7 @@ export class FrameRenderer {
 	private smoothedAutoFocus: { cx: number; cy: number } | null = null;
 	private prevAnimationTimeMs: number | null = null;
 	private prevTargetProgress = 0;
+	private destroyed = false;
 
 	constructor(config: FrameRenderConfig) {
 		this.config = config;
@@ -351,7 +352,7 @@ export class FrameRenderer {
 		timestamp: number,
 		webcamFrame?: VideoFrame | null,
 	): Promise<void> {
-		if (!this.app || !this.videoContainer || !this.cameraContainer) {
+		if (this.destroyed || !this.app || !this.videoContainer || !this.cameraContainer) {
 			throw new Error("Renderer not initialized");
 		}
 
@@ -822,10 +823,25 @@ export class FrameRenderer {
 	}
 
 	destroy(): void {
+		this.destroyed = true;
+
+		// Detach mask before destroying to prevent PixiJS from accessing
+		// a destroyed Graphics object's geometry during a pending render tick.
+		if (this.videoContainer) {
+			this.videoContainer.mask = null;
+		}
+		if (this.maskGraphics) {
+			this.maskGraphics.destroy();
+			this.maskGraphics = null;
+		}
 		if (this.videoSprite) {
 			this.videoSprite.destroy();
 			this.videoSprite = null;
 		}
+		this.cameraContainer = null;
+		this.videoContainer = null;
+		this.blurFilter = null;
+		this.motionBlurFilter = null;
 		this.backgroundSprite = null;
 		if (this.app) {
 			this.app.destroy(true, {
@@ -835,11 +851,6 @@ export class FrameRenderer {
 			});
 			this.app = null;
 		}
-		this.cameraContainer = null;
-		this.videoContainer = null;
-		this.maskGraphics = null;
-		this.blurFilter = null;
-		this.motionBlurFilter = null;
 		this.shadowCanvas = null;
 		this.shadowCtx = null;
 		this.compositeCanvas = null;

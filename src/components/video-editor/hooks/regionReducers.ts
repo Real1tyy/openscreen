@@ -1,7 +1,19 @@
 import type { Span } from "dnd-timeline";
+import type React from "react";
 import type { EditorState } from "@/hooks/useEditorHistory";
 
 type StateUpdater = (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
+
+export function deriveNextIdFromList(prefix: string, existingIds: string[]): number {
+	return existingIds.reduce((max, id) => {
+		const n = Number.parseInt(id.replace(`${prefix}-`, ""), 10);
+		return Number.isNaN(n) ? max : Math.max(max, n);
+	}, 0) + 1;
+}
+
+export function resetIdRef(ref: React.MutableRefObject<number>, prefix: string, existingIds: string[]) {
+	ref.current = deriveNextIdFromList(prefix, existingIds);
+}
 
 export function createSpanChangeHandler<K extends keyof EditorState>(
 	pushState: StateUpdater,

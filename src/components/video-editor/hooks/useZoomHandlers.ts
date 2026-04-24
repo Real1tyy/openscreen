@@ -9,7 +9,7 @@ import {
 	type ZoomFocusMode,
 	type ZoomRegion,
 } from "../types";
-import { createSpanChangeHandler } from "./regionReducers";
+import { createSpanChangeHandler, resetIdRef } from "./regionReducers";
 
 interface UseZoomHandlersParams {
 	pushState: (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
@@ -111,11 +111,7 @@ export function useZoomHandlers({
 	);
 
 	const resetIdCounter = useCallback((existingIds: string[]) => {
-		const maxNum = existingIds.reduce((max, id) => {
-			const n = Number.parseInt(id.replace("zoom-", ""), 10);
-			return Number.isNaN(n) ? max : Math.max(max, n);
-		}, 0);
-		nextIdRef.current = maxNum + 1;
+		resetIdRef(nextIdRef, "zoom", existingIds);
 	}, []);
 
 	return {

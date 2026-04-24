@@ -2,7 +2,7 @@ import type { Span } from "dnd-timeline";
 import { useCallback, useMemo, useRef } from "react";
 import type { EditorState } from "@/hooks/useEditorHistory";
 import { DEFAULT_PLAYBACK_SPEED, type PlaybackSpeed, type SpeedRegion } from "../types";
-import { createSpanChangeHandler } from "./regionReducers";
+import { createSpanChangeHandler, resetIdRef } from "./regionReducers";
 
 interface UseSpeedHandlersParams {
 	pushState: (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
@@ -60,11 +60,7 @@ export function useSpeedHandlers({
 	);
 
 	const resetIdCounter = useCallback((existingIds: string[]) => {
-		const maxNum = existingIds.reduce((max, id) => {
-			const n = Number.parseInt(id.replace("speed-", ""), 10);
-			return Number.isNaN(n) ? max : Math.max(max, n);
-		}, 0);
-		nextIdRef.current = maxNum + 1;
+		resetIdRef(nextIdRef, "speed", existingIds);
 	}, []);
 
 	return {

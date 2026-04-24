@@ -10,7 +10,7 @@ import {
 } from "../trimActions";
 import type { TrimRegion } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
-import { createSpanChangeHandler } from "./regionReducers";
+import { createSpanChangeHandler, resetIdRef } from "./regionReducers";
 
 interface UseTrimHandlersParams {
 	pushState: (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
@@ -197,11 +197,7 @@ export function useTrimHandlers({
 	}, [pushState, selectTrim, currentTimeRef]);
 
 	const resetIdCounter = useCallback((existingIds: string[]) => {
-		const maxNum = existingIds.reduce((max, id) => {
-			const n = Number.parseInt(id.replace("trim-", ""), 10);
-			return Number.isNaN(n) ? max : Math.max(max, n);
-		}, 0);
-		nextIdRef.current = maxNum + 1;
+		resetIdRef(nextIdRef, "trim", existingIds);
 	}, []);
 
 	return {
