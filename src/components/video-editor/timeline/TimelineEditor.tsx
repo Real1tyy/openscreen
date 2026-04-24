@@ -44,6 +44,14 @@ import type {
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import Row from "./Row";
+import {
+	calculateAxisScale,
+	calculateTimelineScale,
+	clampVisibleRange,
+	createInitialRange,
+	formatTimeLabel,
+	normalizeWheelDelta,
+} from "./timelineScaleUtils";
 import TimelineWrapper from "./TimelineWrapper";
 import { detectZoomDwellCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
@@ -52,8 +60,6 @@ const TRIM_ROW_ID = "row-trim";
 const ANNOTATION_ROW_ID = "row-annotation";
 const SPEED_ROW_ID = "row-speed";
 const CHAPTER_ROW_ID = "row-chapter";
-const FALLBACK_RANGE_MS = 1000;
-const TARGET_MARKER_COUNT = 12;
 const SUGGESTION_SPACING_MS = 1800;
 
 interface TimelineEditorProps {
@@ -109,12 +115,6 @@ interface TimelineEditorProps {
 	trimMarkStartMs?: number | null;
 }
 
-interface TimelineScaleConfig {
-	minItemDurationMs: number;
-	defaultItemDurationMs: number;
-	minVisibleRangeMs: number;
-}
-
 interface TimelineRenderItem {
 	id: string;
 	rowId: string;
@@ -124,127 +124,6 @@ interface TimelineRenderItem {
 	speedValue?: number;
 	chapterName?: string;
 	variant: "zoom" | "trim" | "annotation" | "speed" | "chapter";
-}
-
-const SCALE_CANDIDATES = [
-	{ intervalSeconds: 0.05, gridSeconds: 0.01 },
-	{ intervalSeconds: 0.1, gridSeconds: 0.02 },
-	{ intervalSeconds: 0.25, gridSeconds: 0.05 },
-	{ intervalSeconds: 0.5, gridSeconds: 0.1 },
-	{ intervalSeconds: 1, gridSeconds: 0.25 },
-	{ intervalSeconds: 2, gridSeconds: 0.5 },
-	{ intervalSeconds: 5, gridSeconds: 1 },
-	{ intervalSeconds: 10, gridSeconds: 2 },
-	{ intervalSeconds: 15, gridSeconds: 3 },
-	{ intervalSeconds: 30, gridSeconds: 5 },
-	{ intervalSeconds: 60, gridSeconds: 10 },
-	{ intervalSeconds: 120, gridSeconds: 20 },
-	{ intervalSeconds: 300, gridSeconds: 30 },
-	{ intervalSeconds: 600, gridSeconds: 60 },
-	{ intervalSeconds: 900, gridSeconds: 120 },
-	{ intervalSeconds: 1800, gridSeconds: 180 },
-	{ intervalSeconds: 3600, gridSeconds: 300 },
-];
-
-/**
- * Picks the best axis interval for the currently visible time range.
- * Called dynamically — re-runs on every zoom change so the axis always
- * shows a meaningful density of markers regardless of video length.
- */
-function calculateAxisScale(visibleRangeMs: number): { intervalMs: number; gridMs: number } {
-	const visibleSeconds = visibleRangeMs / 1000;
-	const candidate =
-		SCALE_CANDIDATES.find((c) => {
-			if (visibleSeconds <= 0) return true;
-			return visibleSeconds / c.intervalSeconds <= TARGET_MARKER_COUNT;
-		}) ?? SCALE_CANDIDATES[SCALE_CANDIDATES.length - 1];
-	return {
-		intervalMs: Math.round(candidate.intervalSeconds * 1000),
-		gridMs: Math.round(candidate.gridSeconds * 1000),
-	};
-}
-
-function calculateTimelineScale(durationSeconds: number): TimelineScaleConfig {
-	const totalMs = Math.max(0, Math.round(durationSeconds * 1000));
-
-	// Minimum item duration: fixed at 100ms (0.1s).
-	// Allows precise cuts while remaining interactive.
-	const minItemDurationMs = 100;
-
-	// Default placement size: 5% of video duration, clamped between 1s and 30s.
-	const defaultItemDurationMs =
-		totalMs > 0
-			? Math.max(minItemDurationMs, Math.min(Math.round(totalMs * 0.05), 30000))
-			: Math.max(minItemDurationMs, 1000);
-
-	// Minimum visible range: 300ms — allows comfortably viewing 0.1s items.
-	// Axis markers adapt dynamically via calculateAxisScale, so there is no
-	// upper constraint on how far the user can zoom in.
-	const minVisibleRangeMs = 300;
-
-	return {
-		minItemDurationMs,
-		defaultItemDurationMs,
-		minVisibleRangeMs,
-	};
-}
-
-function createInitialRange(totalMs: number): Range {
-	if (totalMs > 0) {
-		return { start: 0, end: totalMs };
-	}
-
-	return { start: 0, end: FALLBACK_RANGE_MS };
-}
-
-function clampVisibleRange(candidate: Range, totalMs: number): Range {
-	if (totalMs <= 0) {
-		return candidate;
-	}
-
-	const span = Math.max(candidate.end - candidate.start, 1);
-
-	if (span >= totalMs) {
-		return { start: 0, end: totalMs };
-	}
-
-	const start = Math.max(0, Math.min(candidate.start, totalMs - span));
-	return { start, end: start + span };
-}
-
-function normalizeWheelDelta(delta: number, deltaMode: number, pageSizePx: number): number {
-	if (deltaMode === WheelEvent.DOM_DELTA_LINE) {
-		return delta * 16;
-	}
-
-	if (deltaMode === WheelEvent.DOM_DELTA_PAGE) {
-		return delta * pageSizePx;
-	}
-
-	return delta;
-}
-
-function formatTimeLabel(milliseconds: number, intervalMs: number) {
-	const totalSeconds = milliseconds / 1000;
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
-
-	const fractionalDigits = intervalMs < 250 ? 2 : intervalMs < 1000 ? 1 : 0;
-
-	if (hours > 0) {
-		const minutesString = minutes.toString().padStart(2, "0");
-		const secondsString = Math.floor(seconds).toString().padStart(2, "0");
-		return `${hours}:${minutesString}:${secondsString}`;
-	}
-
-	if (fractionalDigits > 0) {
-		const secondsWithFraction = seconds.toFixed(fractionalDigits);
-		const [wholeSeconds, fraction] = secondsWithFraction.split(".");
-		return `${minutes}:${wholeSeconds.padStart(2, "0")}.${fraction}`;
-	}
-
-	return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
 }
 
 function PlaybackCursor({

@@ -9,15 +9,10 @@ const MIN_SPEED_REGION_DELTA_MS = 0.0001;
 export class AudioProcessor {
 	private cancelled = false;
 
-	/**
-	 * Audio export has two modes:
-	 * 1) no speed regions -> fast WebCodecs trim-only pipeline
-	 * 2) speed regions present -> pitch-preserving rendered timeline pipeline
-	 */
 	async process(
 		demuxer: WebDemuxer,
 		muxer: VideoMuxer,
-		videoUrl: string,
+		_videoUrl: string,
 		trimRegions?: TrimRegion[],
 		speedRegions?: SpeedRegion[],
 		readEndSec?: number,
@@ -29,28 +24,14 @@ export class AudioProcessor {
 					.sort((a, b) => a.startMs - b.startMs)
 			: [];
 
-		// Speed edits must use timeline playback to preserve pitch
-		if (sortedSpeedRegions.length > 0) {
-			const renderedAudioBlob = await this.renderPitchPreservedTimelineAudio(
-				videoUrl,
-				sortedTrims,
-				sortedSpeedRegions,
-			);
-			if (!this.cancelled) {
-				await this.muxRenderedAudioBlob(renderedAudioBlob, muxer);
-				return;
-			}
-		}
-
-		// No speed edits: keep the original demux/decode/encode path with trim timestamp remap.
-		await this.processTrimOnlyAudio(demuxer, muxer, sortedTrims, readEndSec);
+		await this.processAudio(demuxer, muxer, sortedTrims, sortedSpeedRegions, readEndSec);
 	}
 
-	// Legacy trim-only path. This is still used for projects without speed regions.
-	private async processTrimOnlyAudio(
+	private async processAudio(
 		demuxer: WebDemuxer,
 		muxer: VideoMuxer,
 		sortedTrims: TrimRegion[],
+		sortedSpeedRegions: SpeedRegion[],
 		readEndSec?: number,
 	): Promise<void> {
 		let audioConfig: AudioDecoderConfig;
@@ -119,7 +100,7 @@ export class AudioProcessor {
 			return;
 		}
 
-		// Phase 2: Re-encode with timestamps adjusted for trim gaps
+		// Phase 2: Re-encode with timestamps adjusted for trim gaps and speed regions
 		const encodedChunks: { chunk: EncodedAudioChunk; meta?: EncodedAudioChunkMetadata }[] = [];
 
 		const encoder = new AudioEncoder({
@@ -155,8 +136,12 @@ export class AudioProcessor {
 			}
 
 			const timestampMs = audioData.timestamp / 1000;
-			const trimOffsetMs = this.computeTrimOffset(timestampMs, sortedTrims);
-			const adjustedTimestampUs = audioData.timestamp - trimOffsetMs * 1000;
+			const adjustedTimestampUs = this.computeAdjustedTimestamp(
+				audioData.timestamp,
+				timestampMs,
+				sortedTrims,
+				sortedSpeedRegions,
+			);
 
 			const adjusted = this.cloneWithTimestamp(audioData, Math.max(0, adjustedTimestampUs));
 			audioData.close();
@@ -178,283 +163,6 @@ export class AudioProcessor {
 
 		console.log(
 			`[AudioProcessor] Processed ${decodedFrames.length} audio frames, encoded ${encodedChunks.length} chunks`,
-		);
-	}
-
-	// Speed-aware path that mirrors preview semantics (trim skipping + playbackRate regions)
-	// preserve pitch through browser media playback behavior to avoid chipmunk effect.
-	private async renderPitchPreservedTimelineAudio(
-		videoUrl: string,
-		trimRegions: TrimRegion[],
-		speedRegions: SpeedRegion[],
-	): Promise<Blob> {
-		const media = document.createElement("audio");
-		media.src = videoUrl;
-		media.preload = "auto";
-
-		const pitchMedia = media as HTMLMediaElement & {
-			preservesPitch?: boolean;
-			mozPreservesPitch?: boolean;
-			webkitPreservesPitch?: boolean;
-		};
-		pitchMedia.preservesPitch = true;
-		pitchMedia.mozPreservesPitch = true;
-		pitchMedia.webkitPreservesPitch = true;
-
-		await this.waitForLoadedMetadata(media);
-		if (this.cancelled) {
-			throw new Error("Export cancelled");
-		}
-
-		const audioContext = new AudioContext();
-		const sourceNode = audioContext.createMediaElementSource(media);
-		const destinationNode = audioContext.createMediaStreamDestination();
-		sourceNode.connect(destinationNode);
-
-		const { recorder, recordedBlobPromise } = this.startAudioRecording(destinationNode.stream);
-		let rafId: number | null = null;
-
-		try {
-			if (audioContext.state === "suspended") {
-				await audioContext.resume();
-			}
-
-			await this.seekTo(media, 0);
-			await media.play();
-
-			await new Promise<void>((resolve, reject) => {
-				const cleanup = () => {
-					if (rafId !== null) {
-						cancelAnimationFrame(rafId);
-						rafId = null;
-					}
-					media.removeEventListener("error", onError);
-					media.removeEventListener("ended", onEnded);
-				};
-
-				const onError = () => {
-					cleanup();
-					reject(new Error("Failed while rendering speed-adjusted audio timeline"));
-				};
-
-				const onEnded = () => {
-					cleanup();
-					resolve();
-				};
-
-				const tick = () => {
-					if (this.cancelled) {
-						cleanup();
-						resolve();
-						return;
-					}
-
-					const currentTimeMs = media.currentTime * 1000;
-					const activeTrimRegion = this.findActiveTrimRegion(currentTimeMs, trimRegions);
-
-					if (activeTrimRegion && !media.paused && !media.ended) {
-						const skipToTime = activeTrimRegion.endMs / 1000;
-						if (skipToTime >= media.duration) {
-							media.pause();
-							cleanup();
-							resolve();
-							return;
-						}
-						media.currentTime = skipToTime;
-					} else {
-						const activeSpeedRegion = this.findActiveSpeedRegion(currentTimeMs, speedRegions);
-						const playbackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
-						if (Math.abs(media.playbackRate - playbackRate) > 0.0001) {
-							media.playbackRate = playbackRate;
-						}
-					}
-
-					if (!media.paused && !media.ended) {
-						rafId = requestAnimationFrame(tick);
-					} else {
-						cleanup();
-						resolve();
-					}
-				};
-
-				media.addEventListener("error", onError, { once: true });
-				media.addEventListener("ended", onEnded, { once: true });
-				rafId = requestAnimationFrame(tick);
-			});
-		} finally {
-			if (rafId !== null) {
-				cancelAnimationFrame(rafId);
-			}
-			media.pause();
-			if (recorder.state !== "inactive") {
-				recorder.stop();
-			}
-			destinationNode.stream.getTracks().forEach((track) => track.stop());
-			sourceNode.disconnect();
-			destinationNode.disconnect();
-			await audioContext.close();
-			media.src = "";
-			media.load();
-		}
-
-		const recordedBlob = await recordedBlobPromise;
-		if (this.cancelled) {
-			throw new Error("Export cancelled");
-		}
-		return recordedBlob;
-	}
-
-	// Demuxes the rendered speed-adjusted blob and feeds encoded chunks into the MP4 muxer.
-	private async muxRenderedAudioBlob(blob: Blob, muxer: VideoMuxer): Promise<void> {
-		if (this.cancelled) return;
-
-		const file = new File([blob], "speed-audio.webm", { type: blob.type || "audio/webm" });
-		const wasmUrl = new URL("./wasm/web-demuxer.wasm", window.location.href).href;
-		const demuxer = new WebDemuxer({ wasmFilePath: wasmUrl });
-
-		try {
-			await demuxer.load(file);
-			const audioConfig = (await demuxer.getDecoderConfig("audio")) as AudioDecoderConfig;
-			const reader = (demuxer.read("audio") as ReadableStream<EncodedAudioChunk>).getReader();
-			let isFirstChunk = true;
-
-			try {
-				while (!this.cancelled) {
-					const { done, value: chunk } = await reader.read();
-					if (done || !chunk) break;
-					if (isFirstChunk) {
-						await muxer.addAudioChunk(chunk, { decoderConfig: audioConfig });
-						isFirstChunk = false;
-					} else {
-						await muxer.addAudioChunk(chunk);
-					}
-				}
-			} finally {
-				try {
-					await reader.cancel();
-				} catch {
-					/* reader already closed */
-				}
-			}
-		} finally {
-			try {
-				demuxer.destroy();
-			} catch {
-				/* ignore */
-			}
-		}
-	}
-
-	private startAudioRecording(stream: MediaStream): {
-		recorder: MediaRecorder;
-		recordedBlobPromise: Promise<Blob>;
-	} {
-		const mimeType = this.getSupportedAudioMimeType();
-		const options: MediaRecorderOptions = {
-			audioBitsPerSecond: AUDIO_BITRATE,
-			...(mimeType ? { mimeType } : {}),
-		};
-
-		const recorder = new MediaRecorder(stream, options);
-		const chunks: Blob[] = [];
-
-		const recordedBlobPromise = new Promise<Blob>((resolve, reject) => {
-			recorder.ondataavailable = (event: BlobEvent) => {
-				if (event.data && event.data.size > 0) {
-					chunks.push(event.data);
-				}
-			};
-			recorder.onerror = () => {
-				reject(new Error("MediaRecorder failed while capturing speed-adjusted audio"));
-			};
-			recorder.onstop = () => {
-				const type = mimeType || chunks[0]?.type || "audio/webm";
-				resolve(new Blob(chunks, { type }));
-			};
-		});
-
-		recorder.start();
-		return { recorder, recordedBlobPromise };
-	}
-
-	private getSupportedAudioMimeType(): string | undefined {
-		const candidates = ["audio/webm;codecs=opus", "audio/webm"];
-		for (const candidate of candidates) {
-			if (MediaRecorder.isTypeSupported(candidate)) {
-				return candidate;
-			}
-		}
-		return undefined;
-	}
-
-	private waitForLoadedMetadata(media: HTMLMediaElement): Promise<void> {
-		if (Number.isFinite(media.duration) && media.readyState >= HTMLMediaElement.HAVE_METADATA) {
-			return Promise.resolve();
-		}
-
-		return new Promise<void>((resolve, reject) => {
-			const onLoaded = () => {
-				cleanup();
-				resolve();
-			};
-			const onError = () => {
-				cleanup();
-				reject(new Error("Failed to load media metadata for speed-adjusted audio"));
-			};
-			const cleanup = () => {
-				media.removeEventListener("loadedmetadata", onLoaded);
-				media.removeEventListener("error", onError);
-			};
-
-			media.addEventListener("loadedmetadata", onLoaded);
-			media.addEventListener("error", onError, { once: true });
-		});
-	}
-
-	private seekTo(media: HTMLMediaElement, targetSec: number): Promise<void> {
-		if (Math.abs(media.currentTime - targetSec) < 0.0001) {
-			return Promise.resolve();
-		}
-
-		return new Promise<void>((resolve, reject) => {
-			const onSeeked = () => {
-				cleanup();
-				resolve();
-			};
-			const onError = () => {
-				cleanup();
-				reject(new Error("Failed to seek media for speed-adjusted audio"));
-			};
-			const cleanup = () => {
-				media.removeEventListener("seeked", onSeeked);
-				media.removeEventListener("error", onError);
-			};
-
-			media.addEventListener("seeked", onSeeked, { once: true });
-			media.addEventListener("error", onError, { once: true });
-			media.currentTime = targetSec;
-		});
-	}
-
-	private findActiveTrimRegion(
-		currentTimeMs: number,
-		trimRegions: TrimRegion[],
-	): TrimRegion | null {
-		return (
-			trimRegions.find(
-				(region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
-			) || null
-		);
-	}
-
-	private findActiveSpeedRegion(
-		currentTimeMs: number,
-		speedRegions: SpeedRegion[],
-	): SpeedRegion | null {
-		return (
-			speedRegions.find(
-				(region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
-			) || null
 		);
 	}
 
@@ -489,14 +197,56 @@ export class AudioProcessor {
 		return trims.some((trim) => timestampMs >= trim.startMs && timestampMs < trim.endMs);
 	}
 
-	private computeTrimOffset(timestampMs: number, trims: TrimRegion[]): number {
-		let offset = 0;
-		for (const trim of trims) {
-			if (trim.endMs <= timestampMs) {
-				offset += trim.endMs - trim.startMs;
+	/**
+	 * Maps a source timestamp to the output timeline, accounting for trims and speed regions.
+	 * Walks through the source timeline from 0 to timestampMs, accumulating the output time:
+	 * - Trimmed sections are skipped (zero output time)
+	 * - Speed sections accumulate at 1/speed rate
+	 * - Normal sections accumulate at 1:1
+	 */
+	private computeAdjustedTimestamp(
+		_sourceTimestampUs: number,
+		sourceTimestampMs: number,
+		trims: TrimRegion[],
+		speedRegions: SpeedRegion[],
+	): number {
+		let outputMs = 0;
+		let cursor = 0;
+
+		// Build sorted events from trims and speed regions
+		// Walk linearly through the source timeline
+		while (cursor < sourceTimestampMs) {
+			// Check if cursor is in a trim region
+			const trim = trims.find((t) => cursor >= t.startMs && cursor < t.endMs);
+			if (trim) {
+				// Skip the trim entirely (or up to sourceTimestampMs)
+				cursor = Math.min(trim.endMs, sourceTimestampMs);
+				continue;
 			}
+
+			// Find the next boundary (trim start, speed region boundary, or sourceTimestampMs)
+			let nextBoundary = sourceTimestampMs;
+			for (const t of trims) {
+				if (t.startMs > cursor && t.startMs < nextBoundary) nextBoundary = t.startMs;
+			}
+			for (const sr of speedRegions) {
+				if (sr.startMs > cursor && sr.startMs < nextBoundary) nextBoundary = sr.startMs;
+				if (sr.endMs > cursor && sr.endMs < nextBoundary) nextBoundary = sr.endMs;
+			}
+
+			const segmentDuration = nextBoundary - cursor;
+
+			// Find the active speed region at cursor
+			const activeSpeed = speedRegions.find(
+				(sr) => cursor >= sr.startMs && cursor < sr.endMs,
+			);
+			const speed = activeSpeed ? activeSpeed.speed : 1;
+
+			outputMs += segmentDuration / speed;
+			cursor = nextBoundary;
 		}
-		return offset;
+
+		return outputMs * 1000; // convert ms to microseconds
 	}
 
 	cancel(): void {

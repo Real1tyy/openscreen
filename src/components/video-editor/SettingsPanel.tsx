@@ -1,20 +1,18 @@
-import Block from "@uiw/react-color-block";
+import { BackgroundSection } from "./settings/BackgroundSection";
+import { EffectsSection } from "./settings/EffectsSection";
 import {
 	Bug,
-	Crop,
 	Download,
 	Film,
 	Image,
 	Lock,
-	Palette,
 	Sparkles,
 	Star,
 	Trash2,
 	Unlock,
-	Upload,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
 	Accordion,
@@ -32,9 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useScopedT } from "@/contexts/I18nContext";
-import { getAssetPath } from "@/lib/assetPath";
 import { WEBCAM_LAYOUT_PRESETS } from "@/lib/compositeLayout";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import { GIF_FRAME_RATES, GIF_SIZE_PRESETS } from "@/lib/exporter";
@@ -120,38 +116,6 @@ function CustomSpeedInput({
 		</div>
 	);
 }
-
-const WALLPAPER_COUNT = 18;
-const WALLPAPER_RELATIVE = Array.from(
-	{ length: WALLPAPER_COUNT },
-	(_, i) => `wallpapers/wallpaper${i + 1}.jpg`,
-);
-const GRADIENTS = [
-	"linear-gradient( 111.6deg,  rgba(114,167,232,1) 9.4%, rgba(253,129,82,1) 43.9%, rgba(253,129,82,1) 54.8%, rgba(249,202,86,1) 86.3% )",
-	"linear-gradient(120deg, #d4fc79 0%, #96e6a1 100%)",
-	"radial-gradient( circle farthest-corner at 3.2% 49.6%,  rgba(80,12,139,0.87) 0%, rgba(161,10,144,0.72) 83.6% )",
-	"linear-gradient( 111.6deg,  rgba(0,56,68,1) 0%, rgba(163,217,185,1) 51.5%, rgba(231, 148, 6, 1) 88.6% )",
-	"linear-gradient( 107.7deg,  rgba(235,230,44,0.55) 8.4%, rgba(252,152,15,1) 90.3% )",
-	"linear-gradient( 91deg,  rgba(72,154,78,1) 5.2%, rgba(251,206,70,1) 95.9% )",
-	"radial-gradient( circle farthest-corner at 10% 20%,  rgba(2,37,78,1) 0%, rgba(4,56,126,1) 19.7%, rgba(85,245,221,1) 100.2% )",
-	"linear-gradient( 109.6deg,  rgba(15,2,2,1) 11.2%, rgba(36,163,190,1) 91.1% )",
-	"linear-gradient(135deg, #FBC8B4, #2447B1)",
-	"linear-gradient(109.6deg, #F635A6, #36D860)",
-	"linear-gradient(90deg, #FF0101, #4DFF01)",
-	"linear-gradient(315deg, #EC0101, #5044A9)",
-	"linear-gradient(45deg, #ff9a9e 0%, #fad0c4 99%, #fad0c4 100%)",
-	"linear-gradient(to top, #a18cd1 0%, #fbc2eb 100%)",
-	"linear-gradient(to right, #ff8177 0%, #ff867a 0%, #ff8c7f 21%, #f99185 52%, #cf556c 78%, #b12a5b 100%)",
-	"linear-gradient(120deg, #84fab0 0%, #8fd3f4 100%)",
-	"linear-gradient(to right, #4facfe 0%, #00f2fe 100%)",
-	"linear-gradient(to top, #fcc5e4 0%, #fda34b 15%, #ff7882 35%, #c8699e 52%, #7046aa 71%, #0c1db8 87%, #020f75 100%)",
-	"linear-gradient(to right, #fa709a 0%, #fee140 100%)",
-	"linear-gradient(to top, #30cfd0 0%, #330867 100%)",
-	"linear-gradient(to top, #c471f5 0%, #fa71cd 100%)",
-	"linear-gradient(to right, #f78ca0 0%, #f9748f 19%, #fd868c 60%, #fe9a8b 100%)",
-	"linear-gradient(to top, #48c6ef 0%, #6f86d6 100%)",
-	"linear-gradient(to right, #0acffe 0%, #495aff 100%)",
-];
 
 interface SettingsPanelProps {
 	selected: string;
@@ -299,45 +263,6 @@ export function SettingsPanel({
 	onWebcamSizePresetCommit,
 }: SettingsPanelProps) {
 	const t = useScopedT("settings");
-	const [wallpaperPaths, setWallpaperPaths] = useState<string[]>([]);
-	const [customImages, setCustomImages] = useState<string[]>([]);
-	const fileInputRef = useRef<HTMLInputElement>(null);
-
-	useEffect(() => {
-		let mounted = true;
-		(async () => {
-			try {
-				const resolved = await Promise.all(WALLPAPER_RELATIVE.map((p) => getAssetPath(p)));
-				if (mounted) setWallpaperPaths(resolved);
-			} catch (_err) {
-				if (mounted) setWallpaperPaths(WALLPAPER_RELATIVE.map((p) => `/${p}`));
-			}
-		})();
-		return () => {
-			mounted = false;
-		};
-	}, []);
-	const colorPalette = [
-		"#FF0000",
-		"#FFD700",
-		"#00FF00",
-		"#FFFFFF",
-		"#0000FF",
-		"#FF6B00",
-		"#9B59B6",
-		"#E91E63",
-		"#00BCD4",
-		"#FF5722",
-		"#8BC34A",
-		"#FFC107",
-		"#34B27B",
-		"#000000",
-		"#607D8B",
-		"#795548",
-	];
-
-	const [selectedColor, setSelectedColor] = useState("#ADADAD");
-	const [gradient, setGradient] = useState<string>(GRADIENTS[0]);
 	const [showCropModal, setShowCropModal] = useState(false);
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
 	const [cropAspectLocked, setCropAspectLocked] = useState(false);
@@ -452,53 +377,6 @@ export function SettingsPanel({
 	const handleTrimDeleteClick = () => {
 		if (selectedTrimId && onTrimDelete) {
 			onTrimDelete(selectedTrimId);
-		}
-	};
-
-	const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-		const files = event.target.files;
-		if (!files || files.length === 0) return;
-
-		const file = files[0];
-
-		// Validate file type - only allow JPG/JPEG
-		const validTypes = ["image/jpeg", "image/jpg"];
-		if (!validTypes.includes(file.type)) {
-			toast.error(t("imageUpload.invalidFileType"), {
-				description: t("imageUpload.jpgOnly"),
-			});
-			event.target.value = "";
-			return;
-		}
-
-		const reader = new FileReader();
-
-		reader.onload = (e) => {
-			const dataUrl = e.target?.result as string;
-			if (dataUrl) {
-				setCustomImages((prev) => [...prev, dataUrl]);
-				onWallpaperChange(dataUrl);
-				toast.success(t("imageUpload.uploadSuccess"));
-			}
-		};
-
-		reader.onerror = () => {
-			toast.error(t("imageUpload.failedToUpload"), {
-				description: t("imageUpload.errorReading"),
-			});
-		};
-
-		reader.readAsDataURL(file);
-		// Reset input so the same file can be selected again
-		event.target.value = "";
-	};
-
-	const handleRemoveCustomImage = (imageUrl: string, event: React.MouseEvent) => {
-		event.stopPropagation();
-		setCustomImages((prev) => prev.filter((img) => img !== imageUrl));
-		// If the removed image was selected, clear selection
-		if (selected === imageUrl) {
-			onWallpaperChange(wallpaperPaths[0] || WALLPAPER_RELATIVE[0]);
 		}
 	};
 
@@ -873,283 +751,26 @@ export function SettingsPanel({
 						</AccordionItem>
 					)}
 
-					<AccordionItem value="effects" className="border-white/5 rounded-xl bg-white/[0.02] px-3">
-						<AccordionTrigger className="py-2.5 hover:no-underline">
-							<div className="flex items-center gap-2">
-								<Sparkles className="w-4 h-4 text-[#34B27B]" />
-								<span className="text-xs font-medium">{t("effects.title")}</span>
-							</div>
-						</AccordionTrigger>
-						<AccordionContent className="pb-3">
-							<div className="grid grid-cols-2 gap-2 mb-3">
-								<div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
-									<div className="text-[10px] font-medium text-slate-300">
-										{t("effects.blurBg")}
-									</div>
-									<Switch
-										checked={showBlur}
-										onCheckedChange={onBlurChange}
-										className="data-[state=checked]:bg-[#34B27B] scale-90"
-									/>
-								</div>
-							</div>
+					<EffectsSection
+						showBlur={showBlur}
+						onBlurChange={onBlurChange}
+						motionBlurAmount={motionBlurAmount}
+						onMotionBlurChange={onMotionBlurChange}
+						onMotionBlurCommit={onMotionBlurCommit}
+						shadowIntensity={shadowIntensity}
+						onShadowChange={onShadowChange}
+						onShadowCommit={onShadowCommit}
+						borderRadius={borderRadius}
+						onBorderRadiusChange={onBorderRadiusChange}
+						onBorderRadiusCommit={onBorderRadiusCommit}
+						padding={padding}
+						onPaddingChange={onPaddingChange}
+						onPaddingCommit={onPaddingCommit}
+						webcamLayoutPreset={webcamLayoutPreset}
+						onCropToggle={handleCropToggle}
+					/>
 
-							<div className="grid grid-cols-2 gap-2">
-								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-									<div className="flex items-center justify-between mb-1">
-										<div className="text-[10px] font-medium text-slate-300">
-											{t("effects.motionBlur")}
-										</div>
-										<span className="text-[10px] text-slate-500 font-mono">
-											{motionBlurAmount === 0 ? t("effects.off") : motionBlurAmount.toFixed(2)}
-										</span>
-									</div>
-									<Slider
-										value={[motionBlurAmount]}
-										onValueChange={(values) => onMotionBlurChange?.(values[0])}
-										onValueCommit={() => onMotionBlurCommit?.()}
-										min={0}
-										max={1}
-										step={0.01}
-										className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-									/>
-								</div>
-								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-									<div className="flex items-center justify-between mb-1">
-										<div className="text-[10px] font-medium text-slate-300">
-											{t("effects.shadow")}
-										</div>
-										<span className="text-[10px] text-slate-500 font-mono">
-											{Math.round(shadowIntensity * 100)}%
-										</span>
-									</div>
-									<Slider
-										value={[shadowIntensity]}
-										onValueChange={(values) => onShadowChange?.(values[0])}
-										onValueCommit={() => onShadowCommit?.()}
-										min={0}
-										max={1}
-										step={0.01}
-										className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-									/>
-								</div>
-								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-									<div className="flex items-center justify-between mb-1">
-										<div className="text-[10px] font-medium text-slate-300">
-											{t("effects.roundness")}
-										</div>
-										<span className="text-[10px] text-slate-500 font-mono">{borderRadius}px</span>
-									</div>
-									<Slider
-										value={[borderRadius]}
-										onValueChange={(values) => onBorderRadiusChange?.(values[0])}
-										onValueCommit={() => onBorderRadiusCommit?.()}
-										min={0}
-										max={16}
-										step={0.5}
-										className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-									/>
-								</div>
-								<div
-									className={`p-2 rounded-lg bg-white/5 border border-white/5 ${webcamLayoutPreset === "vertical-stack" ? "opacity-40 pointer-events-none" : ""}`}
-								>
-									<div className="flex items-center justify-between mb-1">
-										<div className="text-[10px] font-medium text-slate-300">
-											{t("effects.padding")}
-										</div>
-										<span className="text-[10px] text-slate-500 font-mono">
-											{webcamLayoutPreset === "vertical-stack" ? "—" : `${padding}%`}
-										</span>
-									</div>
-									<Slider
-										value={[webcamLayoutPreset === "vertical-stack" ? 0 : padding]}
-										onValueChange={(values) => onPaddingChange?.(values[0])}
-										onValueCommit={() => onPaddingCommit?.()}
-										min={0}
-										max={100}
-										step={1}
-										disabled={webcamLayoutPreset === "vertical-stack"}
-										className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-									/>
-								</div>
-							</div>
-
-							<Button
-								onClick={handleCropToggle}
-								variant="outline"
-								className="w-full mt-2 gap-1.5 bg-white/5 text-slate-200 border-white/10 hover:bg-white/10 hover:border-white/20 hover:text-white text-[10px] h-8 transition-all"
-							>
-								<Crop className="w-3 h-3" />
-								{t("crop.cropVideo")}
-							</Button>
-						</AccordionContent>
-					</AccordionItem>
-
-					<AccordionItem
-						value="background"
-						className="border-white/5 rounded-xl bg-white/[0.02] px-3"
-					>
-						<AccordionTrigger className="py-2.5 hover:no-underline">
-							<div className="flex items-center gap-2">
-								<Palette className="w-4 h-4 text-[#34B27B]" />
-								<span className="text-xs font-medium">{t("background.title")}</span>
-							</div>
-						</AccordionTrigger>
-						<AccordionContent className="pb-3">
-							<Tabs defaultValue="image" className="w-full">
-								<TabsList className="mb-2 bg-white/5 border border-white/5 p-0.5 w-full grid grid-cols-3 h-7 rounded-lg">
-									<TabsTrigger
-										value="image"
-										className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all"
-									>
-										{t("background.image")}
-									</TabsTrigger>
-									<TabsTrigger
-										value="color"
-										className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all"
-									>
-										{t("background.color")}
-									</TabsTrigger>
-									<TabsTrigger
-										value="gradient"
-										className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all"
-									>
-										{t("background.gradient")}
-									</TabsTrigger>
-								</TabsList>
-
-								<div className="max-h-[min(200px,25vh)] overflow-y-auto custom-scrollbar">
-									<TabsContent value="image" className="mt-0 space-y-2">
-										<input
-											type="file"
-											ref={fileInputRef}
-											onChange={handleImageUpload}
-											accept=".jpg,.jpeg,image/jpeg"
-											className="hidden"
-										/>
-										<Button
-											onClick={() => fileInputRef.current?.click()}
-											variant="outline"
-											className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#34B27B] hover:text-white hover:border-[#34B27B] transition-all h-7 text-[10px]"
-										>
-											<Upload className="w-3 h-3" />
-											{t("background.uploadCustom")}
-										</Button>
-
-										<div className="grid grid-cols-7 gap-1.5">
-											{customImages.map((imageUrl, idx) => {
-												const isSelected = selected === imageUrl;
-												return (
-													<div
-														key={`custom-${idx}`}
-														className={cn(
-															"aspect-square w-9 h-9 rounded-md border-2 overflow-hidden cursor-pointer transition-all duration-200 relative group shadow-sm",
-															isSelected
-																? "border-[#34B27B] ring-1 ring-[#34B27B]/30"
-																: "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5",
-														)}
-														style={{
-															backgroundImage: `url(${imageUrl})`,
-															backgroundSize: "cover",
-															backgroundPosition: "center",
-														}}
-														onClick={() => onWallpaperChange(imageUrl)}
-														role="button"
-													>
-														<button
-															onClick={(e) => handleRemoveCustomImage(imageUrl, e)}
-															className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-														>
-															<X className="w-2 h-2 text-white" />
-														</button>
-													</div>
-												);
-											})}
-
-											{(wallpaperPaths.length > 0
-												? wallpaperPaths
-												: WALLPAPER_RELATIVE.map((p) => `/${p}`)
-											).map((path) => {
-												const isSelected = (() => {
-													if (!selected) return false;
-													if (selected === path) return true;
-													try {
-														const clean = (s: string) =>
-															s.replace(/^file:\/\//, "").replace(/^\//, "");
-														if (clean(selected).endsWith(clean(path))) return true;
-														if (clean(path).endsWith(clean(selected))) return true;
-													} catch {
-														// Best-effort comparison; fallback to strict match.
-													}
-													return false;
-												})();
-												return (
-													<div
-														key={path}
-														className={cn(
-															"aspect-square w-9 h-9 rounded-md border-2 overflow-hidden cursor-pointer transition-all duration-200 shadow-sm",
-															isSelected
-																? "border-[#34B27B] ring-1 ring-[#34B27B]/30"
-																: "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5",
-														)}
-														style={{
-															backgroundImage: `url(${path})`,
-															backgroundSize: "cover",
-															backgroundPosition: "center",
-														}}
-														onClick={() => onWallpaperChange(path)}
-														role="button"
-													/>
-												);
-											})}
-										</div>
-									</TabsContent>
-
-									<TabsContent value="color" className="mt-0">
-										<div className="p-1">
-											<Block
-												color={selectedColor}
-												colors={colorPalette}
-												onChange={(color) => {
-													setSelectedColor(color.hex);
-													onWallpaperChange(color.hex);
-												}}
-												style={{
-													width: "100%",
-													borderRadius: "8px",
-												}}
-											/>
-										</div>
-									</TabsContent>
-
-									<TabsContent value="gradient" className="mt-0">
-										<div className="grid grid-cols-7 gap-1.5">
-											{GRADIENTS.map((g, idx) => (
-												<div
-													key={g}
-													className={cn(
-														"aspect-square w-9 h-9 rounded-md border-2 overflow-hidden cursor-pointer transition-all duration-200 shadow-sm",
-														gradient === g
-															? "border-[#34B27B] ring-1 ring-[#34B27B]/30"
-															: "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5",
-													)}
-													style={{ background: g }}
-													aria-label={t("background.gradientLabel", {
-														index: idx + 1,
-													})}
-													onClick={() => {
-														setGradient(g);
-														onWallpaperChange(g);
-													}}
-													role="button"
-												/>
-											))}
-										</div>
-									</TabsContent>
-								</div>
-							</Tabs>
-						</AccordionContent>
-					</AccordionItem>
+					<BackgroundSection selected={selected} onWallpaperChange={onWallpaperChange} />
 				</Accordion>
 			</div>
 
