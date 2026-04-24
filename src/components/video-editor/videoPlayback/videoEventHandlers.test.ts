@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { MutableRefObject } from "react";
 import type { SpeedRegion, TrimRegion } from "../types";
