@@ -1,43 +1,65 @@
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import electron from "vite-plugin-electron/simple";
+
+const host = process.env.TAURI_DEV_HOST;
+const isTauri = !!process.env.TAURI_ENV_PLATFORM;
 
 // https://vitejs.dev/config/
 export default defineConfig({
 	plugins: [
 		react(),
-		electron({
-			main: {
-				// Shortcut of `build.lib.entry`.
-				entry: "electron/main.ts",
-				vite: {
-					build: {},
-				},
-			},
-			preload: {
-				// Shortcut of `build.rollupOptions.input`.
-				// Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
-				input: path.join(__dirname, "electron/preload.ts"),
-			},
-			// Ployfill the Electron and Node.js API for Renderer process.
-			// If you want use Node.js in Renderer process, the `nodeIntegration` needs to be enabled in the Main process.
-			// See https://github.com/electron-vite/vite-plugin-electron-renderer
-			renderer:
-				process.env.NODE_ENV === "test"
-					? // https://github.com/electron-vite/vite-plugin-electron-renderer/issues/78#issuecomment-2053600808
-						undefined
-					: {},
-		}),
+		// Electron plugin only loaded when NOT running under Tauri
+		...(!isTauri
+			? [
+					(await import("vite-plugin-electron/simple")).default({
+						main: {
+							entry: "electron/main.ts",
+							vite: { build: {} },
+						},
+						preload: {
+							input: path.join(__dirname, "electron/preload.ts"),
+						},
+						renderer: process.env.NODE_ENV === "test" ? undefined : {},
+					}),
+				]
+			: []),
 	],
+
+	clearScreen: false,
+
+	server: {
+		port: 5173,
+		strictPort: true,
+		host: host || false,
+		hmr: host
+			? {
+					protocol: "ws",
+					host,
+					port: 1421,
+				}
+			: undefined,
+		watch: {
+			ignored: ["**/src-tauri/**"],
+		},
+	},
+
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "src"),
 		},
 	},
+
+	envPrefix: ["VITE_", "TAURI_ENV_*"],
+
 	build: {
-		target: "esnext",
-		minify: "esbuild",
+		target: isTauri
+			? process.env.TAURI_ENV_PLATFORM === "windows"
+				? "chrome105"
+				: "safari13"
+			: "esnext",
+		minify: isTauri ? (!process.env.TAURI_ENV_DEBUG ? "esbuild" : false) : "esbuild",
+		sourcemap: isTauri ? !!process.env.TAURI_ENV_DEBUG : false,
 		rollupOptions: {
 			output: {
 				manualChunks: {

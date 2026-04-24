@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "OpenScreen",
+  "version": "1.3.0",
+  "identifier": "com.openscreen.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev:frontend",
+    "beforeBuildCommand": "npm run build:frontend"
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": [
+      "../public/wallpapers/",
+      "../public/wasm/"
+    ],
+    "category": "Video",
+    "shortDescription": "Screen recording and video editing tool",
+    "longDescription": "Free, open-source alternative to Screen Studio for creating polished product demos and walkthroughs.",
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "both"
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "editor",
+        "title": "OpenScreen",
+        "url": "index.html?windowType=editor",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "maximized": true,
+        "decorations": true,
+        "center": true,
+        "visible": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": true,
+      "tooltip": "OpenScreen"
+    },
+    "withGlobalTauri": false
+  }
+}

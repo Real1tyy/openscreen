@@ -33,3 +33,7 @@ playwright-report/
 
 # Vitest browser mode screenshots
 __screenshots__/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/schemas

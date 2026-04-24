@@ -14,7 +14,14 @@
 	},
 	"scripts": {
 		"dev": "vite",
+		"dev:frontend": "vite",
+		"dev:tauri": "tauri dev",
 		"build": "tsc && vite build && electron-builder",
+		"build:frontend": "tsc && vite build",
+		"build:tauri": "tauri build",
+		"build:tauri:mac": "tauri build --target universal-apple-darwin",
+		"build:tauri:win": "tauri build --target x86_64-pc-windows-msvc",
+		"build:tauri:linux": "tauri build --bundles appimage",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
@@ -29,6 +36,7 @@
 		"test:browser": "vitest --config vitest.browser.config.ts --run",
 		"test:browser:install": "playwright install --with-deps chromium-headless-shell",
 		"test:e2e": "playwright test",
+		"tauri": "tauri",
 		"prepare": "husky"
 	},
 	"dependencies": {
@@ -46,6 +54,10 @@
 		"@radix-ui/react-toggle": "^1.1.10",
 		"@radix-ui/react-toggle-group": "^1.1.11",
 		"@radix-ui/react-tooltip": "^1.2.8",
+		"@tauri-apps/plugin-dialog": "^2.7.0",
+		"@tauri-apps/plugin-fs": "^2.5.0",
+		"@tauri-apps/plugin-process": "^2.3.1",
+		"@tauri-apps/plugin-shell": "^2.3.5",
 		"@types/gif.js": "^0.2.5",
 		"@uiw/color-convert": "^2.9.2",
 		"@uiw/react-color-block": "^2.9.2",
@@ -77,6 +89,8 @@
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.13",
 		"@playwright/test": "^1.59.1",
+		"@tauri-apps/api": "^2.10.1",
+		"@tauri-apps/cli": "^2.10.1",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/react": "^16.3.2",
 		"@testing-library/user-event": "^14.6.1",
