@@ -1,4 +1,3 @@
-import type { Span } from "dnd-timeline";
 import { FolderOpen, Languages, Save, Video } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -39,11 +38,15 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { ExportDialog } from "./ExportDialog";
 import PlaybackControls from "./PlaybackControls";
+import { useAnnotationHandlers } from "./hooks/useAnnotationHandlers";
+import { useChapterHandlers } from "./hooks/useChapterHandlers";
 import { useSelection } from "./hooks/useSelection";
+import { useSpeedHandlers } from "./hooks/useSpeedHandlers";
+import { useTrimHandlers } from "./hooks/useTrimHandlers";
+import { useZoomHandlers } from "./hooks/useZoomHandlers";
 import {
 	createProjectData,
 	createProjectSnapshot,
-	deriveNextId,
 	fromFileUrl,
 	hasProjectUnsavedChanges,
 	normalizeProjectEditor,
@@ -51,34 +54,12 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
-import {
-	computeEndFromNow,
-	computeLoopRegion,
-	computeStartFromNow,
-	findAdjacentAfter,
-	findAdjacentBefore,
-} from "./trimActions";
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
-	type AnnotationRegion,
 	type ChapterMarker,
 	type CursorTelemetryPoint,
-	clampFocusToDepth,
-	DEFAULT_ANNOTATION_POSITION,
-	DEFAULT_ANNOTATION_SIZE,
-	DEFAULT_ANNOTATION_STYLE,
-	DEFAULT_FIGURE_DATA,
-	DEFAULT_PLAYBACK_SPEED,
-	DEFAULT_ZOOM_DEPTH,
-	type FigureData,
-	type PlaybackSpeed,
-	type SpeedRegion,
 	type TrimRegion,
-	type ZoomDepth,
-	type ZoomFocus,
-	type ZoomFocusMode,
-	type ZoomRegion,
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 
@@ -214,22 +195,6 @@ export default function VideoEditor() {
 	const playerContainerRef = useRef<HTMLDivElement>(null);
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 
-	const nextZoomIdRef = useRef(1);
-	const nextTrimIdRef = useRef(1);
-	const nextSpeedIdRef = useRef(1);
-	const nextChapterIdRef = useRef(1);
-	const chaptersRef = useRef(chapters);
-	chaptersRef.current = chapters;
-
-	// Quick-trim: I marks start, O marks end and creates trim region
-	const [trimMarkStartMs, setTrimMarkStartMs] = useState<number | null>(null);
-	const trimMarkStartMsRef = useRef(trimMarkStartMs);
-	trimMarkStartMsRef.current = trimMarkStartMs;
-
-	// Loop mode for trim preview
-	const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
-	const [loopingTrimId, setLoopingTrimId] = useState<string | null>(null);
-
 	// Preview playback speed (not applied on export)
 	const [previewSpeed, setPreviewSpeed] = useState(1);
 
@@ -237,10 +202,79 @@ export default function VideoEditor() {
 	const t = useScopedT("editor");
 	const ts = useScopedT("settings");
 	const { locale, setLocale } = useI18n();
-
-	const nextAnnotationIdRef = useRef(1);
-	const nextAnnotationZIndexRef = useRef(1);
 	const exporterRef = useRef<VideoExporter | null>(null);
+
+	// ── Domain hooks ──────────────────────────────────────────
+	const {
+		handleZoomAdded,
+		handleZoomSuggested,
+		handleZoomSpanChange,
+		handleZoomFocusChange,
+		handleZoomDepthChange,
+		handleZoomFocusModeChange,
+		handleZoomDelete,
+		resetIdCounter: resetZoomIds,
+	} = useZoomHandlers({ pushState, updateState, selectZoom: handleSelectZoom, selectedZoomId });
+
+	const {
+		handleTrimAdded,
+		handleTrimSpanChange,
+		handleTrimDelete,
+		handleTrimSetStartToNow,
+		handleTrimSetEndToNow,
+		handleTrimSetStartFromAdjacent,
+		handleTrimSetEndFromAdjacent,
+		handleTrimPlayFromStart,
+		handleTrimPlayFromEnd,
+		handleTrimToggleLoop,
+		loopRegion,
+		loopingTrimId,
+		clearLoop,
+		trimMarkStartMs,
+		handleQuickTrimStart,
+		handleQuickTrimEnd,
+		resetIdCounter: resetTrimIds,
+	} = useTrimHandlers({
+		pushState, trimRegions, selectTrim: handleSelectTrim, selectedTrimId,
+		currentTimeRef, durationRef, videoPlaybackRef,
+	});
+
+	const {
+		handleSpeedAdded,
+		handleSpeedSpanChange,
+		handleSpeedDelete,
+		handleSpeedChange,
+		resetIdCounter: resetSpeedIds,
+	} = useSpeedHandlers({ pushState, selectSpeed: handleSelectSpeed, selectedSpeedId });
+
+	const {
+		handleAnnotationAdded,
+		handleAnnotationSpanChange,
+		handleAnnotationDelete,
+		handleAnnotationContentChange,
+		handleAnnotationTypeChange,
+		handleAnnotationStyleChange,
+		handleAnnotationFigureDataChange,
+		handleAnnotationPositionChange,
+		handleAnnotationSizeChange,
+		resetIdCounters: resetAnnotationIds,
+	} = useAnnotationHandlers({
+		pushState, selectAnnotation: handleSelectAnnotation, selectedAnnotationId,
+	});
+
+	const {
+		handleAddChapter,
+		handleRenameChapter,
+		handleChapterSpanChange,
+		handleSelectChapter,
+		handleDeleteChapter,
+		handleChapterNavigatePrev,
+		handleChapterNavigateNext,
+		resetIdCounter: resetChapterIds,
+	} = useChapterHandlers({
+		pushState, chapters, selectChapter, selectedChapterId, setEditingChapterId,
+		currentTimeRef, durationRef, videoPlaybackRef,
+	});
 
 	const currentProjectMedia = useMemo<ProjectMedia | null>(() => {
 		const screenVideoPath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
@@ -312,27 +346,11 @@ export default function VideoEditor() {
 
 			clearSelection();
 
-			nextZoomIdRef.current = deriveNextId(
-				"zoom",
-				normalizedEditor.zoomRegions.map((region) => region.id),
-			);
-			nextTrimIdRef.current = deriveNextId(
-				"trim",
-				normalizedEditor.trimRegions.map((region) => region.id),
-			);
-			nextSpeedIdRef.current = deriveNextId(
-				"speed",
-				normalizedEditor.speedRegions.map((region) => region.id),
-			);
-			nextAnnotationIdRef.current = deriveNextId(
-				"annotation",
-				normalizedEditor.annotationRegions.map((region) => region.id),
-			);
-			nextAnnotationZIndexRef.current =
-				normalizedEditor.annotationRegions.reduce(
-					(max, region) => Math.max(max, region.zIndex),
-					0,
-				) + 1;
+			resetZoomIds(normalizedEditor.zoomRegions.map((r) => r.id));
+			resetTrimIds(normalizedEditor.trimRegions.map((r) => r.id));
+			resetSpeedIds(normalizedEditor.speedRegions.map((r) => r.id));
+			resetAnnotationIds(normalizedEditor.annotationRegions);
+			resetChapterIds((normalizedEditor as { chapters?: ChapterMarker[] }).chapters?.map((c) => c.id) ?? []);
 
 			setLastSavedSnapshot(
 				createProjectSnapshot(
@@ -733,496 +751,6 @@ export default function VideoEditor() {
 		video.currentTime = time;
 	}
 
-	const handleZoomAdded = useCallback(
-		(span: Span) => {
-			const id = `zoom-${nextZoomIdRef.current++}`;
-			const newRegion: ZoomRegion = {
-				id,
-				startMs: Math.round(span.start),
-				endMs: Math.round(span.end),
-				depth: DEFAULT_ZOOM_DEPTH,
-				focus: { cx: 0.5, cy: 0.5 },
-			};
-			pushState((prev) => ({ zoomRegions: [...prev.zoomRegions, newRegion] }));
-			handleSelectZoom(id);
-		},
-		[pushState, handleSelectZoom],
-	);
-
-	const handleZoomSuggested = useCallback(
-		(span: Span, focus: ZoomFocus) => {
-			const id = `zoom-${nextZoomIdRef.current++}`;
-			const newRegion: ZoomRegion = {
-				id,
-				startMs: Math.round(span.start),
-				endMs: Math.round(span.end),
-				depth: DEFAULT_ZOOM_DEPTH,
-				focus: clampFocusToDepth(focus, DEFAULT_ZOOM_DEPTH),
-			};
-			pushState((prev) => ({ zoomRegions: [...prev.zoomRegions, newRegion] }));
-			handleSelectZoom(id);
-		},
-		[pushState, handleSelectZoom],
-	);
-
-	const handleTrimAdded = useCallback(
-		(span: Span) => {
-			const id = `trim-${nextTrimIdRef.current++}`;
-			const newRegion: TrimRegion = {
-				id,
-				startMs: Math.round(span.start),
-				endMs: Math.round(span.end),
-			};
-			pushState((prev) => ({ trimRegions: [...prev.trimRegions, newRegion] }));
-			handleSelectTrim(id);
-		},
-		[pushState, handleSelectTrim],
-	);
-
-	const handleAddChapter = useCallback(() => {
-		const totalMs = Math.round(durationRef.current * 1000);
-		if (totalMs <= 0) return;
-		const startMs = Math.max(0, Math.min(Math.round(currentTimeRef.current * 1000), totalMs - 100));
-		const id = `chapter-${nextChapterIdRef.current++}`;
-		pushState((prev) => {
-			const sorted = [...prev.chapters].sort((a, b) => a.startMs - b.startMs);
-			const nextChapter = sorted.find((ch) => ch.startMs > startMs);
-			const maxEnd = nextChapter ? nextChapter.startMs : totalMs;
-			const endMs = Math.max(startMs + 100, maxEnd);
-			return {
-				chapters: [...prev.chapters, { id, startMs, endMs, name: "" }],
-			};
-		});
-		setEditingChapterId(id);
-		selectChapter(id);
-	}, [pushState, setEditingChapterId, selectChapter]);
-
-	const handleRenameChapter = useCallback(
-		(id: string, name: string) => {
-			pushState((prev) => ({
-				chapters: prev.chapters.map((ch) => (ch.id === id ? { ...ch, name } : ch)),
-			}));
-			setEditingChapterId(null);
-		},
-		[pushState, setEditingChapterId],
-	);
-
-	const handleChapterSpanChange = useCallback(
-		(id: string, span: Span) => {
-			pushState((prev) => ({
-				chapters: prev.chapters.map((ch) =>
-					ch.id === id
-						? { ...ch, startMs: Math.round(span.start), endMs: Math.round(span.end) }
-						: ch,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleSelectChapter = useCallback(
-		(id: string | null) => {
-			selectChapter(id);
-			if (id) {
-				const ch = chaptersRef.current.find((c) => c.id === id);
-				if (ch) {
-					const playback = videoPlaybackRef.current;
-					if (playback?.video) playback.video.currentTime = ch.startMs / 1000;
-				}
-			}
-		},
-		[selectChapter],
-	);
-
-	const handleDeleteChapter = useCallback(
-		(id: string) => {
-			pushState((prev) => ({
-				chapters: prev.chapters.filter((ch) => ch.id !== id),
-			}));
-			if (selectedChapterId === id) selectChapter(null);
-		},
-		[pushState, selectedChapterId, selectChapter],
-	);
-
-	// ── Trim context menu handlers ──────────────────────────────────
-	const updateTrimField = useCallback(
-		(id: string, updater: (r: TrimRegion) => Partial<TrimRegion>) => {
-			pushState((prev) => ({
-				trimRegions: prev.trimRegions.map((r) =>
-					r.id === id ? { ...r, ...updater(r) } : r,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleTrimSetStartToNow = useCallback(
-		(id: string) => {
-			const nowMs = Math.round(currentTimeRef.current * 1000);
-			updateTrimField(id, (r) => ({ startMs: computeStartFromNow(r, nowMs) }));
-		},
-		[updateTrimField],
-	);
-
-	const handleTrimSetEndToNow = useCallback(
-		(id: string) => {
-			const nowMs = Math.round(currentTimeRef.current * 1000);
-			updateTrimField(id, (r) => ({ endMs: computeEndFromNow(r, nowMs) }));
-		},
-		[updateTrimField],
-	);
-
-	const handleTrimSetStartFromAdjacent = useCallback(
-		(id: string) => {
-			const adjacent = findAdjacentBefore(id, trimRegions);
-			if (adjacent) updateTrimField(id, () => ({ startMs: adjacent.endMs }));
-		},
-		[trimRegions, updateTrimField],
-	);
-
-	const handleTrimSetEndFromAdjacent = useCallback(
-		(id: string) => {
-			const adjacent = findAdjacentAfter(id, trimRegions);
-			if (adjacent) updateTrimField(id, () => ({ endMs: adjacent.startMs }));
-		},
-		[trimRegions, updateTrimField],
-	);
-
-	const seekAndPlay = useCallback((seekToSec: number) => {
-		handleSeek(seekToSec);
-		setTimeout(() => {
-			videoPlaybackRef.current?.play().catch(console.error);
-		}, 50);
-	}, []);
-
-	const clearLoop = useCallback(() => {
-		setLoopRegion(null);
-		setLoopingTrimId(null);
-	}, []);
-
-	const withTrim = useCallback(
-		(id: string, fn: (trim: TrimRegion) => void) => {
-			const trim = trimRegions.find((r) => r.id === id);
-			if (trim) fn(trim);
-		},
-		[trimRegions],
-	);
-
-	const handleTrimPlayFromStart = useCallback(
-		(id: string) => withTrim(id, (trim) => {
-			clearLoop();
-			seekAndPlay(Math.max(0, trim.startMs - 5000) / 1000);
-		}),
-		[withTrim, clearLoop, seekAndPlay],
-	);
-
-	const handleTrimPlayFromEnd = useCallback(
-		(id: string) => withTrim(id, (trim) => {
-			clearLoop();
-			seekAndPlay(trim.endMs / 1000);
-		}),
-		[withTrim, clearLoop, seekAndPlay],
-	);
-
-	const handleTrimToggleLoop = useCallback(
-		(id: string) => {
-			if (loopingTrimId === id) { clearLoop(); return; }
-			withTrim(id, (trim) => {
-				const region = computeLoopRegion(trim, Math.round(durationRef.current * 1000));
-				setLoopRegion(region);
-				setLoopingTrimId(id);
-				seekAndPlay(region.startMs / 1000);
-			});
-		},
-		[loopingTrimId, withTrim, clearLoop, seekAndPlay],
-	);
-
-	const handleZoomSpanChange = useCallback(
-		(id: string, span: Span) => {
-			pushState((prev) => ({
-				zoomRegions: prev.zoomRegions.map((region) =>
-					region.id === id
-						? {
-								...region,
-								startMs: Math.round(span.start),
-								endMs: Math.round(span.end),
-							}
-						: region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleTrimSpanChange = useCallback(
-		(id: string, span: Span) => {
-			pushState((prev) => ({
-				trimRegions: prev.trimRegions.map((region) =>
-					region.id === id
-						? {
-								...region,
-								startMs: Math.round(span.start),
-								endMs: Math.round(span.end),
-							}
-						: region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	// Focus drag: updateState for live preview, commitState on pointer-up
-	const handleZoomFocusChange = useCallback(
-		(id: string, focus: ZoomFocus) => {
-			updateState((prev) => ({
-				zoomRegions: prev.zoomRegions.map((region) =>
-					region.id === id ? { ...region, focus: clampFocusToDepth(focus, region.depth) } : region,
-				),
-			}));
-		},
-		[updateState],
-	);
-
-	const handleZoomDepthChange = useCallback(
-		(depth: ZoomDepth) => {
-			if (!selectedZoomId) return;
-			pushState((prev) => ({
-				zoomRegions: prev.zoomRegions.map((region) =>
-					region.id === selectedZoomId
-						? {
-								...region,
-								depth,
-								focus: clampFocusToDepth(region.focus, depth),
-							}
-						: region,
-				),
-			}));
-		},
-		[selectedZoomId, pushState],
-	);
-
-	const handleZoomFocusModeChange = useCallback(
-		(focusMode: ZoomFocusMode) => {
-			if (!selectedZoomId) return;
-			pushState((prev) => ({
-				zoomRegions: prev.zoomRegions.map((region) =>
-					region.id === selectedZoomId ? { ...region, focusMode } : region,
-				),
-			}));
-		},
-		[selectedZoomId, pushState],
-	);
-
-	const handleZoomDelete = useCallback(
-		(id: string) => {
-			pushState((prev) => ({
-				zoomRegions: prev.zoomRegions.filter((r) => r.id !== id),
-			}));
-			if (selectedZoomId === id) handleSelectZoom(null);
-		},
-		[selectedZoomId, pushState, handleSelectZoom],
-	);
-
-	const handleTrimDelete = useCallback(
-		(id: string) => {
-			pushState((prev) => ({
-				trimRegions: prev.trimRegions.filter((r) => r.id !== id),
-			}));
-			if (selectedTrimId === id) handleSelectTrim(null);
-		},
-		[selectedTrimId, pushState, handleSelectTrim],
-	);
-
-	const handleSpeedAdded = useCallback(
-		(span: Span) => {
-			const id = `speed-${nextSpeedIdRef.current++}`;
-			const newRegion: SpeedRegion = {
-				id,
-				startMs: Math.round(span.start),
-				endMs: Math.round(span.end),
-				speed: DEFAULT_PLAYBACK_SPEED,
-			};
-			pushState((prev) => ({
-				speedRegions: [...prev.speedRegions, newRegion],
-			}));
-			handleSelectSpeed(id);
-		},
-		[pushState, handleSelectSpeed],
-	);
-
-	const handleSpeedSpanChange = useCallback(
-		(id: string, span: Span) => {
-			pushState((prev) => ({
-				speedRegions: prev.speedRegions.map((region) =>
-					region.id === id
-						? {
-								...region,
-								startMs: Math.round(span.start),
-								endMs: Math.round(span.end),
-							}
-						: region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleSpeedDelete = useCallback(
-		(id: string) => {
-			pushState((prev) => ({
-				speedRegions: prev.speedRegions.filter((region) => region.id !== id),
-			}));
-			if (selectedSpeedId === id) handleSelectSpeed(null);
-		},
-		[selectedSpeedId, pushState, handleSelectSpeed],
-	);
-
-	const handleSpeedChange = useCallback(
-		(speed: PlaybackSpeed) => {
-			if (!selectedSpeedId) return;
-			pushState((prev) => ({
-				speedRegions: prev.speedRegions.map((region) =>
-					region.id === selectedSpeedId ? { ...region, speed } : region,
-				),
-			}));
-		},
-		[selectedSpeedId, pushState],
-	);
-
-	const handleAnnotationAdded = useCallback(
-		(span: Span) => {
-			const id = `annotation-${nextAnnotationIdRef.current++}`;
-			const zIndex = nextAnnotationZIndexRef.current++;
-			const newRegion: AnnotationRegion = {
-				id,
-				startMs: Math.round(span.start),
-				endMs: Math.round(span.end),
-				type: "text",
-				content: "Enter text...",
-				position: { ...DEFAULT_ANNOTATION_POSITION },
-				size: { ...DEFAULT_ANNOTATION_SIZE },
-				style: { ...DEFAULT_ANNOTATION_STYLE },
-				zIndex,
-			};
-			pushState((prev) => ({
-				annotationRegions: [...prev.annotationRegions, newRegion],
-			}));
-			handleSelectAnnotation(id);
-		},
-		[pushState, handleSelectAnnotation],
-	);
-
-	const handleAnnotationSpanChange = useCallback(
-		(id: string, span: Span) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.map((region) =>
-					region.id === id
-						? {
-								...region,
-								startMs: Math.round(span.start),
-								endMs: Math.round(span.end),
-							}
-						: region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleAnnotationDelete = useCallback(
-		(id: string) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.filter((r) => r.id !== id),
-			}));
-			if (selectedAnnotationId === id) handleSelectAnnotation(null);
-		},
-		[selectedAnnotationId, pushState, handleSelectAnnotation],
-	);
-
-	const handleAnnotationContentChange = useCallback(
-		(id: string, content: string) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.map((region) => {
-					if (region.id !== id) return region;
-					if (region.type === "text") {
-						return { ...region, content, textContent: content };
-					} else if (region.type === "image") {
-						return { ...region, content, imageContent: content };
-					}
-					return { ...region, content };
-				}),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleAnnotationTypeChange = useCallback(
-		(id: string, type: AnnotationRegion["type"]) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.map((region) => {
-					if (region.id !== id) return region;
-					const updatedRegion = { ...region, type };
-					if (type === "text") {
-						updatedRegion.content = region.textContent || "Enter text...";
-					} else if (type === "image") {
-						updatedRegion.content = region.imageContent || "";
-					} else if (type === "figure") {
-						updatedRegion.content = "";
-						if (!region.figureData) {
-							updatedRegion.figureData = { ...DEFAULT_FIGURE_DATA };
-						}
-					}
-					return updatedRegion;
-				}),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleAnnotationStyleChange = useCallback(
-		(id: string, style: Partial<AnnotationRegion["style"]>) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.map((region) =>
-					region.id === id ? { ...region, style: { ...region.style, ...style } } : region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleAnnotationFigureDataChange = useCallback(
-		(id: string, figureData: FigureData) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.map((region) =>
-					region.id === id ? { ...region, figureData } : region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleAnnotationPositionChange = useCallback(
-		(id: string, position: { x: number; y: number }) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.map((region) =>
-					region.id === id ? { ...region, position } : region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
-	const handleAnnotationSizeChange = useCallback(
-		(id: string, size: { width: number; height: number }) => {
-			pushState((prev) => ({
-				annotationRegions: prev.annotationRegions.map((region) =>
-					region.id === id ? { ...region, size } : region,
-				),
-			}));
-		},
-		[pushState],
-	);
-
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			const mod = e.ctrlKey || e.metaKey;
@@ -1298,23 +826,11 @@ export default function VideoEditor() {
 			if (isInput) return;
 			if (key === "i" && !mod && !e.shiftKey && !e.altKey) {
 				e.preventDefault();
-				setTrimMarkStartMs(Math.round(currentTimeRef.current * 1000));
+				handleQuickTrimStart();
 			}
 			if (key === "o" && !mod && !e.shiftKey && !e.altKey) {
 				e.preventDefault();
-				const startMs = trimMarkStartMsRef.current;
-				if (startMs == null) return;
-				const endMs = Math.round(currentTimeRef.current * 1000);
-				if (endMs <= startMs) return;
-				const id = `trim-${nextTrimIdRef.current++}`;
-				pushState((prev) => ({
-					trimRegions: [
-						...prev.trimRegions,
-						{ id, startMs, endMs },
-					],
-				}));
-				handleSelectTrim(id);
-				setTrimMarkStartMs(null);
+				handleQuickTrimEnd();
 			}
 
 			// Chapter shortcuts: C = add chapter, [ / ] = navigate between chapters
@@ -1324,36 +840,17 @@ export default function VideoEditor() {
 			}
 			if (key === "[" && !mod && !e.shiftKey && !e.altKey) {
 				e.preventDefault();
-				const nowMs = Math.round(currentTimeRef.current * 1000);
-				const sorted = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs);
-				const prev = [...sorted].reverse().find((ch) => ch.startMs < nowMs - 100);
-				if (prev) {
-					const playback = videoPlaybackRef.current;
-					if (playback?.video) playback.video.currentTime = prev.startMs / 1000;
-				}
+				handleChapterNavigatePrev();
 			}
 			if (key === "]" && !mod && !e.shiftKey && !e.altKey) {
 				e.preventDefault();
-				const nowMs = Math.round(currentTimeRef.current * 1000);
-				const sorted = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs);
-				const next = sorted.find((ch) => ch.startMs > nowMs + 100);
-				if (next) {
-					const playback = videoPlaybackRef.current;
-					if (playback?.video) playback.video.currentTime = next.startMs / 1000;
-				}
+				handleChapterNavigateNext();
 			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [undo, redo, shortcuts, isMac, pushState, handleAddChapter]);
-
-
-	useEffect(() => {
-		if (loopingTrimId && !trimRegions.some((r) => r.id === loopingTrimId)) {
-			clearLoop();
-		}
-	}, [loopingTrimId, trimRegions, clearLoop]);
+	}, [undo, redo, shortcuts, isMac, handleAddChapter, handleQuickTrimStart, handleQuickTrimEnd, handleChapterNavigatePrev, handleChapterNavigateNext]);
 
 	const handleShowExportedFile = useCallback(async (filePath: string) => {
 		try {
