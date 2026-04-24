@@ -1,5 +1,6 @@
 import { WebDemuxer } from "web-demuxer";
 import type { SpeedRegion, TrimRegion } from "@/components/video-editor/types";
+import { getAPI } from "@/lib/tauriBridge";
 
 const SOURCE_LOAD_TIMEOUT_MS = 60_000;
 
@@ -132,9 +133,9 @@ export class StreamingVideoDecoder {
 	private async loadSourceFile(videoUrl: string): Promise<{ file: File; blob: Blob }> {
 		const isRemoteUrl = /^(https?:|blob:|data:)/i.test(videoUrl);
 
-		if (!isRemoteUrl && window.electronAPI?.readBinaryFile) {
+		if (!isRemoteUrl && getAPI()?.readBinaryFile) {
 			const result = await this.withTimeout(
-				window.electronAPI.readBinaryFile(videoUrl),
+				getAPI().readBinaryFile(videoUrl),
 				SOURCE_LOAD_TIMEOUT_MS,
 				"Timed out while loading the source video.",
 			);

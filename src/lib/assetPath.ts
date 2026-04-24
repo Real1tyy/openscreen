@@ -25,8 +25,9 @@ export async function getAssetPath(relativePath: string): Promise<string> {
 				return `/${encodedRelativePath}`;
 			}
 
-			if (window.electronAPI && typeof window.electronAPI.getAssetBasePath === "function") {
-				const base = await window.electronAPI.getAssetBasePath();
+			const api = (await import("@/lib/tauriBridge")).getAPI();
+			if (api && typeof api.getAssetBasePath === "function") {
+				const base = await api.getAssetBasePath();
 				if (base) {
 					return new URL(encodedRelativePath, ensureTrailingSlash(base)).toString();
 				}

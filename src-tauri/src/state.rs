@@ -1,10 +1,15 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+use crate::commands::file_io::CursorTelemetryPoint;
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RecordingSession {
-    pub screen_video_path: Option<String>,
+    #[serde(rename = "screenVideoPath")]
+    pub screen_video_path: String,
+    #[serde(rename = "webcamVideoPath", skip_serializing_if = "Option::is_none")]
     pub webcam_video_path: Option<String>,
-    pub session_path: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: f64,
 }
 
 #[derive(Debug, Default)]
@@ -17,4 +22,5 @@ pub struct AppState {
     pub is_recording: bool,
     pub approved_paths: Vec<String>,
     pub locale: String,
+    pub pending_cursor_samples: Vec<CursorTelemetryPoint>,
 }

@@ -20,6 +20,7 @@ import { RxDragHandleDots2 } from "react-icons/rx";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
 import { getLocaleName } from "@/i18n/loader";
+import { getAPI } from "@/lib/tauriBridge";
 import { isMac as getIsMac } from "@/utils/platformUtils";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useCameraDevices } from "../../hooks/useCameraDevices";
@@ -167,8 +168,8 @@ export function LaunchWindow() {
 
 	useEffect(() => {
 		const checkSelectedSource = async () => {
-			if (window.electronAPI) {
-				const source = await window.electronAPI.getSelectedSource();
+			if (getAPI()) {
+				const source = await getAPI().getSelectedSource();
 				if (source) {
 					setSelectedSource(source.name);
 					setHasSelectedSource(true);
@@ -186,38 +187,38 @@ export function LaunchWindow() {
 	}, []);
 
 	const openSourceSelector = () => {
-		if (window.electronAPI) {
-			window.electronAPI.openSourceSelector();
+		if (getAPI()) {
+			getAPI().openSourceSelector();
 		}
 	};
 
 	const openVideoFile = async () => {
-		const result = await window.electronAPI.openVideoFilePicker();
+		const result = await getAPI().openVideoFilePicker();
 
 		if (result.canceled) {
 			return;
 		}
 
 		if (result.success && result.path) {
-			await window.electronAPI.setCurrentVideoPath(result.path);
-			await window.electronAPI.switchToEditor();
+			await getAPI().setCurrentVideoPath(result.path);
+			await getAPI().switchToEditor();
 		}
 	};
 
 	const openProjectFile = async () => {
-		const result = await window.electronAPI.loadProjectFile();
+		const result = await getAPI().loadProjectFile();
 		if (result.canceled || !result.success) return;
-		await window.electronAPI.switchToEditor();
+		await getAPI().switchToEditor();
 	};
 
 	const sendHudOverlayHide = () => {
-		if (window.electronAPI && window.electronAPI.hudOverlayHide) {
-			window.electronAPI.hudOverlayHide();
+		if (getAPI() && getAPI().hudOverlayHide) {
+			getAPI().hudOverlayHide();
 		}
 	};
 	const sendHudOverlayClose = () => {
-		if (window.electronAPI && window.electronAPI.hudOverlayClose) {
-			window.electronAPI.hudOverlayClose();
+		if (getAPI() && getAPI().hudOverlayClose) {
+			getAPI().hudOverlayClose();
 		}
 	};
 

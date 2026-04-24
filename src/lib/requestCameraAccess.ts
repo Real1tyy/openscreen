@@ -14,9 +14,10 @@ function getDeniedStatus(error: unknown) {
 }
 
 export async function requestCameraAccess(): Promise<CameraAccessResult> {
-	if (window.electronAPI?.requestCameraAccess) {
+	const api = (await import("@/lib/tauriBridge")).getAPI();
+	if (api?.requestCameraAccess) {
 		try {
-			const electronResult = await window.electronAPI.requestCameraAccess();
+			const electronResult = await api.requestCameraAccess();
 			if (!electronResult.success || !electronResult.granted) {
 				return electronResult;
 			}

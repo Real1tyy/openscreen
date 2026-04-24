@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { StreamingVideoDecoder } from "@/lib/exporter/streamingDecoder";
 import { VideoExporter } from "@/lib/exporter/videoExporter";
+import { getAPI } from "@/lib/tauriBridge";
 
 export default function HeadlessExport() {
 	const started = useRef(false);
@@ -17,9 +18,9 @@ export default function HeadlessExport() {
 
 async function runExport() {
 	try {
-		const config = await window.electronAPI.getHeadlessExportConfig();
+		const config = await getAPI().getHeadlessExportConfig();
 		if (!config) {
-			await window.electronAPI.sendHeadlessExportDone({
+			await getAPI().sendHeadlessExportDone({
 				success: false,
 				error: "No export config received",
 			});
@@ -67,7 +68,7 @@ async function runExport() {
 			previewWidth: exportWidth,
 			previewHeight: exportHeight,
 			onProgress: (progress) => {
-				window.electronAPI.sendHeadlessExportProgress(progress.percentage);
+				getAPI().sendHeadlessExportProgress(progress.percentage);
 			},
 		});
 
@@ -75,18 +76,18 @@ async function runExport() {
 
 		if (result.success && result.blob) {
 			const arrayBuffer = await result.blob.arrayBuffer();
-			await window.electronAPI.sendHeadlessExportDone({
+			await getAPI().sendHeadlessExportDone({
 				success: true,
 				data: arrayBuffer,
 			});
 		} else {
-			await window.electronAPI.sendHeadlessExportDone({
+			await getAPI().sendHeadlessExportDone({
 				success: false,
 				error: result.error || "Export failed",
 			});
 		}
 	} catch (error) {
-		await window.electronAPI.sendHeadlessExportDone({
+		await getAPI().sendHeadlessExportDone({
 			success: false,
 			error: error instanceof Error ? error.message : String(error),
 		});
@@ -133,7 +134,7 @@ async function resolveBackground(background: string): Promise<string> {
 	// If it's a relative wallpaper path (e.g. /wallpapers/wallpaper1.jpg),
 	// resolve it relative to the app's assets
 	if (background.startsWith("/")) {
-		const basePath = await window.electronAPI.getAssetBasePath();
+		const basePath = await getAPI().getAssetBasePath();
 		if (basePath) {
 			// basePath is like file:///path/to/assets/ — the wallpaper paths
 			// are stored as /wallpapers/X.jpg, so strip the leading slash

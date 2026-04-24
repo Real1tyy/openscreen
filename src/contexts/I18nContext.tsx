@@ -7,6 +7,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { getAPI } from "@/lib/tauriBridge";
 import {
 	DEFAULT_LOCALE,
 	type I18nNamespace,
@@ -66,7 +67,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 		}
 		document.documentElement.lang = newLocale;
 		// Notify Electron main process
-		window.electronAPI?.setLocale?.(newLocale);
+		getAPI()?.setLocale?.(newLocale);
 	}, []);
 
 	useEffect(() => {

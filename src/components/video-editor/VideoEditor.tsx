@@ -11,6 +11,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { getAPI } from "@/lib/tauriBridge";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { INITIAL_EDITOR_STATE, useEditorHistory } from "@/hooks/useEditorHistory";
 import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
@@ -381,7 +382,7 @@ export default function VideoEditor() {
 		async function loadInitialData() {
 			try {
 				// Check if a file was provided via CLI argument
-				const cliFile = await window.electronAPI.getCliInputFile();
+				const cliFile = await getAPI().getCliInputFile();
 				if (cliFile) {
 					setVideoSourcePath(cliFile);
 					setVideoPath(toFileUrl(cliFile));
@@ -389,7 +390,7 @@ export default function VideoEditor() {
 					setWebcamVideoPath(null);
 					setCurrentProjectPath(null);
 
-					const cliConfig = await window.electronAPI.getCliEditorConfig();
+					const cliConfig = await getAPI().getCliEditorConfig();
 					if (cliConfig) {
 						updateState({
 							shadowIntensity: cliConfig.shadowIntensity,
@@ -407,7 +408,7 @@ export default function VideoEditor() {
 					return;
 				}
 
-				const currentProjectResult = await window.electronAPI.loadCurrentProjectFile();
+				const currentProjectResult = await getAPI().loadCurrentProjectFile();
 				if (currentProjectResult.success && currentProjectResult.project) {
 					const restored = await applyLoadedProject(
 						currentProjectResult.project,
@@ -418,7 +419,7 @@ export default function VideoEditor() {
 					}
 				}
 
-				const currentSessionResult = await window.electronAPI.getCurrentRecordingSession();
+				const currentSessionResult = await getAPI().getCurrentRecordingSession();
 				if (currentSessionResult.success && currentSessionResult.session) {
 					const session = currentSessionResult.session;
 					const sourcePath = fromFileUrl(session.screenVideoPath);
@@ -441,7 +442,7 @@ export default function VideoEditor() {
 					return;
 				}
 
-				const result = await window.electronAPI.getCurrentVideoPath();
+				const result = await getAPI().getCurrentVideoPath();
 				if (result.success && result.path) {
 					const sourcePath = fromFileUrl(result.path);
 					setVideoSourcePath(sourcePath);
@@ -529,7 +530,7 @@ export default function VideoEditor() {
 					.pop()
 					?.replace(/\.[^.]+$/, "") || `project-${Date.now()}`;
 			const projectSnapshot = JSON.stringify(projectData);
-			const result = await window.electronAPI.saveProjectFile(
+			const result = await getAPI().saveProjectFile(
 				projectData,
 				fileNameBase,
 				forceSaveAs ? undefined : (currentProjectPath ?? undefined),
@@ -583,11 +584,11 @@ export default function VideoEditor() {
 	);
 
 	useEffect(() => {
-		window.electronAPI.setHasUnsavedChanges(hasUnsavedChanges);
+		getAPI().setHasUnsavedChanges(hasUnsavedChanges);
 	}, [hasUnsavedChanges]);
 
 	useEffect(() => {
-		const cleanup = window.electronAPI.onRequestSaveBeforeClose(async () => {
+		const cleanup = getAPI().onRequestSaveBeforeClose(async () => {
 			return saveProject(false);
 		});
 		return () => cleanup();
@@ -602,7 +603,7 @@ export default function VideoEditor() {
 	}, [saveProject]);
 
 	const handleNewRecordingConfirm = useCallback(async () => {
-		const result = await window.electronAPI.startNewRecording();
+		const result = await getAPI().startNewRecording();
 		if (result.success) {
 			setShowNewRecordingDialog(false);
 		} else {
@@ -612,7 +613,7 @@ export default function VideoEditor() {
 	}, []);
 
 	const handleLoadProject = useCallback(async () => {
-		const result = await window.electronAPI.loadProjectFile();
+		const result = await getAPI().loadProjectFile();
 
 		if (result.canceled) {
 			return;
@@ -633,9 +634,9 @@ export default function VideoEditor() {
 	}, [applyLoadedProject]);
 
 	useEffect(() => {
-		const removeLoadListener = window.electronAPI.onMenuLoadProject(handleLoadProject);
-		const removeSaveListener = window.electronAPI.onMenuSaveProject(handleSaveProject);
-		const removeSaveAsListener = window.electronAPI.onMenuSaveProjectAs(handleSaveProjectAs);
+		const removeLoadListener = getAPI().onMenuLoadProject(handleLoadProject);
+		const removeSaveListener = getAPI().onMenuSaveProject(handleSaveProject);
+		const removeSaveAsListener = getAPI().onMenuSaveProjectAs(handleSaveProjectAs);
 
 		return () => {
 			removeLoadListener?.();
@@ -658,7 +659,7 @@ export default function VideoEditor() {
 			}
 
 			try {
-				const result = await window.electronAPI.getCursorTelemetry(sourcePath);
+				const result = await getAPI().getCursorTelemetry(sourcePath);
 				if (mounted) {
 					setCursorTelemetry(result.success ? result.samples : []);
 				}

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { EditorState } from "@/hooks/useEditorHistory";
 import { getAssetPath } from "@/lib/assetPath";
+import { getAPI } from "@/lib/tauriBridge";
 import {
 	calculateOutputDimensions,
 	type ExportFormat,
@@ -57,7 +58,7 @@ async function saveExportResult(
 ) {
 	const arrayBuffer = await blob.arrayBuffer();
 	const fileName = `export-${Date.now()}.${extension}`;
-	const saveResult = await window.electronAPI.saveExportedVideo(arrayBuffer, fileName);
+	const saveResult = await getAPI().saveExportedVideo(arrayBuffer, fileName);
 
 	if (saveResult.canceled) {
 		onUnsaved({ arrayBuffer, fileName, format: extension });
@@ -67,7 +68,7 @@ async function saveExportResult(
 		if (extension === "mp4" && chapters && chapters.length > 0 && trimRegions) {
 			const chaptersText = formatChaptersForExport(chapters, trimRegions);
 			const chaptersPath = saveResult.path.replace(/\.mp4$/i, "-chapters.txt");
-			window.electronAPI.writeTextFile(chaptersPath, chaptersText).catch(() => {});
+			getAPI().writeTextFile(chaptersPath, chaptersText).catch(() => {});
 		}
 	} else {
 		const msg = saveResult.message || `Failed to save ${formatLabel}`;
@@ -110,7 +111,7 @@ export function useExport({
 
 	const handleShowExportedFile = useCallback(async (filePath: string) => {
 		try {
-			const result = await window.electronAPI.revealInFolder(filePath);
+			const result = await getAPI().revealInFolder(filePath);
 			if (!result.success) {
 				const msg = result.error || result.message || "Failed to reveal item in folder.";
 				console.error("Failed to reveal in folder:", msg);
@@ -141,7 +142,7 @@ export function useExport({
 	const handleSaveUnsavedExport = useCallback(async () => {
 		if (!unsavedExport) return;
 		try {
-			const saveResult = await window.electronAPI.saveExportedVideo(
+			const saveResult = await getAPI().saveExportedVideo(
 				unsavedExport.arrayBuffer,
 				unsavedExport.fileName,
 			);

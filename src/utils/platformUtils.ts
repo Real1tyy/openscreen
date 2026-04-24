@@ -1,13 +1,12 @@
+import { getAPI } from "@/lib/tauriBridge";
+
 let cachedPlatform: string | null = null;
 
-/**
- * Gets the current platform from Electron
- */
 const getPlatform = async (): Promise<string> => {
 	if (cachedPlatform) return cachedPlatform;
 
 	try {
-		const platform = await window.electronAPI.getPlatform();
+		const platform = await getAPI().getPlatform();
 		cachedPlatform = platform;
 		return platform;
 	} catch (error) {

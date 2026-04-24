@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { MdCheck } from "react-icons/md";
 import { useScopedT } from "@/contexts/I18nContext";
+import { getAPI } from "@/lib/tauriBridge";
 import { Button } from "../ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import styles from "./SourceSelector.module.css";
@@ -24,7 +25,7 @@ export function SourceSelector() {
 		async function fetchSources() {
 			setLoading(true);
 			try {
-				const rawSources = await window.electronAPI.getSources({
+				const rawSources = await getAPI().getSources({
 					types: ["screen", "window"],
 					thumbnailSize: { width: 320, height: 180 },
 					fetchWindowIcons: true,
@@ -55,7 +56,7 @@ export function SourceSelector() {
 
 	const handleSourceSelect = (source: DesktopSource) => setSelectedSource(source);
 	const handleShare = async () => {
-		if (selectedSource) await window.electronAPI.selectSource(selectedSource);
+		if (selectedSource) await getAPI().selectSource(selectedSource);
 	};
 
 	if (loading) {
