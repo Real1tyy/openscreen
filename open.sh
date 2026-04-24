@@ -7,8 +7,10 @@ set -e
 
 OPENSCREEN="$(dirname "$0")/release/1.3.0/Openscreen-Linux-1.3.0.AppImage"
 
+DEFAULT_DIR="$HOME/Documents/OBS-Recordings"
+
 if [ "$1" = "--latest" ]; then
-  DIR="${2:-.}"
+  DIR="${2:-$DEFAULT_DIR}"
   INPUT=$(find "$DIR" -maxdepth 1 -name '*.mp4' -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
   if [ -z "$INPUT" ]; then
     echo "No .mp4 files found in $DIR"
