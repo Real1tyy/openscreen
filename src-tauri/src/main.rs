@@ -5,7 +5,9 @@ mod state;
 
 use state::AppState;
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 fn main() {
     env_logger::init();
@@ -55,6 +57,7 @@ fn main() {
             commands::windows::open_external_url,
             commands::windows::set_locale,
             commands::windows::get_asset_base_path,
+            commands::windows::set_recording_state,
             // CLI
             commands::cli::get_cli_input_file,
             commands::cli::get_cli_editor_config,
@@ -63,17 +66,168 @@ fn main() {
         .setup(|app| {
             let app_handle = app.handle().clone();
 
+            // Ensure recordings directory
             let recordings_dir = app_handle
                 .path()
                 .app_data_dir()
                 .expect("failed to resolve app data dir")
                 .join("recordings");
             std::fs::create_dir_all(&recordings_dir).ok();
-
             log::info!("OpenScreen started, data dir: {:?}", recordings_dir);
+
+            // Parse CLI arguments
+            commands::cli::parse_cli_args(&app_handle);
+
+            // Build application menu
+            setup_app_menu(app)?;
+
+            // Build system tray
+            setup_tray(app)?;
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running OpenScreen");
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { .. } = event {
+                let label = window.label();
+                if label == "editor" {
+                    // Emit event to frontend to check for unsaved changes
+                    window.emit("request-save-before-close", ()).ok();
+                    // Don't prevent close — let the frontend decide via a command
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building OpenScreen")
+        .run(|_app_handle, _event| {
+        });
+}
+
+fn setup_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let is_mac = cfg!(target_os = "macos");
+    let mod_key = if is_mac { "Cmd" } else { "Ctrl" };
+
+    let load_project = MenuItemBuilder::with_id("load-project", "Open Project...")
+        .accelerator(format!("{}+O", mod_key))
+        .build(app)?;
+    let save_project = MenuItemBuilder::with_id("save-project", "Save Project")
+        .accelerator(format!("{}+S", mod_key))
+        .build(app)?;
+    let save_project_as = MenuItemBuilder::with_id("save-project-as", "Save Project As...")
+        .accelerator(format!("{}+Shift+S", mod_key))
+        .build(app)?;
+
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&load_project)
+        .item(&save_project)
+        .item(&save_project_as)
+        .separator()
+        .quit()
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .fullscreen()
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .close_window()
+        .build()?;
+
+    let menu = MenuBuilder::new(app)
+        .items(&[&file_menu, &edit_menu, &view_menu, &window_menu])
+        .build()?;
+
+    app.set_menu(menu)?;
+
+    app.on_menu_event(move |app, event| {
+        match event.id().as_ref() {
+            "load-project" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.emit("menu-load-project", ()).ok();
+                }
+            }
+            "save-project" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.emit("menu-save-project", ()).ok();
+                }
+            }
+            "save-project-as" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.emit("menu-save-project-as", ()).ok();
+                }
+            }
+            _ => {}
+        }
+    });
+
+    Ok(())
+}
+
+fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let open_item = MenuItemBuilder::with_id("tray-open", "Open").build(app)?;
+    let quit_item = MenuItemBuilder::with_id("tray-quit", "Quit").build(app)?;
+
+    let tray_menu = MenuBuilder::new(app)
+        .item(&open_item)
+        .separator()
+        .item(&quit_item)
+        .build()?;
+
+    TrayIconBuilder::new()
+        .icon(app.default_window_icon().unwrap().clone())
+        .tooltip("OpenScreen")
+        .menu(&tray_menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray-open" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.unminimize().ok();
+                    editor.show().ok();
+                    editor.set_focus().ok();
+                } else if let Some(hud) = app.get_webview_window("hud-overlay") {
+                    hud.show().ok();
+                    hud.set_focus().ok();
+                }
+            }
+            "tray-quit" => {
+                app.exit(0);
+            }
+            "tray-stop-recording" => {
+                // Emit stop-recording event to the HUD window
+                if let Some(hud) = app.get_webview_window("hud-overlay") {
+                    hud.emit("stop-recording-from-tray", ()).ok();
+                }
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.unminimize().ok();
+                    editor.show().ok();
+                    editor.set_focus().ok();
+                } else if let Some(hud) = app.get_webview_window("hud-overlay") {
+                    hud.show().ok();
+                    hud.set_focus().ok();
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
 }

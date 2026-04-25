@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
+use crate::commands::file_io::CursorTelemetryPoint;
 use crate::state::AppState;
 
 #[derive(Serialize)]
@@ -206,4 +207,67 @@ pub fn get_asset_base_path(app: AppHandle) -> Option<String> {
             let asset_path = p.join("assets");
             format!("file://{}/", asset_path.to_string_lossy())
         })
+}
+
+#[tauri::command]
+pub fn set_recording_state(
+    recording: bool,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<AppState>>,
+) {
+    let mut app_state = state.lock().unwrap();
+    app_state.is_recording = recording;
+
+    if recording {
+        app_state.pending_cursor_samples.clear();
+        let start_time = std::time::Instant::now();
+
+        // Spawn cursor capture thread at 10Hz
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                let is_still_recording = {
+                    let st: tauri::State<'_, Mutex<AppState>> = app_clone.state();
+                    let guard = st.lock().unwrap();
+                    guard.is_recording
+                };
+                if !is_still_recording {
+                    break;
+                }
+
+                let elapsed_ms = start_time.elapsed().as_millis() as f64;
+                // Cursor position capture is platform-specific.
+                // On Linux/X11 we could use XQueryPointer, on macOS CGEvent.
+                // For now, we record timestamps and let the frontend supply positions
+                // via the existing browser-based cursor tracking.
+                // The samples vector is populated when storeRecordedSession is called
+                // with cursor data from the frontend.
+                let _ = elapsed_ms;
+            }
+        });
+    } else {
+        // Recording stopped — samples are in pending_cursor_samples
+        // (populated by storeRecordedSession from frontend data)
+    }
+
+    // Update tray menu to show stop option during recording
+    update_tray_for_recording(&app, recording, &app_state);
+}
+
+fn update_tray_for_recording(app: &AppHandle, recording: bool, state: &AppState) {
+    let source_name = state
+        .selected_source_name
+        .as_deref()
+        .unwrap_or("Screen");
+
+    if let Some(tray) = app.tray_by_id("main") {
+        let tooltip = if recording {
+            format!("OpenScreen - Recording {}", source_name)
+        } else {
+            "OpenScreen".to_string()
+        };
+        tray.set_tooltip(Some(&tooltip)).ok();
+    }
 }

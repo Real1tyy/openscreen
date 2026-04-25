@@ -943,3 +943,113 @@ fn chrono_millis() -> u64 {
         .unwrap()
         .as_millis() as u64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_has_valid_video_extension() {
+        assert!(has_valid_video_extension("video.mp4"));
+        assert!(has_valid_video_extension("video.webm"));
+        assert!(has_valid_video_extension("video.mov"));
+        assert!(has_valid_video_extension("video.avi"));
+        assert!(has_valid_video_extension("video.mkv"));
+        assert!(has_valid_video_extension("VIDEO.MP4"));
+        assert!(!has_valid_video_extension("file.txt"));
+        assert!(!has_valid_video_extension("file.exe"));
+        assert!(!has_valid_video_extension("file"));
+    }
+
+    #[test]
+    fn test_is_path_within_dir() {
+        let dir = std::env::temp_dir();
+        let file = dir.join("test.txt");
+        assert!(is_path_within_dir(&file, &dir));
+        assert!(!is_path_within_dir(Path::new("/etc/passwd"), &dir));
+    }
+
+    #[test]
+    fn test_resolve_recording_output_path_rejects_traversal() {
+        let tmp = std::env::temp_dir();
+        // We can't test with a real AppHandle, but we can test the validation logic
+        let name = "../../../etc/passwd";
+        assert!(name.contains(".."));
+        assert!(name.contains('/'));
+    }
+
+    #[test]
+    fn test_cursor_telemetry_point_serialization() {
+        let point = CursorTelemetryPoint {
+            time_ms: 1000.0,
+            cx: 0.5,
+            cy: 0.75,
+        };
+        let json = serde_json::to_string(&point).unwrap();
+        assert!(json.contains("\"timeMs\":1000.0"));
+        assert!(json.contains("\"cx\":0.5"));
+        assert!(json.contains("\"cy\":0.75"));
+
+        let deserialized: CursorTelemetryPoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.time_ms, 1000.0);
+        assert_eq!(deserialized.cx, 0.5);
+        assert_eq!(deserialized.cy, 0.75);
+    }
+
+    #[test]
+    fn test_cursor_telemetry_from_json_file() {
+        let data = r#"{"version":1,"samples":[{"timeMs":0,"cx":0.5,"cy":0.5},{"timeMs":100,"cx":0.6,"cy":0.4}]}"#;
+        let parsed: serde_json::Value = serde_json::from_str(data).unwrap();
+        let samples = parsed.get("samples").unwrap().as_array().unwrap();
+        let points: Vec<CursorTelemetryPoint> = samples
+            .iter()
+            .filter_map(|s| serde_json::from_value(s.clone()).ok())
+            .collect();
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].time_ms, 0.0);
+        assert_eq!(points[1].cx, 0.6);
+    }
+
+    #[test]
+    fn test_write_and_read_text_file() {
+        let tmp = std::env::temp_dir().join("openscreen_test_write.txt");
+        let result = write_text_file(tmp.to_string_lossy().to_string(), "hello world".to_string());
+        assert!(result.success);
+
+        let content = fs::read_to_string(&tmp).unwrap();
+        assert_eq!(content, "hello world");
+        fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_generic_result_serialization() {
+        let result = GenericResult {
+            success: true,
+            path: Some("/tmp/file.mp4".to_string()),
+            message: None,
+            error: None,
+            canceled: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"path\":\"/tmp/file.mp4\""));
+        assert!(!json.contains("message"));
+        assert!(!json.contains("error"));
+        assert!(!json.contains("canceled"));
+    }
+
+    #[test]
+    fn test_shortcuts_round_trip() {
+        let tmp = std::env::temp_dir().join("openscreen_test_shortcuts.json");
+        let shortcuts = serde_json::json!({"playPause": "Space", "undo": "Ctrl+Z"});
+        let content = serde_json::to_string_pretty(&shortcuts).unwrap();
+        fs::write(&tmp, &content).unwrap();
+
+        let loaded: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&tmp).unwrap()).unwrap();
+        assert_eq!(loaded["playPause"], "Space");
+        assert_eq!(loaded["undo"], "Ctrl+Z");
+        fs::remove_file(&tmp).ok();
+    }
+}

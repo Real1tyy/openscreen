@@ -24,3 +24,49 @@ pub struct AppState {
     pub locale: String,
     pub pending_cursor_samples: Vec<CursorTelemetryPoint>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_state_default() {
+        let state = AppState::default();
+        assert!(state.current_session.is_none());
+        assert!(state.current_project_path.is_none());
+        assert!(!state.is_recording);
+        assert!(state.approved_paths.is_empty());
+        assert!(state.pending_cursor_samples.is_empty());
+    }
+
+    #[test]
+    fn test_recording_session_serialization() {
+        let session = RecordingSession {
+            screen_video_path: "/tmp/screen.webm".to_string(),
+            webcam_video_path: Some("/tmp/webcam.webm".to_string()),
+            created_at: 1700000000.0,
+        };
+        let json = serde_json::to_string(&session).unwrap();
+        assert!(json.contains("screenVideoPath"));
+        assert!(json.contains("webcamVideoPath"));
+        assert!(json.contains("createdAt"));
+
+        let deserialized: RecordingSession = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.screen_video_path, "/tmp/screen.webm");
+        assert_eq!(deserialized.webcam_video_path.as_deref(), Some("/tmp/webcam.webm"));
+    }
+
+    #[test]
+    fn test_recording_session_without_webcam() {
+        let session = RecordingSession {
+            screen_video_path: "/tmp/screen.webm".to_string(),
+            webcam_video_path: None,
+            created_at: 1700000000.0,
+        };
+        let json = serde_json::to_string(&session).unwrap();
+        assert!(!json.contains("webcamVideoPath"));
+
+        let deserialized: RecordingSession = serde_json::from_str(&json).unwrap();
+        assert!(deserialized.webcam_video_path.is_none());
+    }
+}
