@@ -1,24 +1,22 @@
 import { BackgroundSection } from "./settings/BackgroundSection";
 import { EffectsSection } from "./settings/EffectsSection";
+import { SpeedSection } from "./settings/SpeedSection";
+import { WebcamSection } from "./settings/WebcamSection";
+import { ZoomSection } from "./settings/ZoomSection";
 import {
 	Bug,
 	Download,
 	Film,
 	Image,
 	Lock,
-	Sparkles,
 	Star,
 	Trash2,
 	Unlock,
 	X,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { toast } from "sonner";
 import {
 	Accordion,
-	AccordionContent,
-	AccordionItem,
-	AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,19 +26,16 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useScopedT } from "@/contexts/I18nContext";
-import { WEBCAM_LAYOUT_PRESETS } from "@/lib/compositeLayout";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import { GIF_FRAME_RATES, GIF_SIZE_PRESETS } from "@/lib/exporter";
 import { cn } from "@/lib/utils";
-import { type AspectRatio, isPortraitAspectRatio } from "@/utils/aspectRatioUtils";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import { getAPI } from "@/lib/tauriBridge";
 import { getTestId } from "@/utils/getTestId";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { CropControl } from "./CropControl";
-import { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 import type {
 	AnnotationRegion,
 	AnnotationType,
@@ -53,70 +48,8 @@ import type {
 	ZoomDepth,
 	ZoomFocusMode,
 } from "./types";
-import { DEFAULT_WEBCAM_SIZE_PRESET, MAX_PLAYBACK_SPEED, SPEED_OPTIONS } from "./types";
+import { DEFAULT_WEBCAM_SIZE_PRESET } from "./types";
 
-function CustomSpeedInput({
-	value,
-	onChange,
-	onError,
-}: {
-	value: number;
-	onChange: (val: number) => void;
-	onError: () => void;
-}) {
-	const isPreset = SPEED_OPTIONS.some((o) => o.speed === value);
-	const [draft, setDraft] = useState(isPreset ? "" : String(Math.round(value)));
-	const [isFocused, setIsFocused] = useState(false);
-
-	const prevValue = useRef(value);
-	if (!isFocused && prevValue.current !== value) {
-		prevValue.current = value;
-		setDraft(isPreset ? "" : String(Math.round(value)));
-	}
-
-	const handleChange = useCallback(
-		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const digits = e.target.value.replace(/\D/g, "");
-			if (digits === "") {
-				setDraft("");
-				return;
-			}
-			const num = Number(digits);
-			if (num > MAX_PLAYBACK_SPEED) {
-				onError();
-				return;
-			}
-			setDraft(digits);
-			if (num >= 1) onChange(num);
-		},
-		[onChange, onError],
-	);
-
-	const handleBlur = useCallback(() => {
-		setIsFocused(false);
-		if (!draft || Number(draft) < 1) {
-			setDraft(isPreset ? "" : String(Math.round(value)));
-		}
-	}, [draft, isPreset, value]);
-
-	return (
-		<div className="flex items-center gap-1">
-			<input
-				type="text"
-				inputMode="numeric"
-				pattern="[0-9]*"
-				placeholder="--"
-				value={draft}
-				onFocus={() => setIsFocused(true)}
-				onChange={handleChange}
-				onBlur={handleBlur}
-				onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-				className="w-12 bg-white/5 border border-white/10 rounded-md px-1 py-0.5 text-[11px] font-semibold text-[#d97706] text-center focus:outline-none focus:border-[#d97706]/40"
-			/>
-			<span className="text-[11px] font-semibold text-slate-500">×</span>
-		</div>
-	);
-}
 
 interface SettingsPanelProps {
 	selected: string;
@@ -189,15 +122,6 @@ interface SettingsPanelProps {
 }
 
 export default SettingsPanel;
-
-const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
-	{ depth: 1, label: "1.25×" },
-	{ depth: 2, label: "1.5×" },
-	{ depth: 3, label: "1.8×" },
-	{ depth: 4, label: "2.2×" },
-	{ depth: 5, label: "3.5×" },
-	{ depth: 6, label: "5×" },
-];
 
 export function SettingsPanel({
 	selected,
@@ -366,20 +290,7 @@ export function SettingsPanel({
 		[cropRegion, videoWidth, videoHeight],
 	);
 
-	const zoomEnabled = Boolean(selectedZoomDepth);
 	const trimEnabled = Boolean(selectedTrimId);
-
-	const handleDeleteClick = () => {
-		if (selectedZoomId && onZoomDelete) {
-			onZoomDelete(selectedZoomId);
-		}
-	};
-
-	const handleTrimDeleteClick = () => {
-		if (selectedTrimId && onTrimDelete) {
-			onTrimDelete(selectedTrimId);
-		}
-	};
 
 	const handleCropToggle = () => {
 		if (!showCropModal && cropRegion) {
@@ -427,96 +338,20 @@ export function SettingsPanel({
 	return (
 		<div className="flex-[2] min-w-0 bg-[#09090b] border border-white/5 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-0">
-				<div className="mb-4">
-					<div className="flex items-center justify-between mb-3">
-						<span className="text-sm font-medium text-slate-200">{t("zoom.level")}</span>
-						<div className="flex items-center gap-2">
-							{zoomEnabled && selectedZoomDepth && (
-								<span className="text-[10px] uppercase tracking-wider font-medium text-[#34B27B] bg-[#34B27B]/10 px-2 py-0.5 rounded-full">
-									{ZOOM_DEPTH_OPTIONS.find((o) => o.depth === selectedZoomDepth)?.label}
-								</span>
-							)}
-							<KeyboardShortcutsHelp />
-						</div>
-					</div>
-					<div className="grid grid-cols-6 gap-1.5">
-						{ZOOM_DEPTH_OPTIONS.map((option) => {
-							const isActive = selectedZoomDepth === option.depth;
-							return (
-								<Button
-									key={option.depth}
-									type="button"
-									disabled={!zoomEnabled}
-									onClick={() => onZoomDepthChange?.(option.depth)}
-									className={cn(
-										"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all",
-										"duration-200 ease-out",
-										zoomEnabled ? "opacity-100 cursor-pointer" : "opacity-40 cursor-not-allowed",
-										isActive
-											? "border-[#34B27B] bg-[#34B27B] text-white shadow-[#34B27B]/20"
-											: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
-									)}
-								>
-									<span className="text-xs font-semibold">{option.label}</span>
-								</Button>
-							);
-						})}
-					</div>
-					{!zoomEnabled && (
-						<p className="text-[10px] text-slate-500 mt-2 text-center">{t("zoom.selectRegion")}</p>
-					)}
-					{zoomEnabled && hasCursorTelemetry && (
-						<div className="mt-3">
-							<span className="text-sm font-medium text-slate-200 mb-2 block">
-								{t("zoom.focusMode.title")}
-							</span>
-							<div className="grid grid-cols-2 gap-1.5">
-								{(["manual", "auto"] as const).map((mode) => {
-									const isActive = selectedZoomFocusMode === mode;
-									return (
-										<Button
-											key={mode}
-											type="button"
-											onClick={() => onZoomFocusModeChange?.(mode)}
-											className={cn(
-												"h-auto w-full rounded-lg border px-2 py-2 text-center shadow-sm transition-all",
-												"duration-200 ease-out cursor-pointer",
-												isActive
-													? "border-[#34B27B] bg-[#34B27B] text-white shadow-[#34B27B]/20"
-													: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
-											)}
-										>
-											<span className="text-xs font-semibold capitalize">
-												{t(`zoom.focusMode.${mode}`)}
-											</span>
-										</Button>
-									);
-								})}
-							</div>
-							{selectedZoomFocusMode === "auto" && (
-								<p className="text-[10px] text-slate-500 mt-1.5">
-									{t("zoom.focusMode.autoDescription")}
-								</p>
-							)}
-						</div>
-					)}
-					{zoomEnabled && (
-						<Button
-							onClick={handleDeleteClick}
-							variant="destructive"
-							size="sm"
-							className="mt-2 w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
-						>
-							<Trash2 className="w-3 h-3" />
-							{t("zoom.deleteZoom")}
-						</Button>
-					)}
-				</div>
+				<ZoomSection
+					selectedZoomDepth={selectedZoomDepth ?? null}
+					onZoomDepthChange={onZoomDepthChange}
+					selectedZoomFocusMode={selectedZoomFocusMode ?? null}
+					onZoomFocusModeChange={onZoomFocusModeChange}
+					hasCursorTelemetry={hasCursorTelemetry}
+					selectedZoomId={selectedZoomId ?? null}
+					onZoomDelete={onZoomDelete}
+				/>
 
 				{trimEnabled && (
 					<div className="mb-4">
 						<Button
-							onClick={handleTrimDeleteClick}
+							onClick={() => selectedTrimId && onTrimDelete?.(selectedTrimId)}
 							variant="destructive"
 							size="sm"
 							className="w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
@@ -527,79 +362,12 @@ export function SettingsPanel({
 					</div>
 				)}
 
-				<div className="mb-4">
-					<div className="flex items-center justify-between mb-3">
-						<span className="text-sm font-medium text-slate-200">{t("speed.playbackSpeed")}</span>
-						{selectedSpeedId && selectedSpeedValue && (
-							<span className="text-[10px] uppercase tracking-wider font-medium text-[#d97706] bg-[#d97706]/10 px-2 py-0.5 rounded-full">
-								{SPEED_OPTIONS.find((o) => o.speed === selectedSpeedValue)?.label ??
-									`${selectedSpeedValue}×`}
-							</span>
-						)}
-					</div>
-					<div className="grid grid-cols-5 gap-1.5">
-						{SPEED_OPTIONS.map((option) => {
-							const isActive = selectedSpeedValue === option.speed;
-							return (
-								<Button
-									key={option.speed}
-									type="button"
-									disabled={!selectedSpeedId}
-									onClick={() => onSpeedChange?.(option.speed)}
-									className={cn(
-										"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all",
-										"duration-200 ease-out",
-										selectedSpeedId
-											? "opacity-100 cursor-pointer"
-											: "opacity-40 cursor-not-allowed",
-										isActive
-											? "border-[#d97706] bg-[#d97706] text-white shadow-[#d97706]/20"
-											: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
-									)}
-								>
-									<span className="text-xs font-semibold">{option.label}</span>
-								</Button>
-							);
-						})}
-					</div>
-					<div className="mt-3">
-						<div className="flex items-center justify-between">
-							<span
-								className={cn("text-[11px]", selectedSpeedId ? "text-slate-500" : "text-slate-600")}
-							>
-								{t("speed.customPlaybackSpeed")}
-							</span>
-							{selectedSpeedId ? (
-								<CustomSpeedInput
-									value={selectedSpeedValue ?? 1}
-									onChange={(val) => onSpeedChange?.(val)}
-									onError={() => toast.error(t("speed.maxSpeedError"))}
-								/>
-							) : (
-								<div className="flex items-center gap-1 opacity-40">
-									<div className="w-12 bg-white/5 border border-white/10 rounded-md px-1 py-0.5 text-[11px] font-semibold text-slate-600 text-center">
-										--
-									</div>
-									<span className="text-[11px] font-semibold text-slate-600">×</span>
-								</div>
-							)}
-						</div>
-					</div>
-					{!selectedSpeedId && (
-						<p className="text-[10px] text-slate-500 mt-2 text-center">{t("speed.selectRegion")}</p>
-					)}
-					{selectedSpeedId && (
-						<Button
-							onClick={() => selectedSpeedId && onSpeedDelete?.(selectedSpeedId)}
-							variant="destructive"
-							size="sm"
-							className="mt-2 w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
-						>
-							<Trash2 className="w-3 h-3" />
-							{t("speed.deleteRegion")}
-						</Button>
-					)}
-				</div>
+				<SpeedSection
+					selectedSpeedId={selectedSpeedId ?? null}
+					selectedSpeedValue={selectedSpeedValue ?? null}
+					onSpeedChange={onSpeedChange}
+					onSpeedDelete={onSpeedDelete}
+				/>
 
 				<Accordion
 					type="multiple"
@@ -607,149 +375,16 @@ export function SettingsPanel({
 					className="space-y-1"
 				>
 					{hasWebcam && (
-						<AccordionItem
-							value="layout"
-							className="border-white/5 rounded-xl bg-white/[0.02] px-3"
-						>
-							<AccordionTrigger className="py-2.5 hover:no-underline">
-								<div className="flex items-center gap-2">
-									<Sparkles className="w-4 h-4 text-[#34B27B]" />
-									<span className="text-xs font-medium">{t("layout.title")}</span>
-								</div>
-							</AccordionTrigger>
-							<AccordionContent className="pb-3">
-								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-									<div className="text-[10px] font-medium text-slate-300 mb-1.5">
-										{t("layout.preset")}
-									</div>
-									<Select
-										value={webcamLayoutPreset}
-										onValueChange={(value: WebcamLayoutPreset) =>
-											onWebcamLayoutPresetChange?.(value)
-										}
-									>
-										<SelectTrigger className="h-8 bg-black/20 border-white/10 text-xs">
-											<SelectValue placeholder={t("layout.selectPreset")} />
-										</SelectTrigger>
-										<SelectContent>
-											{WEBCAM_LAYOUT_PRESETS.filter(
-												(preset) =>
-													preset.value === "picture-in-picture" ||
-													isPortraitAspectRatio(aspectRatio),
-											).map((preset) => (
-												<SelectItem key={preset.value} value={preset.value} className="text-xs">
-													{preset.value === "picture-in-picture"
-														? t("layout.pictureInPicture")
-														: t("layout.verticalStack")}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-								{webcamLayoutPreset === "picture-in-picture" && (
-									<div className="mt-2 p-2 rounded-lg bg-white/5 border border-white/5">
-										<div className="text-[10px] font-medium text-slate-300 mb-1.5">
-											{t("layout.webcamShape")}
-										</div>
-										<div className="grid grid-cols-4 gap-1.5">
-											{(
-												[
-													{ value: "rectangle", label: "Rect" },
-													{ value: "circle", label: "Circle" },
-													{ value: "square", label: "Square" },
-													{ value: "rounded", label: "Rounded" },
-												] as Array<{ value: WebcamMaskShape; label: string }>
-											).map((shape) => (
-												<button
-													key={shape.value}
-													type="button"
-													onClick={() => onWebcamMaskShapeChange?.(shape.value)}
-													className={cn(
-														"h-10 rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-all",
-														webcamMaskShape === shape.value
-															? "bg-[#34B27B] border-[#34B27B] text-white"
-															: "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 text-slate-400",
-													)}
-												>
-													<svg
-														width="16"
-														height="16"
-														viewBox="0 0 16 16"
-														fill="none"
-														xmlns="http://www.w3.org/2000/svg"
-													>
-														{shape.value === "rectangle" && (
-															<rect
-																x="1"
-																y="3"
-																width="14"
-																height="10"
-																rx="2"
-																stroke="currentColor"
-																strokeWidth="1.5"
-															/>
-														)}
-														{shape.value === "circle" && (
-															<circle
-																cx="8"
-																cy="8"
-																r="6.5"
-																stroke="currentColor"
-																strokeWidth="1.5"
-															/>
-														)}
-														{shape.value === "square" && (
-															<rect
-																x="2"
-																y="2"
-																width="12"
-																height="12"
-																rx="1"
-																stroke="currentColor"
-																strokeWidth="1.5"
-															/>
-														)}
-														{shape.value === "rounded" && (
-															<rect
-																x="1"
-																y="3"
-																width="14"
-																height="10"
-																rx="5"
-																stroke="currentColor"
-																strokeWidth="1.5"
-															/>
-														)}
-													</svg>
-													<span className="text-[8px] leading-none">{shape.label}</span>
-												</button>
-											))}
-										</div>
-									</div>
-								)}
-								{webcamLayoutPreset === "picture-in-picture" && (
-									<div className="p-2 rounded-lg bg-white/5 border border-white/5 mt-2">
-										<div className="flex items-center justify-between mb-1.5">
-											<div className="text-[10px] font-medium text-slate-300">
-												{t("layout.webcamSize")}
-											</div>
-											<div className="text-[10px] font-medium text-slate-400">
-												{webcamSizePreset}%
-											</div>
-										</div>
-										<Slider
-											value={[webcamSizePreset]}
-											onValueChange={(values) => onWebcamSizePresetChange?.(values[0])}
-											onValueCommit={() => onWebcamSizePresetCommit?.()}
-											min={10}
-											max={50}
-											step={1}
-											className="w-full"
-										/>
-									</div>
-								)}
-							</AccordionContent>
-						</AccordionItem>
+						<WebcamSection
+							aspectRatio={aspectRatio}
+							webcamLayoutPreset={webcamLayoutPreset}
+							onWebcamLayoutPresetChange={onWebcamLayoutPresetChange}
+							webcamMaskShape={webcamMaskShape}
+							onWebcamMaskShapeChange={onWebcamMaskShapeChange}
+							webcamSizePreset={webcamSizePreset}
+							onWebcamSizePresetChange={onWebcamSizePresetChange}
+							onWebcamSizePresetCommit={onWebcamSizePresetCommit}
+						/>
 					)}
 
 					<EffectsSection

@@ -13,6 +13,21 @@ export function toAssetUrl(filePath: string): string {
 	return convertFileSrc(filePath);
 }
 
+export async function readFileAsBlobUrl(filePath: string): Promise<string> {
+	const { readFile } = await import("@tauri-apps/plugin-fs");
+	const data = await readFile(filePath);
+	const ext = filePath.split(".").pop()?.toLowerCase() ?? "mp4";
+	const mimeMap: Record<string, string> = {
+		mp4: "video/mp4",
+		webm: "video/webm",
+		mov: "video/quicktime",
+		avi: "video/x-msvideo",
+		mkv: "video/x-matroska",
+	};
+	const blob = new Blob([data], { type: mimeMap[ext] ?? "video/mp4" });
+	return URL.createObjectURL(blob);
+}
+
 type ElectronAPI = Window["electronAPI"];
 
 let tempCounter = 0;

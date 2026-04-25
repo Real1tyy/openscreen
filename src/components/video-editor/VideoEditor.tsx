@@ -11,7 +11,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
-import { getAPI } from "@/lib/tauriBridge";
+import { getAPI, isTauri, readFileAsBlobUrl } from "@/lib/tauriBridge";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { INITIAL_EDITOR_STATE, useEditorHistory } from "@/hooks/useEditorHistory";
 import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
@@ -24,9 +24,7 @@ import {
 	type GifFrameRate,
 	type GifSizePreset,
 } from "@/lib/exporter";
-import { computeFrameStepTime } from "@/lib/frameStep";
 import type { ProjectMedia } from "@/lib/recordingSession";
-import { matchesShortcut } from "@/lib/shortcuts";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import {
 	getAspectRatioValue,
@@ -37,6 +35,7 @@ import { ExportDialog } from "./ExportDialog";
 import PlaybackControls from "./PlaybackControls";
 import { useAnnotationHandlers } from "./hooks/useAnnotationHandlers";
 import { useChapterHandlers } from "./hooks/useChapterHandlers";
+import { useEditorKeyboard } from "./hooks/useEditorKeyboard";
 import { useExport } from "./hooks/useExport";
 import { useSelection } from "./hooks/useSelection";
 import { useSpeedHandlers } from "./hooks/useSpeedHandlers";
@@ -61,7 +60,12 @@ import {
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 
-
+async function toPlayableUrl(filePath: string): Promise<string> {
+	if (isTauri()) {
+		return readFileAsBlobUrl(filePath);
+	}
+	return toFileUrl(filePath);
+}
 
 export default function VideoEditor() {
 	const {
@@ -275,9 +279,9 @@ export default function VideoEditor() {
 
 			setError(null);
 			setVideoSourcePath(sourcePath);
-			setVideoPath(toFileUrl(sourcePath));
+			setVideoPath(await toPlayableUrl(sourcePath));
 			setWebcamVideoSourcePath(webcamSourcePath);
-			setWebcamVideoPath(webcamSourcePath ? toFileUrl(webcamSourcePath) : null);
+			setWebcamVideoPath(webcamSourcePath ? await toPlayableUrl(webcamSourcePath) : null);
 			setCurrentProjectPath(path ?? null);
 
 			pushState({
@@ -383,9 +387,12 @@ export default function VideoEditor() {
 			try {
 				// Check if a file was provided via CLI argument
 				const cliFile = await getAPI().getCliInputFile();
+				console.log("[VideoEditor] CLI input file:", cliFile);
 				if (cliFile) {
+					const videoUrl = await toPlayableUrl(cliFile);
+					console.log("[VideoEditor] Video URL:", videoUrl);
 					setVideoSourcePath(cliFile);
-					setVideoPath(toFileUrl(cliFile));
+					setVideoPath(videoUrl);
 					setWebcamVideoSourcePath(null);
 					setWebcamVideoPath(null);
 					setCurrentProjectPath(null);
@@ -427,9 +434,9 @@ export default function VideoEditor() {
 						? fromFileUrl(session.webcamVideoPath)
 						: null;
 					setVideoSourcePath(sourcePath);
-					setVideoPath(toFileUrl(sourcePath));
+					setVideoPath(await toPlayableUrl(sourcePath));
 					setWebcamVideoSourcePath(webcamSourcePath);
-					setWebcamVideoPath(webcamSourcePath ? toFileUrl(webcamSourcePath) : null);
+					setWebcamVideoPath(webcamSourcePath ? await toPlayableUrl(webcamSourcePath) : null);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(
 						createProjectSnapshot(
@@ -446,7 +453,7 @@ export default function VideoEditor() {
 				if (result.success && result.path) {
 					const sourcePath = fromFileUrl(result.path);
 					setVideoSourcePath(sourcePath);
-					setVideoPath(toFileUrl(sourcePath));
+					setVideoPath(await toPlayableUrl(sourcePath));
 					setWebcamVideoSourcePath(null);
 					setWebcamVideoPath(null);
 					setCurrentProjectPath(null);
@@ -711,106 +718,19 @@ export default function VideoEditor() {
 		video.currentTime = time;
 	}
 
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			const mod = e.ctrlKey || e.metaKey;
-			const key = e.key.toLowerCase();
-
-			if (mod && key === "z" && !e.shiftKey) {
-				e.preventDefault();
-				e.stopPropagation();
-				undo();
-				return;
-			}
-			if (mod && (key === "y" || (key === "z" && e.shiftKey))) {
-				e.preventDefault();
-				e.stopPropagation();
-				redo();
-				return;
-			}
-
-			// Frame-step navigation (arrow keys, no modifiers)
-			if (
-				(e.key === "ArrowLeft" || e.key === "ArrowRight") &&
-				!e.ctrlKey &&
-				!e.metaKey &&
-				!e.shiftKey &&
-				!e.altKey
-			) {
-				const target = e.target;
-				if (
-					target instanceof HTMLInputElement ||
-					target instanceof HTMLTextAreaElement ||
-					target instanceof HTMLSelectElement ||
-					(target instanceof HTMLElement &&
-						(target.isContentEditable ||
-							target.closest('[role="separator"], [role="slider"], [role="spinbutton"]')))
-				) {
-					return;
-				}
-				e.preventDefault();
-				const video = videoPlaybackRef.current?.video;
-				if (!video) {
-					return;
-				}
-				const direction = e.key === "ArrowLeft" ? "backward" : "forward";
-				const newTime = computeFrameStepTime(
-					video.currentTime,
-					Number.isFinite(video.duration) ? video.duration : durationRef.current,
-					direction,
-				);
-				video.currentTime = newTime;
-				return;
-			}
-
-			const isInput =
-				e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-
-			if (e.key === "Tab" && !isInput) {
-				e.preventDefault();
-			}
-
-			if (matchesShortcut(e, shortcuts.playPause, isMac)) {
-				// Allow space only in inputs/textareas
-				if (isInput) {
-					return;
-				}
-				e.preventDefault();
-				const playback = videoPlaybackRef.current;
-				if (playback?.video) {
-					playback.video.paused ? playback.play().catch(console.error) : playback.pause();
-				}
-			}
-
-			// Quick-trim shortcuts: I = mark start, O = mark end & apply trim
-			if (isInput) return;
-			if (key === "i" && !mod && !e.shiftKey && !e.altKey) {
-				e.preventDefault();
-				handleQuickTrimStart();
-			}
-			if (key === "o" && !mod && !e.shiftKey && !e.altKey) {
-				e.preventDefault();
-				handleQuickTrimEnd();
-			}
-
-			// Chapter shortcuts: C = add chapter, [ / ] = navigate between chapters
-			if (key === "c" && !mod && !e.shiftKey && !e.altKey) {
-				e.preventDefault();
-				handleAddChapter();
-			}
-			if (key === "[" && !mod && !e.shiftKey && !e.altKey) {
-				e.preventDefault();
-				handleChapterNavigatePrev();
-			}
-			if (key === "]" && !mod && !e.shiftKey && !e.altKey) {
-				e.preventDefault();
-				handleChapterNavigateNext();
-			}
-		};
-
-		window.addEventListener("keydown", handleKeyDown, { capture: true });
-		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [undo, redo, shortcuts, isMac, handleAddChapter, handleQuickTrimStart, handleQuickTrimEnd, handleChapterNavigatePrev, handleChapterNavigateNext]);
+	useEditorKeyboard({
+		undo,
+		redo,
+		shortcuts,
+		isMac,
+		videoPlaybackRef,
+		durationRef,
+		handleQuickTrimStart,
+		handleQuickTrimEnd,
+		handleAddChapter,
+		handleChapterNavigatePrev,
+		handleChapterNavigateNext,
+	});
 
 
 	if (loading) {
