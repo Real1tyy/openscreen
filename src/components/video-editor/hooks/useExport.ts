@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { EditorState } from "@/hooks/useEditorHistory";
 import { getAssetPath } from "@/lib/assetPath";
-import { getAPI } from "@/lib/tauriBridge";
+import { getAPI, isTauri } from "@/lib/tauriBridge";
 import {
 	calculateOutputDimensions,
 	type ExportFormat,
@@ -229,28 +229,67 @@ export function useExport({
 					const quality = settings.quality || exportQuality;
 					const dims = computeExportDimensions(sourceWidth, sourceHeight, aspectRatioValue, quality);
 
-					const exporter = new VideoExporter({
-						...commonConfig,
-						width: dims.width,
-						height: dims.height,
-						frameRate: 60,
-						bitrate: dims.bitrate,
-						codec: "avc1.640033",
-					});
+					// Try NVENC hardware encoding in Tauri, fall back to WebCodecs
+					let exported = false;
+					if (isTauri()) {
+						try {
+							const { NvencVideoExporter } = await import("@/lib/exporter/nvencExporter");
+							const { tempDir } = await import("@tauri-apps/api/path");
+							const dir = await tempDir();
+							const tmpOutput = `${dir}openscreen-export-${Date.now()}.mp4`;
 
-					exporterRef.current = exporter;
-					const result = await exporter.export();
+							const nvencExporter = new NvencVideoExporter({
+								...commonConfig,
+								width: dims.width,
+								height: dims.height,
+								frameRate: 60,
+								bitrate: dims.bitrate,
+								outputPath: tmpOutput,
+							});
 
-					if (result.success && result.blob) {
-						await saveExportResult(
-							result.blob, "mp4", "Video", handleExportSaved,
-							(data) => setUnsavedExport(data),
-							(msg) => setExportError(msg),
-							chapters, trimRegions,
-						);
-					} else {
-						setExportError(result.error || "Export failed");
-						toast.error(result.error || "Export failed");
+							exporterRef.current = nvencExporter as unknown as VideoExporter;
+							const result = await nvencExporter.export();
+
+							if (result.success && result.blob) {
+								await saveExportResult(
+									result.blob, "mp4", "Video", handleExportSaved,
+									(data) => setUnsavedExport(data),
+									(msg) => setExportError(msg),
+									chapters, trimRegions,
+								);
+								exported = true;
+							} else {
+								console.warn("[Export] NVENC export returned failure, falling back:", result.error);
+							}
+						} catch (nvencError) {
+							console.warn("[Export] NVENC path failed, falling back to WebCodecs:", nvencError);
+						}
+					}
+
+					if (!exported) {
+						const exporter = new VideoExporter({
+							...commonConfig,
+							width: dims.width,
+							height: dims.height,
+							frameRate: 60,
+							bitrate: dims.bitrate,
+							codec: "avc1.640033",
+						});
+
+						exporterRef.current = exporter;
+						const result = await exporter.export();
+
+						if (result.success && result.blob) {
+							await saveExportResult(
+								result.blob, "mp4", "Video", handleExportSaved,
+								(data) => setUnsavedExport(data),
+								(msg) => setExportError(msg),
+								chapters, trimRegions,
+							);
+						} else {
+							setExportError(result.error || "Export failed");
+							toast.error(result.error || "Export failed");
+						}
 					}
 				}
 

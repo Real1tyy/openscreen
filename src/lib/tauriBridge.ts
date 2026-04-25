@@ -228,6 +228,51 @@ function buildTauriAPI(): ElectronAPI {
 	} as ElectronAPI;
 }
 
+// NVENC export API — only available in Tauri
+export interface NvencExportAPI {
+	checkNvencAvailable: () => Promise<boolean>;
+	startNvencExport: (config: {
+		width: number;
+		height: number;
+		fps: number;
+		bitrate: number;
+		outputPath: string;
+	}) => Promise<{
+		success: boolean;
+		sessionId: string;
+		usingNvenc: boolean;
+		error?: string;
+	}>;
+	feedFrame: (
+		sessionId: string,
+		framePath: string,
+		width: number,
+		height: number,
+		isKeyframe: boolean,
+	) => Promise<{ success: boolean; frameCount: number; error?: string }>;
+	finishExport: (
+		sessionId: string,
+	) => Promise<{
+		success: boolean;
+		path?: string;
+		error?: string;
+		totalFrames: number;
+	}>;
+	cancelExport: (sessionId: string) => Promise<void>;
+}
+
+export function getNvencAPI(): NvencExportAPI | null {
+	if (!isTauri()) return null;
+	return {
+		checkNvencAvailable: () => invoke("check_nvenc_available"),
+		startNvencExport: (config) => invoke("start_nvenc_export", { config }),
+		feedFrame: (sessionId, framePath, width, height, isKeyframe) =>
+			invoke("feed_frame", { sessionId, framePath, width, height, isKeyframe }),
+		finishExport: (sessionId) => invoke("finish_export", { sessionId }),
+		cancelExport: (sessionId) => invoke("cancel_export", { sessionId }),
+	};
+}
+
 let cachedAPI: ElectronAPI | null = null;
 
 export function getAPI(): ElectronAPI {

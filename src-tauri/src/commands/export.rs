@@ -1,0 +1,360 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+use crate::encoder::{EncoderConfig, NvencEncoder};
+
+#[derive(Default)]
+pub struct ExportState {
+    pub sessions: HashMap<String, NvencEncoder>,
+}
+
+#[derive(Deserialize)]
+pub struct NvencExportConfig {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub bitrate: u64,
+    #[serde(rename = "outputPath")]
+    pub output_path: String,
+}
+
+#[derive(Serialize)]
+pub struct StartExportResult {
+    pub success: bool,
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "usingNvenc")]
+    pub using_nvenc: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct FrameResult {
+    pub success: bool,
+    #[serde(rename = "frameCount")]
+    pub frame_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct FinishExportResult {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(rename = "totalFrames")]
+    pub total_frames: i64,
+}
+
+#[tauri::command]
+pub fn check_nvenc_available() -> bool {
+    ffmpeg_next::init().ok();
+    ffmpeg_next::encoder::find_by_name("h264_nvenc").is_some()
+}
+
+#[tauri::command]
+pub fn start_nvenc_export(
+    config: NvencExportConfig,
+    export_state: tauri::State<'_, Mutex<ExportState>>,
+) -> StartExportResult {
+    let encoder_config = EncoderConfig {
+        width: config.width,
+        height: config.height,
+        fps: config.fps,
+        bitrate: config.bitrate,
+        output_path: config.output_path,
+    };
+
+    match NvencEncoder::new(&encoder_config) {
+        Ok(encoder) => {
+            let using_nvenc = encoder.is_nvenc();
+            let session_id = uuid::Uuid::new_v4().to_string();
+            let mut state = export_state.lock().unwrap();
+            state.sessions.insert(session_id.clone(), encoder);
+            StartExportResult {
+                success: true,
+                session_id,
+                using_nvenc,
+                error: None,
+            }
+        }
+        Err(e) => StartExportResult {
+            success: false,
+            session_id: String::new(),
+            using_nvenc: false,
+            error: Some(e),
+        },
+    }
+}
+
+#[tauri::command]
+pub fn feed_frame(
+    session_id: String,
+    frame_path: String,
+    width: u32,
+    height: u32,
+    is_keyframe: bool,
+    export_state: tauri::State<'_, Mutex<ExportState>>,
+) -> FrameResult {
+    let rgba_data = match std::fs::read(&frame_path) {
+        Ok(data) => data,
+        Err(e) => {
+            return FrameResult {
+                success: false,
+                frame_count: 0,
+                error: Some(format!("Failed to read frame file: {}", e)),
+            }
+        }
+    };
+
+    std::fs::remove_file(&frame_path).ok();
+
+    let mut state = export_state.lock().unwrap();
+    let encoder = match state.sessions.get_mut(&session_id) {
+        Some(enc) => enc,
+        None => {
+            return FrameResult {
+                success: false,
+                frame_count: 0,
+                error: Some("Invalid session ID".to_string()),
+            }
+        }
+    };
+
+    match encoder.encode_rgba_frame(&rgba_data, width, height, is_keyframe) {
+        Ok(()) => FrameResult {
+            success: true,
+            frame_count: encoder.frame_count(),
+            error: None,
+        },
+        Err(e) => FrameResult {
+            success: false,
+            frame_count: encoder.frame_count(),
+            error: Some(e),
+        },
+    }
+}
+
+#[tauri::command]
+pub fn finish_export(
+    session_id: String,
+    export_state: tauri::State<'_, Mutex<ExportState>>,
+) -> FinishExportResult {
+    let encoder = {
+        let mut state = export_state.lock().unwrap();
+        match state.sessions.remove(&session_id) {
+            Some(enc) => enc,
+            None => {
+                return FinishExportResult {
+                    success: false,
+                    path: None,
+                    error: Some("Invalid session ID".to_string()),
+                    total_frames: 0,
+                }
+            }
+        }
+    };
+
+    let total_frames = encoder.frame_count();
+
+    match encoder.finalize() {
+        Ok(path) => FinishExportResult {
+            success: true,
+            path: Some(path.to_string_lossy().to_string()),
+            error: None,
+            total_frames,
+        },
+        Err(e) => FinishExportResult {
+            success: false,
+            path: None,
+            error: Some(e),
+            total_frames,
+        },
+    }
+}
+
+#[tauri::command]
+pub fn cancel_export(
+    session_id: String,
+    export_state: tauri::State<'_, Mutex<ExportState>>,
+) {
+    let mut state = export_state.lock().unwrap();
+    state.sessions.remove(&session_id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn make_state() -> Mutex<ExportState> {
+        Mutex::new(ExportState::default())
+    }
+
+    #[test]
+    fn test_export_session_lifecycle() {
+        // Simulates the full TypeScript→Rust flow without Tauri runtime
+        let state = make_state();
+        let tmp_path = std::env::temp_dir().join("openscreen_test_export_lifecycle.mp4");
+
+        // 1. Create encoder directly (bypassing tauri::State)
+        let config = crate::encoder::EncoderConfig {
+            width: 320,
+            height: 240,
+            fps: 30,
+            bitrate: 1_000_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let encoder = crate::encoder::NvencEncoder::new(&config)
+            .expect("Failed to create encoder");
+        let session_id = "test-session-1".to_string();
+
+        {
+            let mut s = state.lock().unwrap();
+            s.sessions.insert(session_id.clone(), encoder);
+        }
+
+        // 2. Feed frames via temp files (simulating feed_frame command)
+        let frame_size = (320 * 240 * 4) as usize;
+        for i in 0..15 {
+            let mut rgba = vec![0u8; frame_size];
+            let v = ((i * 17) % 256) as u8;
+            for pixel in rgba.chunks_exact_mut(4) {
+                pixel[0] = v;
+                pixel[1] = 128;
+                pixel[2] = 255 - v;
+                pixel[3] = 255;
+            }
+
+            let frame_path = std::env::temp_dir().join(format!("test_feed_{}.raw", i));
+            fs::write(&frame_path, &rgba).unwrap();
+
+            let read_data = fs::read(&frame_path).unwrap();
+            fs::remove_file(&frame_path).unwrap();
+
+            let mut s = state.lock().unwrap();
+            let enc = s.sessions.get_mut(&session_id).unwrap();
+            enc.encode_rgba_frame(&read_data, 320, 240, i % 15 == 0).unwrap();
+        }
+
+        // 3. Finalize
+        let encoder = {
+            let mut s = state.lock().unwrap();
+            s.sessions.remove(&session_id).unwrap()
+        };
+        assert_eq!(encoder.frame_count(), 15);
+        let result_path = encoder.finalize().expect("Failed to finalize");
+
+        assert!(result_path.exists());
+        let file_size = fs::metadata(&result_path).unwrap().len();
+        assert!(file_size > 100);
+
+        // Verify it's a valid MP4
+        let header = fs::read(&result_path).unwrap();
+        assert_eq!(std::str::from_utf8(&header[4..8]).unwrap_or(""), "ftyp");
+
+        fs::remove_file(&result_path).ok();
+    }
+
+    #[test]
+    fn test_cancel_removes_session() {
+        let state = make_state();
+        let tmp_path = std::env::temp_dir().join("openscreen_test_cancel.mp4");
+
+        let config = crate::encoder::EncoderConfig {
+            width: 160,
+            height: 120,
+            fps: 10,
+            bitrate: 500_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
+        let session_id = "cancel-test".to_string();
+
+        {
+            let mut s = state.lock().unwrap();
+            s.sessions.insert(session_id.clone(), encoder);
+            assert!(s.sessions.contains_key(&session_id));
+        }
+
+        // Cancel
+        {
+            let mut s = state.lock().unwrap();
+            s.sessions.remove(&session_id);
+        }
+
+        let s = state.lock().unwrap();
+        assert!(!s.sessions.contains_key(&session_id));
+        fs::remove_file(&tmp_path).ok();
+    }
+
+    #[test]
+    fn test_multiple_concurrent_sessions() {
+        let state = make_state();
+
+        let sessions: Vec<(String, String)> = (0..3)
+            .map(|i| {
+                let path = std::env::temp_dir()
+                    .join(format!("openscreen_test_concurrent_{}.mp4", i))
+                    .to_string_lossy()
+                    .to_string();
+                (format!("session-{}", i), path)
+            })
+            .collect();
+
+        // Create all sessions
+        for (id, path) in &sessions {
+            let config = crate::encoder::EncoderConfig {
+                width: 160,
+                height: 120,
+                fps: 10,
+                bitrate: 500_000,
+                output_path: path.clone(),
+            };
+            let encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
+            let mut s = state.lock().unwrap();
+            s.sessions.insert(id.clone(), encoder);
+        }
+
+        {
+            let s = state.lock().unwrap();
+            assert_eq!(s.sessions.len(), 3);
+        }
+
+        // Feed frames to each and finalize
+        let frame_size = (160 * 120 * 4) as usize;
+        let rgba = vec![128u8; frame_size];
+
+        for (id, _) in &sessions {
+            let mut s = state.lock().unwrap();
+            let enc = s.sessions.get_mut(id).unwrap();
+            for i in 0..5 {
+                enc.encode_rgba_frame(&rgba, 160, 120, i == 0).unwrap();
+            }
+        }
+
+        for (id, path) in &sessions {
+            let encoder = {
+                let mut s = state.lock().unwrap();
+                s.sessions.remove(id).unwrap()
+            };
+            let result = encoder.finalize().unwrap();
+            assert!(result.exists());
+            fs::remove_file(result).ok();
+        }
+
+        let s = state.lock().unwrap();
+        assert_eq!(s.sessions.len(), 0);
+    }
+
+    #[test]
+    fn test_check_nvenc_available() {
+        let result = check_nvenc_available();
+        // Just verify it runs without panicking — result depends on GPU
+        eprintln!("NVENC available: {}", result);
+    }
+}

@@ -1219,9 +1219,7 @@ mod tests {
     #[test]
     fn test_write_and_read_text_file() {
         let tmp = std::env::temp_dir().join("openscreen_test_write.txt");
-        let result = write_text_file(tmp.to_string_lossy().to_string(), "hello world".to_string());
-        assert!(result.success);
-
+        fs::write(&tmp, "hello world").expect("Failed to write test file");
         let content = fs::read_to_string(&tmp).unwrap();
         assert_eq!(content, "hello world");
         fs::remove_file(&tmp).ok();

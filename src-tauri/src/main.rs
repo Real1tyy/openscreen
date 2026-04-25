@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod encoder;
 mod state;
 
+use commands::export::ExportState;
 use state::AppState;
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -18,6 +20,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .manage(Mutex::new(AppState::default()))
+        .manage(Mutex::new(ExportState::default()))
         .invoke_handler(tauri::generate_handler![
             // Platform
             commands::platform::get_platform,
@@ -65,6 +68,12 @@ fn main() {
             commands::cli::get_cli_input_file,
             commands::cli::get_cli_editor_config,
             commands::cli::get_headless_export_config,
+            // NVENC Export
+            commands::export::check_nvenc_available,
+            commands::export::start_nvenc_export,
+            commands::export::feed_frame,
+            commands::export::finish_export,
+            commands::export::cancel_export,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
