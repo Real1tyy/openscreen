@@ -516,9 +516,9 @@ mod tests {
             // Moving gradient to give the encoder something to work with
             let offset = (i * 3) as u8;
             for (idx, pixel) in rgba.chunks_exact_mut(4).enumerate() {
-                pixel[0] = ((idx as u8).wrapping_add(offset));
-                pixel[1] = ((idx as u8).wrapping_add(offset).wrapping_add(85));
-                pixel[2] = ((idx as u8).wrapping_add(offset).wrapping_add(170));
+                pixel[0] = (idx as u8).wrapping_add(offset);
+                pixel[1] = (idx as u8).wrapping_add(offset).wrapping_add(85);
+                pixel[2] = (idx as u8).wrapping_add(offset).wrapping_add(170);
                 pixel[3] = 255;
             }
             enc.encode_rgba_frame(&rgba, 320, 240, i % 30 == 0)
@@ -622,6 +622,264 @@ mod tests {
 
         assert_eq!(enc.frame_count(), 300);
         let result = enc.finalize().expect("Failed to finalize");
+        assert!(result.exists());
+        fs::remove_file(&result).ok();
+    }
+
+    #[test]
+    fn test_encoder_dimension_mismatch_between_config_and_frame() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_dim_mismatch.mp4");
+        let config = EncoderConfig {
+            width: 320,
+            height: 240,
+            fps: 30,
+            bitrate: 1_000_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let mut enc = NvencEncoder::new(&config).unwrap();
+
+        // Feed frame data sized for 640x480 but declare 320x240
+        let wrong_size = vec![0u8; 640 * 480 * 4];
+        let result = enc.encode_rgba_frame(&wrong_size, 320, 240, true);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("size mismatch"));
+        fs::remove_file(&tmp_path).ok();
+    }
+
+    #[test]
+    fn test_encoder_zero_frames_finalize() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_zero_frames.mp4");
+        let config = EncoderConfig {
+            width: 160,
+            height: 120,
+            fps: 30,
+            bitrate: 500_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let enc = NvencEncoder::new(&config).unwrap();
+        assert_eq!(enc.frame_count(), 0);
+        let result = enc.finalize();
+        // Finalizing with zero frames should either succeed (empty container) or fail gracefully
+        // Either outcome is acceptable — the important thing is no panic
+        match result {
+            Ok(path) => {
+                assert!(path.exists());
+                fs::remove_file(&path).ok();
+            }
+            Err(e) => {
+                eprintln!("Zero-frame finalize error (expected): {}", e);
+            }
+        }
+        fs::remove_file(&tmp_path).ok();
+    }
+
+    #[test]
+    fn test_encoder_varying_keyframe_intervals() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_keyframes.mp4");
+        let config = EncoderConfig {
+            width: 160,
+            height: 120,
+            fps: 30,
+            bitrate: 500_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let mut enc = NvencEncoder::new(&config).unwrap();
+        let frame_size = (160 * 120 * 4) as usize;
+
+        // Every frame is a keyframe
+        for _ in 0..10 {
+            let rgba = vec![128u8; frame_size];
+            enc.encode_rgba_frame(&rgba, 160, 120, true).unwrap();
+        }
+
+        let result = enc.finalize().unwrap();
+        assert!(result.exists());
+        let size = fs::metadata(&result).unwrap().len();
+        assert!(size > 0);
+        fs::remove_file(&result).ok();
+    }
+
+    #[test]
+    fn test_encoder_rapid_color_changes() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_rapid_color.mp4");
+        let config = EncoderConfig {
+            width: 320,
+            height: 240,
+            fps: 60,
+            bitrate: 4_000_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let mut enc = NvencEncoder::new(&config).unwrap();
+        let frame_size = (320 * 240 * 4) as usize;
+
+        for i in 0..60 {
+            let mut rgba = vec![0u8; frame_size];
+            // Alternate between completely different frames to stress the encoder
+            let val = if i % 2 == 0 { 0u8 } else { 255u8 };
+            for pixel in rgba.chunks_exact_mut(4) {
+                pixel[0] = val;
+                pixel[1] = 255 - val;
+                pixel[2] = val;
+                pixel[3] = 255;
+            }
+            enc.encode_rgba_frame(&rgba, 320, 240, i % 30 == 0).unwrap();
+        }
+
+        let result = enc.finalize().unwrap();
+        assert!(result.exists());
+        assert!(fs::metadata(&result).unwrap().len() > 100);
+        fs::remove_file(&result).ok();
+    }
+
+    #[test]
+    fn test_encoder_output_readable_by_ffmpeg_demuxer() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_demux_verify.mp4");
+        let config = EncoderConfig {
+            width: 320,
+            height: 240,
+            fps: 30,
+            bitrate: 1_000_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+
+        let mut enc = NvencEncoder::new(&config).unwrap();
+        let frame_size = (320 * 240 * 4) as usize;
+
+        for i in 0..30u32 {
+            let mut rgba = vec![0u8; frame_size];
+            for y in 0..240u32 {
+                for x in 0..320u32 {
+                    let idx = ((y * 320 + x) * 4) as usize;
+                    rgba[idx] = ((x + i * 10) % 256) as u8;
+                    rgba[idx + 1] = ((y + i * 5) % 256) as u8;
+                    rgba[idx + 2] = 128;
+                    rgba[idx + 3] = 255;
+                }
+            }
+            enc.encode_rgba_frame(&rgba, 320, 240, i % 15 == 0).unwrap();
+        }
+        enc.finalize().unwrap();
+
+        // Verify the output is a valid container with a video stream
+        let input = ffmpeg::format::input(&tmp_path).expect("FFmpeg cannot open output");
+        let video_stream = input.streams().best(ffmpeg::media::Type::Video);
+        assert!(video_stream.is_some(), "No video stream in output");
+
+        let stream = video_stream.unwrap();
+        let params = stream.parameters();
+        let ctx = ffmpeg::codec::context::Context::from_parameters(params)
+            .expect("Cannot create decoder context");
+        let decoder = ctx.decoder();
+        assert!(decoder.video().is_ok(), "Stream is not decodable as video");
+
+        fs::remove_file(&tmp_path).ok();
+    }
+
+    #[test]
+    fn test_encoder_sequential_sessions_same_path() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_sequential.mp4");
+        let frame_size = (160 * 120 * 4) as usize;
+        let rgba = vec![100u8; frame_size];
+
+        for round in 0..3 {
+            let config = EncoderConfig {
+                width: 160,
+                height: 120,
+                fps: 10,
+                bitrate: 500_000,
+                output_path: tmp_path.to_string_lossy().to_string(),
+            };
+            let mut enc = NvencEncoder::new(&config).unwrap();
+            for i in 0..5 {
+                enc.encode_rgba_frame(&rgba, 160, 120, i == 0).unwrap();
+            }
+            let result = enc.finalize().unwrap();
+            assert!(result.exists(), "round {} failed", round);
+        }
+
+        // Final file should be valid
+        let header = fs::read(&tmp_path).unwrap();
+        assert_eq!(std::str::from_utf8(&header[4..8]).unwrap_or(""), "ftyp");
+        fs::remove_file(&tmp_path).ok();
+    }
+
+    #[test]
+    fn test_encoder_transparency_in_rgba() {
+        // Verify encoder handles semi-transparent pixels (alpha != 255)
+        let tmp_path = std::env::temp_dir().join("openscreen_test_alpha.mp4");
+        let config = EncoderConfig {
+            width: 160,
+            height: 120,
+            fps: 10,
+            bitrate: 500_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let mut enc = NvencEncoder::new(&config).unwrap();
+        let frame_size = (160 * 120 * 4) as usize;
+
+        let mut rgba = vec![0u8; frame_size];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel[0] = 255;
+            pixel[1] = 0;
+            pixel[2] = 0;
+            pixel[3] = 128; // semi-transparent
+        }
+
+        for i in 0..5 {
+            enc.encode_rgba_frame(&rgba, 160, 120, i == 0).unwrap();
+        }
+        let result = enc.finalize().unwrap();
+        assert!(result.exists());
+        fs::remove_file(&result).ok();
+    }
+
+    #[test]
+    fn test_encoder_all_black_frames() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_black.mp4");
+        let config = EncoderConfig {
+            width: 320,
+            height: 240,
+            fps: 30,
+            bitrate: 1_000_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let mut enc = NvencEncoder::new(&config).unwrap();
+        let frame_size = (320 * 240 * 4) as usize;
+        let mut rgba = vec![0u8; frame_size];
+        // All black with full alpha
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel[3] = 255;
+        }
+
+        for i in 0..30 {
+            enc.encode_rgba_frame(&rgba, 320, 240, i == 0).unwrap();
+        }
+        let result = enc.finalize().unwrap();
+        assert!(result.exists());
+        // All-black should compress very small
+        let size = fs::metadata(&result).unwrap().len();
+        assert!(size > 0);
+        fs::remove_file(&result).ok();
+    }
+
+    #[test]
+    fn test_encoder_all_white_frames() {
+        let tmp_path = std::env::temp_dir().join("openscreen_test_white.mp4");
+        let config = EncoderConfig {
+            width: 320,
+            height: 240,
+            fps: 30,
+            bitrate: 1_000_000,
+            output_path: tmp_path.to_string_lossy().to_string(),
+        };
+        let mut enc = NvencEncoder::new(&config).unwrap();
+        let frame_size = (320 * 240 * 4) as usize;
+        let rgba = vec![255u8; frame_size];
+
+        for i in 0..30 {
+            enc.encode_rgba_frame(&rgba, 320, 240, i == 0).unwrap();
+        }
+        let result = enc.finalize().unwrap();
         assert!(result.exists());
         fs::remove_file(&result).ok();
     }

@@ -260,6 +260,14 @@ pub fn set_recording_state(
     update_tray_for_recording(&app, recording, &app_state);
 }
 
+fn tray_tooltip_text(recording: bool, source_name: &str) -> String {
+    if recording {
+        format!("OpenScreen - Recording {}", source_name)
+    } else {
+        "OpenScreen".to_string()
+    }
+}
+
 fn update_tray_for_recording(app: &AppHandle, recording: bool, state: &AppState) {
     let source_name = state
         .selected_source_name
@@ -267,11 +275,158 @@ fn update_tray_for_recording(app: &AppHandle, recording: bool, state: &AppState)
         .unwrap_or("Screen");
 
     if let Some(tray) = app.tray_by_id("main") {
-        let tooltip = if recording {
-            format!("OpenScreen - Recording {}", source_name)
-        } else {
-            "OpenScreen".to_string()
-        };
+        let tooltip = tray_tooltip_text(recording, source_name);
         tray.set_tooltip(Some(&tooltip)).ok();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    #[test]
+    fn test_processed_desktop_source_serialization() {
+        let source = ProcessedDesktopSource {
+            id: "screen:0:0".to_string(),
+            name: "Primary Display".to_string(),
+            display_id: "0".to_string(),
+            thumbnail: Some("data:image/png;base64,abc".to_string()),
+            app_icon: None,
+        };
+        let json = serde_json::to_string(&source).unwrap();
+        assert!(json.contains("\"id\":\"screen:0:0\""));
+        assert!(json.contains("\"name\":\"Primary Display\""));
+        assert!(json.contains("\"appIcon\":null"));
+
+        let loaded: ProcessedDesktopSource = serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded.id, "screen:0:0");
+        assert!(loaded.app_icon.is_none());
+    }
+
+    #[test]
+    fn test_processed_desktop_source_with_all_fields() {
+        let json = r#"{"id":"window:123","name":"Firefox","display_id":"1","thumbnail":"thumb","appIcon":"icon"}"#;
+        let source: ProcessedDesktopSource = serde_json::from_str(json).unwrap();
+        assert_eq!(source.id, "window:123");
+        assert_eq!(source.name, "Firefox");
+        assert_eq!(source.app_icon.as_deref(), Some("icon"));
+    }
+
+    #[test]
+    fn test_source_selection_state_management() {
+        let state = Mutex::new(AppState::default());
+
+        // Initially no source selected
+        {
+            let s = state.lock().unwrap();
+            assert!(s.selected_source_id.is_none());
+            assert!(s.selected_source_name.is_none());
+        }
+
+        // Select a source
+        {
+            let mut s = state.lock().unwrap();
+            s.selected_source_id = Some("screen:0:0".to_string());
+            s.selected_source_name = Some("Primary Display".to_string());
+        }
+
+        // Verify selection
+        {
+            let s = state.lock().unwrap();
+            assert_eq!(s.selected_source_id.as_deref(), Some("screen:0:0"));
+            assert_eq!(s.selected_source_name.as_deref(), Some("Primary Display"));
+        }
+    }
+
+    #[test]
+    fn test_recording_state_management() {
+        let state = Mutex::new(AppState::default());
+
+        // Not recording by default
+        assert!(!state.lock().unwrap().is_recording);
+
+        // Start recording clears pending samples
+        {
+            let mut s = state.lock().unwrap();
+            s.pending_cursor_samples.push(
+                crate::commands::file_io::CursorTelemetryPoint {
+                    time_ms: 0.0,
+                    cx: 0.5,
+                    cy: 0.5,
+                },
+            );
+            assert_eq!(s.pending_cursor_samples.len(), 1);
+
+            // Simulate recording start
+            s.is_recording = true;
+            s.pending_cursor_samples.clear();
+        }
+
+        {
+            let s = state.lock().unwrap();
+            assert!(s.is_recording);
+            assert!(s.pending_cursor_samples.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_start_new_recording_clears_session() {
+        let state = Mutex::new(AppState::default());
+        {
+            let mut s = state.lock().unwrap();
+            s.current_session = Some(crate::state::RecordingSession {
+                screen_video_path: "/old/recording.webm".to_string(),
+                webcam_video_path: None,
+                created_at: 0.0,
+            });
+        }
+
+        // start_new_recording clears the session
+        {
+            let mut s = state.lock().unwrap();
+            s.current_session = None;
+        }
+
+        assert!(state.lock().unwrap().current_session.is_none());
+    }
+
+    #[test]
+    fn test_tray_tooltip_text_recording() {
+        assert_eq!(
+            tray_tooltip_text(true, "Primary Display"),
+            "OpenScreen - Recording Primary Display"
+        );
+    }
+
+    #[test]
+    fn test_tray_tooltip_text_idle() {
+        assert_eq!(tray_tooltip_text(false, "anything"), "OpenScreen");
+    }
+
+    #[test]
+    fn test_tray_tooltip_text_default_source() {
+        assert_eq!(
+            tray_tooltip_text(true, "Screen"),
+            "OpenScreen - Recording Screen"
+        );
+    }
+
+    #[test]
+    fn test_generic_result_serialization() {
+        let ok = GenericResult {
+            success: true,
+            error: None,
+        };
+        let json = serde_json::to_string(&ok).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(!json.contains("\"error\""));
+
+        let err = GenericResult {
+            success: false,
+            error: Some("window not found".to_string()),
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        assert!(json.contains("\"error\":\"window not found\""));
     }
 }

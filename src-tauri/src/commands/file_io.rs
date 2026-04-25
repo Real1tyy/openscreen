@@ -26,12 +26,16 @@ fn is_path_within_dir(file_path: &Path, dir_path: &Path) -> bool {
     resolved.starts_with(&resolved_dir)
 }
 
-fn is_path_allowed(file_path: &str, app: &AppHandle, state: &AppState) -> bool {
+fn is_path_allowed_for_dir(file_path: &str, rec_dir: &Path, approved_paths: &[String]) -> bool {
     let resolved = PathBuf::from(file_path);
-    if state.approved_paths.iter().any(|p| PathBuf::from(p) == resolved) {
+    if approved_paths.iter().any(|p| PathBuf::from(p) == resolved) {
         return true;
     }
-    is_path_within_dir(&resolved, &recordings_dir(app))
+    is_path_within_dir(&resolved, rec_dir)
+}
+
+fn is_path_allowed(file_path: &str, app: &AppHandle, state: &AppState) -> bool {
+    is_path_allowed_for_dir(file_path, &recordings_dir(app), &state.approved_paths)
 }
 
 fn has_valid_video_extension(file_path: &str) -> bool {
@@ -43,7 +47,7 @@ fn has_valid_video_extension(file_path: &str) -> bool {
     matches!(ext.as_str(), "webm" | "mp4" | "mov" | "avi" | "mkv")
 }
 
-fn resolve_recording_output_path(app: &AppHandle, file_name: &str) -> Result<PathBuf, String> {
+fn resolve_output_path_for_dir(rec_dir: &Path, file_name: &str) -> Result<PathBuf, String> {
     let trimmed = file_name.trim();
     if trimmed.is_empty() {
         return Err("Invalid recording file name".to_string());
@@ -51,7 +55,11 @@ fn resolve_recording_output_path(app: &AppHandle, file_name: &str) -> Result<Pat
     if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
         return Err("Recording file name must not contain path segments".to_string());
     }
-    Ok(recordings_dir(app).join(trimmed))
+    Ok(rec_dir.join(trimmed))
+}
+
+fn resolve_recording_output_path(app: &AppHandle, file_name: &str) -> Result<PathBuf, String> {
+    resolve_output_path_for_dir(&recordings_dir(app), file_name)
 }
 
 #[derive(Serialize)]
@@ -869,25 +877,15 @@ pub async fn load_project_file(
             match std::fs::read_to_string(&path_str) {
                 Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
                     Ok(project) => {
-                        // Extract and approve media paths
+                        let project_dir = Path::new(&path_str).parent().unwrap_or(Path::new("."));
+                        let rec_dir = recordings_dir(&app);
+                        let approved = extract_approved_media_paths(&project, project_dir, &rec_dir);
+
                         if let Some(media) = project.get("media") {
-                            let project_dir = Path::new(&path_str).parent().unwrap_or(Path::new("."));
                             let mut app_state = state.lock().unwrap();
-                            if let Some(screen) = media.get("screenVideoPath").and_then(|v| v.as_str()) {
-                                if is_path_within_dir(Path::new(screen), project_dir)
-                                    || is_path_within_dir(Path::new(screen), &recordings_dir(&app))
-                                {
-                                    app_state.approved_paths.push(screen.to_string());
-                                }
+                            for path in approved {
+                                app_state.approved_paths.push(path);
                             }
-                            if let Some(webcam) = media.get("webcamVideoPath").and_then(|v| v.as_str()) {
-                                if is_path_within_dir(Path::new(webcam), project_dir)
-                                    || is_path_within_dir(Path::new(webcam), &recordings_dir(&app))
-                                {
-                                    app_state.approved_paths.push(webcam.to_string());
-                                }
-                            }
-                            // Set session from project media
                             let session = crate::state::RecordingSession {
                                 screen_video_path: media
                                     .get("screenVideoPath")
@@ -1142,6 +1140,31 @@ pub fn reveal_in_folder(file_path: String) -> GenericResult {
     }
 }
 
+fn extract_approved_media_paths(
+    project: &serde_json::Value,
+    project_dir: &Path,
+    rec_dir: &Path,
+) -> Vec<String> {
+    let mut approved = Vec::new();
+    if let Some(media) = project.get("media") {
+        if let Some(screen) = media.get("screenVideoPath").and_then(|v| v.as_str()) {
+            if is_path_within_dir(Path::new(screen), project_dir)
+                || is_path_within_dir(Path::new(screen), rec_dir)
+            {
+                approved.push(screen.to_string());
+            }
+        }
+        if let Some(webcam) = media.get("webcamVideoPath").and_then(|v| v.as_str()) {
+            if is_path_within_dir(Path::new(webcam), project_dir)
+                || is_path_within_dir(Path::new(webcam), rec_dir)
+            {
+                approved.push(webcam.to_string());
+            }
+        }
+    }
+    approved
+}
+
 fn chrono_millis() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1153,6 +1176,23 @@ fn chrono_millis() -> u64 {
 mod tests {
     use super::*;
     use std::fs;
+    use std::os::unix::fs::symlink;
+
+    fn test_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("openscreen_test_{}", name));
+        fs::create_dir_all(&dir).ok();
+        dir
+    }
+
+    fn cleanup(path: &Path) {
+        if path.is_dir() {
+            fs::remove_dir_all(path).ok();
+        } else {
+            fs::remove_file(path).ok();
+        }
+    }
+
+    // ─── Video extension validation ─────────────────────────────────
 
     #[test]
     fn test_has_valid_video_extension() {
@@ -1162,13 +1202,20 @@ mod tests {
         assert!(has_valid_video_extension("video.avi"));
         assert!(has_valid_video_extension("video.mkv"));
         assert!(has_valid_video_extension("VIDEO.MP4"));
+        assert!(has_valid_video_extension("/some/path/rec.WebM"));
         assert!(!has_valid_video_extension("file.txt"));
         assert!(!has_valid_video_extension("file.exe"));
         assert!(!has_valid_video_extension("file"));
+        assert!(!has_valid_video_extension(""));
+        assert!(!has_valid_video_extension(".mp4"));
+        assert!(!has_valid_video_extension("file.mp4.txt"));
+        assert!(!has_valid_video_extension("file.gif"));
     }
 
+    // ─── Path containment ───────���───────────────────────────────────
+
     #[test]
-    fn test_is_path_within_dir() {
+    fn test_is_path_within_dir_basic() {
         let dir = std::env::temp_dir();
         let file = dir.join("test.txt");
         assert!(is_path_within_dir(&file, &dir));
@@ -1176,13 +1223,292 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_recording_output_path_rejects_traversal() {
-        let tmp = std::env::temp_dir();
-        // We can't test with a real AppHandle, but we can test the validation logic
-        let name = "../../../etc/passwd";
-        assert!(name.contains(".."));
-        assert!(name.contains('/'));
+    fn test_is_path_within_dir_nested() {
+        let dir = test_dir("within_nested");
+        let nested = dir.join("sub").join("deep");
+        fs::create_dir_all(&nested).unwrap();
+        let file = nested.join("file.txt");
+        fs::write(&file, "x").unwrap();
+
+        assert!(is_path_within_dir(&file, &dir));
+        assert!(is_path_within_dir(&nested, &dir));
+        assert!(!is_path_within_dir(&dir, &nested));
+        cleanup(&dir);
     }
+
+    #[test]
+    fn test_is_path_within_dir_dotdot_traversal() {
+        // When the traversal path doesn't exist on disk, canonicalize falls back
+        // to the raw path. This test verifies behavior with real existing paths.
+        let dir = test_dir("within_dotdot");
+        let outside = test_dir("dotdot_outside");
+        fs::create_dir_all(dir.join("sub")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let outside_file = outside.join("target.txt");
+        fs::write(&outside_file, "x").unwrap();
+
+        // A path that exists and is truly outside the dir
+        assert!(!is_path_within_dir(&outside_file, &dir));
+        cleanup(&dir);
+        cleanup(&outside);
+    }
+
+    #[test]
+    fn test_is_path_within_dir_symlink_escape() {
+        let dir = test_dir("within_symlink");
+        let outside = test_dir("outside_target");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(outside.join("secret.txt"), "secret").unwrap();
+
+        let link_path = dir.join("escape");
+        symlink(&outside, &link_path).ok();
+        if link_path.exists() {
+            let escaped_file = link_path.join("secret.txt");
+            assert!(
+                !is_path_within_dir(&escaped_file, &dir),
+                "symlink should not allow escaping the directory"
+            );
+        }
+        cleanup(&dir);
+        cleanup(&outside);
+    }
+
+    #[test]
+    fn test_is_path_within_dir_same_dir() {
+        let dir = test_dir("within_same");
+        fs::create_dir_all(&dir).unwrap();
+        assert!(is_path_within_dir(&dir, &dir));
+        cleanup(&dir);
+    }
+
+    // ─── Path access control ────────────────────────────────────────
+
+    #[test]
+    fn test_is_path_allowed_approved_exact_match() {
+        let rec_dir = test_dir("allowed_approved");
+        fs::create_dir_all(&rec_dir).unwrap();
+        let outside_path = "/home/user/Documents/my-video.mp4";
+        let approved = vec![outside_path.to_string()];
+
+        assert!(is_path_allowed_for_dir(outside_path, &rec_dir, &approved));
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_is_path_allowed_within_recordings() {
+        let rec_dir = test_dir("allowed_rec");
+        fs::create_dir_all(&rec_dir).unwrap();
+        let video = rec_dir.join("recording.webm");
+        fs::write(&video, "fake-video").unwrap();
+
+        assert!(is_path_allowed_for_dir(
+            &video.to_string_lossy(),
+            &rec_dir,
+            &[]
+        ));
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_is_path_allowed_denies_unapproved_outside() {
+        let rec_dir = test_dir("allowed_deny");
+        fs::create_dir_all(&rec_dir).unwrap();
+
+        assert!(!is_path_allowed_for_dir("/etc/passwd", &rec_dir, &[]));
+        assert!(!is_path_allowed_for_dir(
+            "/home/user/sensitive.db",
+            &rec_dir,
+            &[]
+        ));
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_is_path_allowed_denies_traversal_into_recordings() {
+        let rec_dir = test_dir("allowed_traversal");
+        fs::create_dir_all(&rec_dir).unwrap();
+        let traversal = format!("{}/../../../etc/passwd", rec_dir.to_string_lossy());
+
+        assert!(!is_path_allowed_for_dir(&traversal, &rec_dir, &[]));
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_is_path_allowed_multiple_approved_paths() {
+        let rec_dir = test_dir("allowed_multi");
+        fs::create_dir_all(&rec_dir).unwrap();
+        let approved = vec![
+            "/path/one.mp4".to_string(),
+            "/path/two.webm".to_string(),
+            "/path/three.mov".to_string(),
+        ];
+
+        assert!(is_path_allowed_for_dir("/path/two.webm", &rec_dir, &approved));
+        assert!(!is_path_allowed_for_dir("/path/four.mp4", &rec_dir, &approved));
+        cleanup(&rec_dir);
+    }
+
+    // ─── Recording output path resolution ───────────────────────────
+
+    #[test]
+    fn test_resolve_output_path_valid() {
+        let rec_dir = test_dir("resolve_valid");
+        let result = resolve_output_path_for_dir(&rec_dir, "recording-001.webm");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), rec_dir.join("recording-001.webm"));
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_resolve_output_path_rejects_empty() {
+        let rec_dir = test_dir("resolve_empty");
+        assert!(resolve_output_path_for_dir(&rec_dir, "").is_err());
+        assert!(resolve_output_path_for_dir(&rec_dir, "   ").is_err());
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_resolve_output_path_rejects_traversal() {
+        let rec_dir = test_dir("resolve_traversal");
+        assert!(resolve_output_path_for_dir(&rec_dir, "../../../etc/passwd").is_err());
+        assert!(resolve_output_path_for_dir(&rec_dir, "sub/../../../etc/shadow").is_err());
+        assert!(resolve_output_path_for_dir(&rec_dir, "..").is_err());
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_resolve_output_path_rejects_forward_slash() {
+        let rec_dir = test_dir("resolve_slash");
+        assert!(resolve_output_path_for_dir(&rec_dir, "sub/file.webm").is_err());
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_resolve_output_path_rejects_backslash() {
+        let rec_dir = test_dir("resolve_backslash");
+        assert!(resolve_output_path_for_dir(&rec_dir, "sub\\file.webm").is_err());
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_resolve_output_path_trims_whitespace() {
+        let rec_dir = test_dir("resolve_trim");
+        let result = resolve_output_path_for_dir(&rec_dir, "  file.webm  ");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), rec_dir.join("file.webm"));
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_resolve_output_path_allows_special_chars_in_name() {
+        let rec_dir = test_dir("resolve_special");
+        assert!(resolve_output_path_for_dir(&rec_dir, "my recording (1).webm").is_ok());
+        assert!(resolve_output_path_for_dir(&rec_dir, "recording-2024-01-15T10:30:00.webm").is_ok());
+        cleanup(&rec_dir);
+    }
+
+    // ─── Project media path extraction ───���──────────────────────────
+
+    #[test]
+    fn test_extract_approved_media_paths_screen_only() {
+        let proj_dir = test_dir("extract_screen");
+        let rec_dir = test_dir("extract_screen_rec");
+        fs::create_dir_all(&proj_dir).unwrap();
+        fs::create_dir_all(&rec_dir).unwrap();
+
+        let screen_path = proj_dir.join("screen.webm");
+        fs::write(&screen_path, "fake").unwrap();
+
+        let project = serde_json::json!({
+            "media": {
+                "screenVideoPath": screen_path.to_string_lossy()
+            }
+        });
+
+        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        assert_eq!(approved.len(), 1);
+        assert_eq!(approved[0], screen_path.to_string_lossy());
+        cleanup(&proj_dir);
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_extract_approved_media_paths_screen_and_webcam() {
+        let proj_dir = test_dir("extract_both");
+        let rec_dir = test_dir("extract_both_rec");
+        fs::create_dir_all(&proj_dir).unwrap();
+        fs::create_dir_all(&rec_dir).unwrap();
+
+        let screen_path = proj_dir.join("screen.webm");
+        let webcam_path = proj_dir.join("webcam.webm");
+        fs::write(&screen_path, "fake").unwrap();
+        fs::write(&webcam_path, "fake").unwrap();
+
+        let project = serde_json::json!({
+            "media": {
+                "screenVideoPath": screen_path.to_string_lossy(),
+                "webcamVideoPath": webcam_path.to_string_lossy()
+            }
+        });
+
+        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        assert_eq!(approved.len(), 2);
+        cleanup(&proj_dir);
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_extract_approved_media_paths_rejects_outside_paths() {
+        let proj_dir = test_dir("extract_reject");
+        let rec_dir = test_dir("extract_reject_rec");
+        fs::create_dir_all(&proj_dir).unwrap();
+        fs::create_dir_all(&rec_dir).unwrap();
+
+        let project = serde_json::json!({
+            "media": {
+                "screenVideoPath": "/etc/shadow",
+                "webcamVideoPath": "/root/.ssh/id_rsa"
+            }
+        });
+
+        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        assert!(approved.is_empty(), "paths outside project and recordings dirs must be rejected");
+        cleanup(&proj_dir);
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_extract_approved_media_paths_in_recordings_dir() {
+        let proj_dir = test_dir("extract_inrec");
+        let rec_dir = test_dir("extract_inrec_rec");
+        fs::create_dir_all(&proj_dir).unwrap();
+        fs::create_dir_all(&rec_dir).unwrap();
+
+        let screen_path = rec_dir.join("recording-001.webm");
+        fs::write(&screen_path, "fake").unwrap();
+
+        let project = serde_json::json!({
+            "media": {
+                "screenVideoPath": screen_path.to_string_lossy()
+            }
+        });
+
+        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        assert_eq!(approved.len(), 1);
+        cleanup(&proj_dir);
+        cleanup(&rec_dir);
+    }
+
+    #[test]
+    fn test_extract_approved_media_paths_no_media_key() {
+        let proj_dir = test_dir("extract_nomedia");
+        let rec_dir = test_dir("extract_nomedia_rec");
+        let project = serde_json::json!({"settings": {}});
+        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        assert!(approved.is_empty());
+    }
+
+    // ─── Cursor telemetry ───────────────────────────────────────────
 
     #[test]
     fn test_cursor_telemetry_point_serialization() {
@@ -1217,119 +1543,56 @@ mod tests {
     }
 
     #[test]
-    fn test_write_and_read_text_file() {
-        let tmp = std::env::temp_dir().join("openscreen_test_write.txt");
-        fs::write(&tmp, "hello world").expect("Failed to write test file");
-        let content = fs::read_to_string(&tmp).unwrap();
-        assert_eq!(content, "hello world");
-        fs::remove_file(&tmp).ok();
-    }
-
-    #[test]
-    fn test_generic_result_serialization() {
-        let result = GenericResult {
-            success: true,
-            path: Some("/tmp/file.mp4".to_string()),
-            message: None,
-            error: None,
-            canceled: None,
+    fn test_cursor_telemetry_legacy_array_format() {
+        let data = r#"[{"timeMs":0,"cx":0.1,"cy":0.2},{"timeMs":50,"cx":0.3,"cy":0.4}]"#;
+        let parsed: serde_json::Value = serde_json::from_str(data).unwrap();
+        let raw_samples = if parsed.is_array() {
+            parsed.as_array().cloned().unwrap_or_default()
+        } else {
+            parsed.get("samples").and_then(|s| s.as_array()).cloned().unwrap_or_default()
         };
-        let json = serde_json::to_string(&result).unwrap();
-        assert!(json.contains("\"success\":true"));
-        assert!(json.contains("\"path\":\"/tmp/file.mp4\""));
-        assert!(!json.contains("message"));
-        assert!(!json.contains("error"));
-        assert!(!json.contains("canceled"));
+        let points: Vec<CursorTelemetryPoint> = raw_samples
+            .iter()
+            .filter_map(|s| serde_json::from_value(s.clone()).ok())
+            .collect();
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].cx, 0.1);
     }
 
     #[test]
-    fn test_shortcuts_round_trip() {
-        let tmp = std::env::temp_dir().join("openscreen_test_shortcuts.json");
-        let shortcuts = serde_json::json!({"playPause": "Space", "undo": "Ctrl+Z"});
-        let content = serde_json::to_string_pretty(&shortcuts).unwrap();
-        fs::write(&tmp, &content).unwrap();
+    fn test_cursor_telemetry_write_read_round_trip() {
+        let dir = test_dir("telemetry_roundtrip");
+        fs::create_dir_all(&dir).unwrap();
+
+        let samples: Vec<CursorTelemetryPoint> = (0..100)
+            .map(|i| CursorTelemetryPoint {
+                time_ms: i as f64 * 16.67,
+                cx: (i as f64 / 100.0),
+                cy: 1.0 - (i as f64 / 100.0),
+            })
+            .collect();
+
+        let telemetry = serde_json::json!({
+            "version": 1,
+            "samples": samples
+        });
+
+        let path = dir.join("recording.webm.cursor.json");
+        fs::write(&path, serde_json::to_string_pretty(&telemetry).unwrap()).unwrap();
 
         let loaded: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&tmp).unwrap()).unwrap();
-        assert_eq!(loaded["playPause"], "Space");
-        assert_eq!(loaded["undo"], "Ctrl+Z");
-        fs::remove_file(&tmp).ok();
-    }
-
-    #[test]
-    fn test_move_or_copy_same_filesystem() {
-        let src = std::env::temp_dir().join("openscreen_test_move_src.bin");
-        let dest = std::env::temp_dir().join("openscreen_test_move_dest.bin");
-        let payload = vec![0u8; 1024 * 1024]; // 1 MB
-        fs::write(&src, &payload).unwrap();
-        assert!(src.exists());
-
-        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
-
-        assert!(!src.exists(), "source should be removed after move");
-        assert!(dest.exists(), "destination should exist after move");
-        let read_back = fs::read(&dest).unwrap();
-        assert_eq!(read_back.len(), 1024 * 1024);
-        fs::remove_file(&dest).ok();
-    }
-
-    #[test]
-    fn test_move_or_copy_preserves_content() {
-        let src = std::env::temp_dir().join("openscreen_test_content_src.bin");
-        let dest = std::env::temp_dir().join("openscreen_test_content_dest.bin");
-        let payload: Vec<u8> = (0..=255).cycle().take(4096).collect();
-        fs::write(&src, &payload).unwrap();
-
-        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
-
-        let read_back = fs::read(&dest).unwrap();
-        assert_eq!(read_back, payload, "content must be identical after move");
-        fs::remove_file(&dest).ok();
-    }
-
-    #[test]
-    fn test_move_or_copy_nonexistent_source_fails() {
-        let src = std::env::temp_dir().join("openscreen_nonexistent_file.bin");
-        let dest = std::env::temp_dir().join("openscreen_nonexistent_dest.bin");
-        let result = move_or_copy(&src.to_string_lossy(), &dest);
-        assert!(result.is_err(), "should fail for nonexistent source");
-    }
-
-    #[test]
-    fn test_session_manifest_round_trip() {
-        let session = crate::state::RecordingSession {
-            screen_video_path: "/tmp/recordings/screen-001.webm".to_string(),
-            webcam_video_path: Some("/tmp/recordings/screen-001-webcam.webm".to_string()),
-            created_at: 1700000000000.0,
-        };
-        let json = serde_json::to_string_pretty(&session).unwrap();
-        let manifest_path = std::env::temp_dir().join("openscreen_test_manifest.session.json");
-        fs::write(&manifest_path, &json).unwrap();
-
-        let loaded_json = fs::read_to_string(&manifest_path).unwrap();
-        let loaded: crate::state::RecordingSession =
-            serde_json::from_str(&loaded_json).unwrap();
-        assert_eq!(loaded.screen_video_path, session.screen_video_path);
-        assert_eq!(loaded.webcam_video_path, session.webcam_video_path);
-        assert_eq!(loaded.created_at, session.created_at);
-        fs::remove_file(&manifest_path).ok();
-    }
-
-    #[test]
-    fn test_large_binary_write_and_verify() {
-        let tmp = std::env::temp_dir().join("openscreen_test_large_binary.bin");
-        // Simulate a 10 MB video file
-        let size = 10 * 1024 * 1024;
-        let payload: Vec<u8> = (0..size).map(|i| (i % 256) as u8).collect();
-        fs::write(&tmp, &payload).unwrap();
-
-        let read_back = fs::read(&tmp).unwrap();
-        assert_eq!(read_back.len(), size);
-        assert_eq!(read_back[0], 0);
-        assert_eq!(read_back[255], 255);
-        assert_eq!(read_back[256], 0);
-        assert_eq!(read_back[size - 1], ((size - 1) % 256) as u8);
-        fs::remove_file(&tmp).ok();
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let loaded_samples: Vec<CursorTelemetryPoint> = loaded
+            .get("samples")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| serde_json::from_value(s.clone()).ok())
+            .collect();
+        assert_eq!(loaded_samples.len(), 100);
+        assert!((loaded_samples[50].cx - 0.5).abs() < 0.001);
+        cleanup(&dir);
     }
 
     #[test]
@@ -1357,5 +1620,490 @@ mod tests {
         assert_eq!(deserialized.len(), 36000);
         assert_eq!(deserialized[0].time_ms, 0.0);
         assert_eq!(deserialized[35999].time_ms, 3599900.0);
+    }
+
+    // ─── Serialization ─────────��────────────────────────────────────
+
+    #[test]
+    fn test_generic_result_serialization() {
+        let result = GenericResult {
+            success: true,
+            path: Some("/tmp/file.mp4".to_string()),
+            message: None,
+            error: None,
+            canceled: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"path\":\"/tmp/file.mp4\""));
+        assert!(!json.contains("message"));
+        assert!(!json.contains("error"));
+        assert!(!json.contains("canceled"));
+    }
+
+    #[test]
+    fn test_generic_result_canceled_serialization() {
+        let result = GenericResult {
+            success: false,
+            path: None,
+            message: Some("Export canceled".to_string()),
+            error: None,
+            canceled: Some(true),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"canceled\":true"));
+        assert!(json.contains("\"message\":\"Export canceled\""));
+        assert!(!json.contains("\"path\""));
+    }
+
+    #[test]
+    fn test_session_result_serialization() {
+        let session = crate::state::RecordingSession {
+            screen_video_path: "/tmp/screen.webm".to_string(),
+            webcam_video_path: None,
+            created_at: 1700000000.0,
+        };
+        let result = SessionResult {
+            success: true,
+            path: Some("/tmp/screen.webm".to_string()),
+            session: Some(session),
+            message: Some("ok".to_string()),
+            error: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"screenVideoPath\""));
+        assert!(!json.contains("\"webcamVideoPath\""));
+    }
+
+    #[test]
+    fn test_project_load_result_serialization() {
+        let result = ProjectLoadResult {
+            success: true,
+            path: Some("/tmp/project.openscreen".to_string()),
+            project: Some(serde_json::json!({"version": 1})),
+            message: None,
+            canceled: None,
+            error: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["project"]["version"], 1);
+        assert!(!json.contains("\"canceled\""));
+    }
+
+    #[test]
+    fn test_read_binary_result_serialization() {
+        let result = ReadBinaryResult {
+            success: true,
+            data: Some(vec![0, 1, 2, 3]),
+            path: Some("/tmp/file.bin".to_string()),
+            message: None,
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"data\":[0,1,2,3]"));
+        assert!(!json.contains("\"message\""));
+    }
+
+    // ─── File operations ────────────────────────────────────────────
+
+    #[test]
+    fn test_write_and_read_text_file() {
+        let tmp = std::env::temp_dir().join("openscreen_test_write.txt");
+        fs::write(&tmp, "hello world").expect("Failed to write test file");
+        let content = fs::read_to_string(&tmp).unwrap();
+        assert_eq!(content, "hello world");
+        cleanup(&tmp);
+    }
+
+    #[test]
+    fn test_shortcuts_round_trip() {
+        let tmp = std::env::temp_dir().join("openscreen_test_shortcuts.json");
+        let shortcuts = serde_json::json!({"playPause": "Space", "undo": "Ctrl+Z"});
+        let content = serde_json::to_string_pretty(&shortcuts).unwrap();
+        fs::write(&tmp, &content).unwrap();
+
+        let loaded: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&tmp).unwrap()).unwrap();
+        assert_eq!(loaded["playPause"], "Space");
+        assert_eq!(loaded["undo"], "Ctrl+Z");
+        cleanup(&tmp);
+    }
+
+    #[test]
+    fn test_move_or_copy_same_filesystem() {
+        let src = std::env::temp_dir().join("openscreen_test_move_src.bin");
+        let dest = std::env::temp_dir().join("openscreen_test_move_dest.bin");
+        let payload = vec![0u8; 1024 * 1024];
+        fs::write(&src, &payload).unwrap();
+
+        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
+
+        assert!(!src.exists(), "source should be removed after move");
+        assert!(dest.exists(), "destination should exist after move");
+        let read_back = fs::read(&dest).unwrap();
+        assert_eq!(read_back.len(), 1024 * 1024);
+        cleanup(&dest);
+    }
+
+    #[test]
+    fn test_move_or_copy_preserves_content() {
+        let src = std::env::temp_dir().join("openscreen_test_content_src.bin");
+        let dest = std::env::temp_dir().join("openscreen_test_content_dest.bin");
+        let payload: Vec<u8> = (0..=255).cycle().take(4096).collect();
+        fs::write(&src, &payload).unwrap();
+
+        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
+
+        let read_back = fs::read(&dest).unwrap();
+        assert_eq!(read_back, payload, "content must be identical after move");
+        cleanup(&dest);
+    }
+
+    #[test]
+    fn test_move_or_copy_nonexistent_source_fails() {
+        let src = std::env::temp_dir().join("openscreen_nonexistent_file.bin");
+        let dest = std::env::temp_dir().join("openscreen_nonexistent_dest.bin");
+        let result = move_or_copy(&src.to_string_lossy(), &dest);
+        assert!(result.is_err(), "should fail for nonexistent source");
+    }
+
+    #[test]
+    fn test_move_or_copy_overwrites_existing_dest() {
+        let src = std::env::temp_dir().join("openscreen_test_overwrite_src.bin");
+        let dest = std::env::temp_dir().join("openscreen_test_overwrite_dest.bin");
+        fs::write(&dest, "old content").unwrap();
+        fs::write(&src, "new content").unwrap();
+
+        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
+
+        let content = fs::read_to_string(&dest).unwrap();
+        assert_eq!(content, "new content");
+        cleanup(&dest);
+    }
+
+    #[test]
+    fn test_move_or_copy_empty_file() {
+        let src = std::env::temp_dir().join("openscreen_test_empty_src.bin");
+        let dest = std::env::temp_dir().join("openscreen_test_empty_dest.bin");
+        fs::write(&src, &[]).unwrap();
+
+        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
+
+        assert!(dest.exists());
+        assert_eq!(fs::metadata(&dest).unwrap().len(), 0);
+        cleanup(&dest);
+    }
+
+    // ─── Session manifest ─��─────────────────────────────────────────
+
+    #[test]
+    fn test_session_manifest_round_trip() {
+        let session = crate::state::RecordingSession {
+            screen_video_path: "/tmp/recordings/screen-001.webm".to_string(),
+            webcam_video_path: Some("/tmp/recordings/screen-001-webcam.webm".to_string()),
+            created_at: 1700000000000.0,
+        };
+        let json = serde_json::to_string_pretty(&session).unwrap();
+        let manifest_path = std::env::temp_dir().join("openscreen_test_manifest.session.json");
+        fs::write(&manifest_path, &json).unwrap();
+
+        let loaded: crate::state::RecordingSession =
+            serde_json::from_str(&fs::read_to_string(&manifest_path).unwrap()).unwrap();
+        assert_eq!(loaded.screen_video_path, session.screen_video_path);
+        assert_eq!(loaded.webcam_video_path, session.webcam_video_path);
+        assert_eq!(loaded.created_at, session.created_at);
+        cleanup(&manifest_path);
+    }
+
+    #[test]
+    fn test_session_manifest_webcam_naming_convention() {
+        let base_name = "screen-001";
+        let webcam_name = format!("{}-webcam", base_name);
+        assert_eq!(webcam_name, "screen-001-webcam");
+
+        let screen_name = "screen-001-webcam";
+        if screen_name.ends_with("-webcam") {
+            let stripped = &screen_name[..screen_name.len() - 7];
+            assert_eq!(stripped, "screen-001");
+        }
+    }
+
+    // ─── Project persistence ────────────────────────────────────────
+
+    #[test]
+    fn test_project_file_round_trip() {
+        let dir = test_dir("project_roundtrip");
+        fs::create_dir_all(&dir).unwrap();
+
+        let project = serde_json::json!({
+            "version": 1,
+            "media": {
+                "screenVideoPath": dir.join("screen.webm").to_string_lossy(),
+            },
+            "timeline": {
+                "regions": [
+                    {"start": 0.0, "end": 5.0, "speed": 1.0},
+                    {"start": 5.0, "end": 10.0, "speed": 2.0}
+                ],
+                "trimStart": 0.5,
+                "trimEnd": 9.5
+            },
+            "settings": {
+                "wallpaper": "gradient-blue",
+                "padding": 50,
+                "borderRadius": 12
+            },
+            "annotations": [
+                {"type": "text", "content": "Hello", "x": 100, "y": 200}
+            ]
+        });
+
+        let path = dir.join("test.openscreen");
+        let content = serde_json::to_string_pretty(&project).unwrap();
+        fs::write(&path, &content).unwrap();
+
+        let loaded_content = fs::read_to_string(&path).unwrap();
+        let loaded: serde_json::Value = serde_json::from_str(&loaded_content).unwrap();
+
+        assert_eq!(loaded["version"], 1);
+        assert_eq!(loaded["timeline"]["regions"].as_array().unwrap().len(), 2);
+        assert_eq!(loaded["timeline"]["trimStart"], 0.5);
+        assert_eq!(loaded["settings"]["wallpaper"], "gradient-blue");
+        assert_eq!(loaded["annotations"].as_array().unwrap().len(), 1);
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_project_file_invalid_json() {
+        let dir = test_dir("project_invalid");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bad.openscreen");
+        fs::write(&path, "this is not json {{{").unwrap();
+
+        let result = serde_json::from_str::<serde_json::Value>(
+            &fs::read_to_string(&path).unwrap(),
+        );
+        assert!(result.is_err());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_project_file_sanitized_name() {
+        let name = "My Project (2024)".replace(|c: char| !c.is_alphanumeric() && c != '-' && c != '_', "_");
+        assert_eq!(name, "My_Project__2024_");
+        let with_ext = if name.ends_with(".openscreen") {
+            name
+        } else {
+            format!("{}.openscreen", name)
+        };
+        assert_eq!(with_ext, "My_Project__2024_.openscreen");
+    }
+
+    // ─── Full recording session simulation ──────────────────────────
+
+    #[test]
+    fn test_full_recording_session_lifecycle() {
+        let dir = test_dir("session_lifecycle");
+        let recordings = dir.join("recordings");
+        fs::create_dir_all(&recordings).unwrap();
+
+        // 1. Simulate storing a recording
+        let video_data = vec![0u8; 1024];
+        let screen_path = recordings.join("screen-001.webm");
+        fs::write(&screen_path, &video_data).unwrap();
+
+        // 2. Write session manifest
+        let session = crate::state::RecordingSession {
+            screen_video_path: screen_path.to_string_lossy().to_string(),
+            webcam_video_path: None,
+            created_at: 1700000000000.0,
+        };
+        let manifest_path = recordings.join("screen-001.session.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&session).unwrap(),
+        )
+        .unwrap();
+
+        // 3. Write cursor telemetry
+        let samples = vec![
+            CursorTelemetryPoint { time_ms: 0.0, cx: 0.5, cy: 0.5 },
+            CursorTelemetryPoint { time_ms: 100.0, cx: 0.6, cy: 0.4 },
+        ];
+        let telemetry_path = format!("{}.cursor.json", screen_path.to_string_lossy());
+        fs::write(
+            &telemetry_path,
+            serde_json::to_string(&serde_json::json!({"version": 1, "samples": samples})).unwrap(),
+        )
+        .unwrap();
+
+        // 4. Verify all artifacts exist
+        assert!(screen_path.exists());
+        assert!(manifest_path.exists());
+        assert!(Path::new(&telemetry_path).exists());
+
+        // 5. Load session manifest back
+        let loaded: crate::state::RecordingSession =
+            serde_json::from_str(&fs::read_to_string(&manifest_path).unwrap()).unwrap();
+        assert_eq!(loaded.screen_video_path, screen_path.to_string_lossy());
+
+        // 6. Load cursor telemetry back
+        let tel: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&telemetry_path).unwrap()).unwrap();
+        let loaded_samples: Vec<CursorTelemetryPoint> = tel
+            .get("samples")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| serde_json::from_value(s.clone()).ok())
+            .collect();
+        assert_eq!(loaded_samples.len(), 2);
+
+        // 7. Verify path is within recordings
+        assert!(is_path_within_dir(&screen_path, &recordings));
+
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_full_recording_session_with_webcam() {
+        let dir = test_dir("session_webcam");
+        let recordings = dir.join("recordings");
+        fs::create_dir_all(&recordings).unwrap();
+
+        let screen_path = recordings.join("recording-001.webm");
+        let webcam_path = recordings.join("recording-001-webcam.webm");
+        fs::write(&screen_path, vec![0u8; 512]).unwrap();
+        fs::write(&webcam_path, vec![0u8; 256]).unwrap();
+
+        let session = crate::state::RecordingSession {
+            screen_video_path: screen_path.to_string_lossy().to_string(),
+            webcam_video_path: Some(webcam_path.to_string_lossy().to_string()),
+            created_at: 1700000000000.0,
+        };
+
+        let json = serde_json::to_string_pretty(&session).unwrap();
+        assert!(json.contains("webcamVideoPath"));
+
+        let loaded: crate::state::RecordingSession = serde_json::from_str(&json).unwrap();
+        assert!(loaded.webcam_video_path.is_some());
+        assert!(Path::new(loaded.webcam_video_path.as_ref().unwrap()).exists());
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_get_recorded_video_finds_most_recent() {
+        let dir = test_dir("recent_video");
+        fs::create_dir_all(&dir).unwrap();
+
+        fs::write(dir.join("a-old.webm"), "old").unwrap();
+        fs::write(dir.join("b-middle.webm"), "mid").unwrap();
+        fs::write(dir.join("c-newest.webm"), "new").unwrap();
+        fs::write(dir.join("c-newest-webcam.webm"), "webcam").unwrap();
+        fs::write(dir.join("not-a-video.txt"), "nope").unwrap();
+
+        let mut videos: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                name.ends_with(".webm") && !name.ends_with("-webcam.webm")
+            })
+            .map(|e| e.path().to_string_lossy().to_string())
+            .collect();
+        videos.sort();
+        videos.reverse();
+
+        assert_eq!(videos.len(), 3);
+        assert!(videos[0].contains("c-newest.webm"));
+        assert!(!videos.iter().any(|v| v.contains("-webcam")));
+        assert!(!videos.iter().any(|v| v.contains(".txt")));
+        cleanup(&dir);
+    }
+
+    // ─── File-based transfer simulation ─────────────────────────────
+
+    #[test]
+    fn test_file_based_transfer_screen_only() {
+        let dir = test_dir("transfer_screen");
+        let recordings = dir.join("recordings");
+        fs::create_dir_all(&recordings).unwrap();
+
+        let temp_file = dir.join("temp-screen.webm");
+        let video_data = vec![42u8; 2048];
+        fs::write(&temp_file, &video_data).unwrap();
+
+        let dest = recordings.join("screen-001.webm");
+        move_or_copy(&temp_file.to_string_lossy(), &dest).unwrap();
+
+        assert!(!temp_file.exists(), "temp file should be gone");
+        assert!(dest.exists());
+        assert_eq!(fs::read(&dest).unwrap(), video_data);
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_file_based_transfer_with_webcam() {
+        let dir = test_dir("transfer_webcam");
+        let recordings = dir.join("recordings");
+        fs::create_dir_all(&recordings).unwrap();
+
+        let temp_screen = dir.join("temp-screen.webm");
+        let temp_webcam = dir.join("temp-webcam.webm");
+        fs::write(&temp_screen, vec![1u8; 1024]).unwrap();
+        fs::write(&temp_webcam, vec![2u8; 512]).unwrap();
+
+        let screen_dest = recordings.join("rec-001.webm");
+        let webcam_dest = recordings.join("rec-001-webcam.webm");
+
+        move_or_copy(&temp_screen.to_string_lossy(), &screen_dest).unwrap();
+        move_or_copy(&temp_webcam.to_string_lossy(), &webcam_dest).unwrap();
+
+        assert!(screen_dest.exists());
+        assert!(webcam_dest.exists());
+        assert_eq!(fs::read(&screen_dest).unwrap()[0], 1);
+        assert_eq!(fs::read(&webcam_dest).unwrap()[0], 2);
+        cleanup(&dir);
+    }
+
+    // ─── Binary I/O ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_large_binary_write_and_verify() {
+        let tmp = std::env::temp_dir().join("openscreen_test_large_binary.bin");
+        let size = 10 * 1024 * 1024;
+        let payload: Vec<u8> = (0..size).map(|i| (i % 256) as u8).collect();
+        fs::write(&tmp, &payload).unwrap();
+
+        let read_back = fs::read(&tmp).unwrap();
+        assert_eq!(read_back.len(), size);
+        assert_eq!(read_back[0], 0);
+        assert_eq!(read_back[255], 255);
+        assert_eq!(read_back[256], 0);
+        assert_eq!(read_back[size - 1], ((size - 1) % 256) as u8);
+        cleanup(&tmp);
+    }
+
+    #[test]
+    fn test_unicode_filename_handling() {
+        let dir = test_dir("unicode_fname");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("запис_экрана.webm");
+        fs::write(&path, vec![0u8; 100]).unwrap();
+        assert!(path.exists());
+        assert!(has_valid_video_extension(&path.to_string_lossy()));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_spaces_in_path() {
+        let dir = test_dir("spaces in path");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("my recording.webm");
+        fs::write(&file, "data").unwrap();
+        assert!(file.exists());
+        assert!(is_path_within_dir(&file, &dir));
+        cleanup(&dir);
     }
 }

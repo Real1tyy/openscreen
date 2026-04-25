@@ -312,7 +312,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mut config = serde_json::json!({
+        let config = serde_json::json!({
             "inputFile": opts.input_file,
             "outputFile": opts.output,
             "blur": opts.blur,
@@ -332,5 +332,149 @@ mod tests {
         assert!(obj.contains_key("background"), "missing 'background'");
         assert_eq!(obj["fps"], 60);
         assert_eq!(obj["background"], "wallpaper1.jpg");
+    }
+
+    #[test]
+    fn test_parse_resolution_1440p() {
+        let res = parse_resolution("1440p").unwrap();
+        assert_eq!(res.width, 2560);
+        assert_eq!(res.height, 1440);
+    }
+
+    #[test]
+    fn test_parse_resolution_case_insensitive() {
+        assert!(parse_resolution("720P").is_some());
+        assert!(parse_resolution("4K").is_some());
+        assert!(parse_resolution("1080P").is_some());
+    }
+
+    #[test]
+    fn test_parse_resolution_zero_dimensions() {
+        let res = parse_resolution("0x0");
+        // Parser accepts it (validation is the caller's responsibility)
+        if let Some(r) = res {
+            assert_eq!(r.width, 0);
+            assert_eq!(r.height, 0);
+        }
+    }
+
+    #[test]
+    fn test_parse_resolution_large_dimensions() {
+        let res = parse_resolution("7680x4320").unwrap();
+        assert_eq!(res.width, 7680);
+        assert_eq!(res.height, 4320);
+    }
+
+    #[test]
+    fn test_parse_resolution_negative_rejected() {
+        assert!(parse_resolution("-1x-1").is_none());
+    }
+
+    #[test]
+    fn test_cli_options_serialization_round_trip() {
+        let opts = CliOptions {
+            input_file: Some("/tmp/video.webm".to_string()),
+            export: true,
+            output: Some("/tmp/output.mp4".to_string()),
+            blur: true,
+            shadow: true,
+            shadow_intensity: 0.7,
+            motion_blur: 0.3,
+            roundness: 15.0,
+            padding: 60.0,
+            background: "gradient-sunset".to_string(),
+            resolution: Some(Resolution {
+                width: 1920,
+                height: 1080,
+            }),
+            bitrate: Some(8_000_000),
+            fps: 60,
+        };
+
+        let json = serde_json::to_string(&opts).unwrap();
+        let loaded: CliOptions = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(loaded.input_file.as_deref(), Some("/tmp/video.webm"));
+        assert!(loaded.export);
+        assert_eq!(loaded.fps, 60);
+        assert_eq!(loaded.bitrate, Some(8_000_000));
+        assert_eq!(loaded.resolution.as_ref().unwrap().width, 1920);
+        assert!((loaded.shadow_intensity - 0.7).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cli_options_default_values() {
+        let opts = CliOptions::default();
+        assert!(!opts.export);
+        assert!(!opts.blur);
+        assert!(!opts.shadow);
+        assert_eq!(opts.shadow_intensity, 0.0);
+        assert_eq!(opts.motion_blur, 0.0);
+        assert_eq!(opts.roundness, 0.0);
+        assert_eq!(opts.padding, 0.0);
+        assert!(opts.background.is_empty());
+        assert!(opts.resolution.is_none());
+        assert!(opts.bitrate.is_none());
+    }
+
+    #[test]
+    fn test_headless_config_includes_resolution_when_set() {
+        let opts = CliOptions {
+            input_file: Some("/tmp/test.mp4".to_string()),
+            export: true,
+            resolution: Some(Resolution {
+                width: 1920,
+                height: 1080,
+            }),
+            bitrate: Some(5_000_000),
+            fps: 30,
+            ..Default::default()
+        };
+
+        let mut config = serde_json::json!({
+            "inputFile": opts.input_file,
+            "outputFile": opts.output,
+            "fps": opts.fps,
+        });
+        if let Some(ref res) = opts.resolution {
+            config["resolution"] = serde_json::json!({
+                "width": res.width,
+                "height": res.height,
+            });
+        }
+        if let Some(bitrate) = opts.bitrate {
+            config["bitrate"] = serde_json::json!(bitrate);
+        }
+
+        assert_eq!(config["resolution"]["width"], 1920);
+        assert_eq!(config["resolution"]["height"], 1080);
+        assert_eq!(config["bitrate"], 5_000_000);
+    }
+
+    #[test]
+    fn test_output_path_derivation() {
+        let input = PathBuf::from("/home/user/recordings/screen-001.webm");
+        let stem = input
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let dir = input.parent().unwrap_or(&input);
+        let derived = dir.join(format!("{}-openscreen.mp4", stem));
+        assert_eq!(
+            derived.to_string_lossy(),
+            "/home/user/recordings/screen-001-openscreen.mp4"
+        );
+    }
+
+    #[test]
+    fn test_output_path_derivation_no_extension() {
+        let input = PathBuf::from("/tmp/video");
+        let stem = input
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let dir = input.parent().unwrap_or(&input);
+        let derived = dir.join(format!("{}-openscreen.mp4", stem));
+        assert_eq!(derived.to_string_lossy(), "/tmp/video-openscreen.mp4");
     }
 }
