@@ -26,11 +26,30 @@
     "dialog:allow-message",
     "fs:default",
     {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "/**" }
+      ]
+    },
+    {
       "identifier": "fs:allow-read",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "/**" }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-file",
       "allow": [
         { "path": "$APPDATA/**" },
         { "path": "$TEMP/**" },
-        { "path": "$HOME/**" },
         { "path": "$DOWNLOAD/**" }
       ]
     },
