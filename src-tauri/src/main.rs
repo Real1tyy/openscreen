@@ -44,6 +44,9 @@ fn main() {
             commands::file_io::save_shortcuts,
             commands::file_io::write_text_file,
             commands::file_io::reveal_in_folder,
+            commands::file_io::store_recorded_session_from_files,
+            commands::file_io::save_exported_video_from_file,
+            commands::file_io::read_binary_file_to_temp,
             // Windows
             commands::windows::switch_to_editor,
             commands::windows::switch_to_hud,

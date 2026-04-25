@@ -107,6 +107,190 @@ pub struct StoreRecordedSessionPayload {
     pub created_at: Option<f64>,
 }
 
+// --- File-based binary transfer (zero-copy path for large video data) ---
+
+#[derive(Deserialize)]
+pub struct FileBasedVideoInput {
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    #[serde(rename = "tempPath")]
+    pub temp_path: String,
+}
+
+#[derive(Deserialize)]
+pub struct StoreSessionFromFilesPayload {
+    pub screen: FileBasedVideoInput,
+    pub webcam: Option<FileBasedVideoInput>,
+    #[serde(rename = "createdAt")]
+    pub created_at: Option<f64>,
+}
+
+#[tauri::command]
+pub async fn store_recorded_session_from_files(
+    payload: StoreSessionFromFilesPayload,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<SessionResult, String> {
+    let created_at = payload.created_at.unwrap_or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as f64
+    });
+
+    let screen_dest = resolve_recording_output_path(&app, &payload.screen.file_name)
+        .map_err(|e| e.to_string())?;
+
+    // Move temp file to final destination (rename is instant on same filesystem)
+    move_or_copy(&payload.screen.temp_path, &screen_dest)?;
+
+    let webcam_dest = if let Some(ref webcam) = payload.webcam {
+        let dest = resolve_recording_output_path(&app, &webcam.file_name)
+            .map_err(|e| e.to_string())?;
+        move_or_copy(&webcam.temp_path, &dest)?;
+        Some(dest.to_string_lossy().to_string())
+    } else {
+        None
+    };
+
+    let session = crate::state::RecordingSession {
+        screen_video_path: screen_dest.to_string_lossy().to_string(),
+        webcam_video_path: webcam_dest,
+        created_at,
+    };
+
+    // Write session manifest
+    let manifest_name = Path::new(&payload.screen.file_name)
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let manifest_path = recordings_dir(&app).join(format!("{}.session.json", manifest_name));
+    let manifest_json = serde_json::to_string_pretty(&session).unwrap_or_default();
+    std::fs::write(&manifest_path, &manifest_json).ok();
+
+    // Write pending cursor telemetry
+    {
+        let mut app_state = state.lock().unwrap();
+        if !app_state.pending_cursor_samples.is_empty() {
+            let telemetry_path = format!("{}.cursor.json", screen_dest.to_string_lossy());
+            let telemetry = serde_json::json!({
+                "version": 1,
+                "samples": app_state.pending_cursor_samples
+            });
+            std::fs::write(
+                &telemetry_path,
+                serde_json::to_string_pretty(&telemetry).unwrap_or_default(),
+            )
+            .ok();
+            app_state.pending_cursor_samples.clear();
+        }
+
+        app_state.current_session = Some(session.clone());
+        app_state.current_project_path = None;
+    }
+
+    Ok(SessionResult {
+        success: true,
+        path: Some(screen_dest.to_string_lossy().to_string()),
+        session: Some(session),
+        message: Some("Recording session stored successfully".to_string()),
+        error: None,
+    })
+}
+
+#[tauri::command]
+pub async fn save_exported_video_from_file(
+    temp_path: String,
+    file_name: String,
+    app: AppHandle,
+) -> GenericResult {
+    let is_gif = file_name.to_lowercase().ends_with(".gif");
+    let filter_name = if is_gif { "GIF Image" } else { "MP4 Video" };
+    let filter_ext = if is_gif { "gif" } else { "mp4" };
+
+    let file_path = app
+        .dialog()
+        .file()
+        .set_title(if is_gif { "Save GIF" } else { "Save Video" })
+        .set_file_name(&file_name)
+        .add_filter(filter_name, &[filter_ext])
+        .blocking_save_file();
+
+    match file_path.and_then(|fp| fp.into_path().ok()) {
+        Some(path_buf) => {
+            let path_str = path_buf.to_string_lossy().into_owned();
+            match move_or_copy(&temp_path, &path_buf) {
+                Ok(_) => GenericResult {
+                    success: true,
+                    path: Some(path_str),
+                    message: Some("Video exported successfully".to_string()),
+                    error: None,
+                    canceled: None,
+                },
+                Err(e) => GenericResult {
+                    success: false,
+                    path: None,
+                    message: Some("Failed to save exported video".to_string()),
+                    error: Some(e),
+                    canceled: None,
+                },
+            }
+        }
+        None => {
+            // Cleanup temp file on cancel
+            std::fs::remove_file(&temp_path).ok();
+            GenericResult {
+                success: false,
+                path: None,
+                message: Some("Export canceled".to_string()),
+                error: None,
+                canceled: Some(true),
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub fn read_binary_file_to_temp(
+    file_path: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> GenericResult {
+    let app_state = state.lock().unwrap();
+    if !is_path_allowed(&file_path, &app, &app_state) {
+        return GenericResult {
+            success: false,
+            path: None,
+            message: Some("Access denied: path outside allowed directories".to_string()),
+            error: None,
+            canceled: None,
+        };
+    }
+    drop(app_state);
+
+    // Return the approved path — frontend reads via fs plugin or convertFileSrc
+    GenericResult {
+        success: true,
+        path: Some(file_path),
+        message: None,
+        error: None,
+        canceled: None,
+    }
+}
+
+fn move_or_copy(src: &str, dest: &Path) -> Result<(), String> {
+    // Try rename first (instant if same filesystem)
+    if std::fs::rename(src, dest).is_ok() {
+        return Ok(());
+    }
+    // Fall back to copy + delete (cross-filesystem)
+    std::fs::copy(src, dest)
+        .map_err(|e| format!("Failed to copy file: {}", e))?;
+    std::fs::remove_file(src).ok();
+    Ok(())
+}
+
 #[derive(Serialize)]
 pub struct CursorTelemetryResult {
     pub success: bool,
@@ -1051,5 +1235,108 @@ mod tests {
         assert_eq!(loaded["playPause"], "Space");
         assert_eq!(loaded["undo"], "Ctrl+Z");
         fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_move_or_copy_same_filesystem() {
+        let src = std::env::temp_dir().join("openscreen_test_move_src.bin");
+        let dest = std::env::temp_dir().join("openscreen_test_move_dest.bin");
+        let payload = vec![0u8; 1024 * 1024]; // 1 MB
+        fs::write(&src, &payload).unwrap();
+        assert!(src.exists());
+
+        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
+
+        assert!(!src.exists(), "source should be removed after move");
+        assert!(dest.exists(), "destination should exist after move");
+        let read_back = fs::read(&dest).unwrap();
+        assert_eq!(read_back.len(), 1024 * 1024);
+        fs::remove_file(&dest).ok();
+    }
+
+    #[test]
+    fn test_move_or_copy_preserves_content() {
+        let src = std::env::temp_dir().join("openscreen_test_content_src.bin");
+        let dest = std::env::temp_dir().join("openscreen_test_content_dest.bin");
+        let payload: Vec<u8> = (0..=255).cycle().take(4096).collect();
+        fs::write(&src, &payload).unwrap();
+
+        move_or_copy(&src.to_string_lossy(), &dest).unwrap();
+
+        let read_back = fs::read(&dest).unwrap();
+        assert_eq!(read_back, payload, "content must be identical after move");
+        fs::remove_file(&dest).ok();
+    }
+
+    #[test]
+    fn test_move_or_copy_nonexistent_source_fails() {
+        let src = std::env::temp_dir().join("openscreen_nonexistent_file.bin");
+        let dest = std::env::temp_dir().join("openscreen_nonexistent_dest.bin");
+        let result = move_or_copy(&src.to_string_lossy(), &dest);
+        assert!(result.is_err(), "should fail for nonexistent source");
+    }
+
+    #[test]
+    fn test_session_manifest_round_trip() {
+        let session = crate::state::RecordingSession {
+            screen_video_path: "/tmp/recordings/screen-001.webm".to_string(),
+            webcam_video_path: Some("/tmp/recordings/screen-001-webcam.webm".to_string()),
+            created_at: 1700000000000.0,
+        };
+        let json = serde_json::to_string_pretty(&session).unwrap();
+        let manifest_path = std::env::temp_dir().join("openscreen_test_manifest.session.json");
+        fs::write(&manifest_path, &json).unwrap();
+
+        let loaded_json = fs::read_to_string(&manifest_path).unwrap();
+        let loaded: crate::state::RecordingSession =
+            serde_json::from_str(&loaded_json).unwrap();
+        assert_eq!(loaded.screen_video_path, session.screen_video_path);
+        assert_eq!(loaded.webcam_video_path, session.webcam_video_path);
+        assert_eq!(loaded.created_at, session.created_at);
+        fs::remove_file(&manifest_path).ok();
+    }
+
+    #[test]
+    fn test_large_binary_write_and_verify() {
+        let tmp = std::env::temp_dir().join("openscreen_test_large_binary.bin");
+        // Simulate a 10 MB video file
+        let size = 10 * 1024 * 1024;
+        let payload: Vec<u8> = (0..size).map(|i| (i % 256) as u8).collect();
+        fs::write(&tmp, &payload).unwrap();
+
+        let read_back = fs::read(&tmp).unwrap();
+        assert_eq!(read_back.len(), size);
+        assert_eq!(read_back[0], 0);
+        assert_eq!(read_back[255], 255);
+        assert_eq!(read_back[256], 0);
+        assert_eq!(read_back[size - 1], ((size - 1) % 256) as u8);
+        fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_cursor_telemetry_large_sample_set() {
+        let samples: Vec<CursorTelemetryPoint> = (0..36000)
+            .map(|i| CursorTelemetryPoint {
+                time_ms: i as f64 * 100.0,
+                cx: (i as f64 / 36000.0),
+                cy: 1.0 - (i as f64 / 36000.0),
+            })
+            .collect();
+        assert_eq!(samples.len(), 36000);
+        let json = serde_json::to_string(&serde_json::json!({"version": 1, "samples": samples})).unwrap();
+        assert!(json.len() > 1_000_000, "serialized telemetry should be >1MB");
+
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let deserialized: Vec<CursorTelemetryPoint> = parsed
+            .get("samples")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| serde_json::from_value(s.clone()).ok())
+            .collect();
+        assert_eq!(deserialized.len(), 36000);
+        assert_eq!(deserialized[0].time_ms, 0.0);
+        assert_eq!(deserialized[35999].time_ms, 3599900.0);
     }
 }

@@ -8,6 +8,36 @@ export function isTauri(): boolean {
 
 type ElectronAPI = Window["electronAPI"];
 
+let tempCounter = 0;
+function nextTempName(ext: string): string {
+	return `openscreen-transfer-${Date.now()}-${tempCounter++}.${ext}`;
+}
+
+async function writeToTempFile(data: ArrayBuffer, ext: string): Promise<string> {
+	const { writeFile } = await import("@tauri-apps/plugin-fs");
+	const { tempDir } = await import("@tauri-apps/api/path");
+	const dir = await tempDir();
+	const name = nextTempName(ext);
+	const path = `${dir}${name}`;
+	await writeFile(path, new Uint8Array(data));
+	return path;
+}
+
+async function readFromPath(filePath: string): Promise<ArrayBuffer> {
+	const { readFile } = await import("@tauri-apps/plugin-fs");
+	const data = await readFile(filePath);
+	return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+}
+
+async function cleanupTempFile(path: string): Promise<void> {
+	try {
+		const { remove } = await import("@tauri-apps/plugin-fs");
+		await remove(path);
+	} catch {
+		// Best-effort cleanup
+	}
+}
+
 function buildTauriAPI(): ElectronAPI {
 	return {
 		hudOverlayHide: () => {
@@ -26,30 +56,33 @@ function buildTauriAPI(): ElectronAPI {
 		selectSource: (source) => invoke("select_source", { source }),
 		getSelectedSource: () => invoke("get_selected_source"),
 		requestCameraAccess: () => invoke("request_camera_access"),
+
 		storeRecordedVideo: async (videoData, fileName) => {
-			const data = Array.from(new Uint8Array(videoData));
-			return invoke("store_recorded_session", {
+			const screenTempPath = await writeToTempFile(videoData, "webm");
+			return invoke("store_recorded_session_from_files", {
 				payload: {
-					screen: { fileName, videoData: data },
+					screen: { fileName, tempPath: screenTempPath },
 					createdAt: Date.now(),
 				},
 			});
 		},
+
 		storeRecordedSession: async (payload: StoreRecordedSessionInput) => {
-			const screenData = Array.from(new Uint8Array(payload.screen.videoData));
+			const screenTempPath = await writeToTempFile(payload.screen.videoData, "webm");
 			const tauriPayload: Record<string, unknown> = {
-				screen: { fileName: payload.screen.fileName, videoData: screenData },
+				screen: { fileName: payload.screen.fileName, tempPath: screenTempPath },
 				createdAt: payload.createdAt ?? Date.now(),
 			};
 			if (payload.webcam) {
-				const webcamData = Array.from(new Uint8Array(payload.webcam.videoData));
+				const webcamTempPath = await writeToTempFile(payload.webcam.videoData, "webm");
 				tauriPayload.webcam = {
 					fileName: payload.webcam.fileName,
-					videoData: webcamData,
+					tempPath: webcamTempPath,
 				};
 			}
-			return invoke("store_recorded_session", { payload: tauriPayload });
+			return invoke("store_recorded_session_from_files", { payload: tauriPayload });
 		},
+
 		getRecordedVideoPath: () => invoke("get_recorded_video_path"),
 		getAssetBasePath: () => invoke("get_asset_base_path"),
 		setRecordingState: (recording) => invoke("set_recording_state", { recording }),
@@ -65,10 +98,24 @@ function buildTauriAPI(): ElectronAPI {
 			};
 		},
 		openExternalUrl: (url) => invoke("open_external_url", { url }),
+
 		saveExportedVideo: async (videoData, fileName) => {
-			const data = Array.from(new Uint8Array(videoData));
-			return invoke("save_exported_video", { videoData: data, fileName });
+			const tempPath = await writeToTempFile(
+				videoData,
+				fileName.toLowerCase().endsWith(".gif") ? "gif" : "mp4",
+			);
+			const result: {
+				success: boolean;
+				path?: string;
+				message?: string;
+				canceled?: boolean;
+			} = await invoke("save_exported_video_from_file", { tempPath, fileName });
+			if (!result.success && !result.canceled) {
+				await cleanupTempFile(tempPath);
+			}
+			return result;
 		},
+
 		openVideoFilePicker: () => invoke("open_video_file_picker"),
 		setCurrentVideoPath: (path) => invoke("set_current_video_path", { path }),
 		setCurrentRecordingSession: (session) =>
@@ -76,22 +123,24 @@ function buildTauriAPI(): ElectronAPI {
 		getCurrentVideoPath: () => invoke("get_current_video_path"),
 		getCurrentRecordingSession: () => invoke("get_current_recording_session"),
 		clearCurrentVideoPath: () => invoke("clear_current_video_path"),
+
 		readBinaryFile: async (filePath) => {
-			const result: { success: boolean; data?: number[]; path?: string; message?: string } =
-				await invoke("read_binary_file", { filePath });
-			if (result.success && result.data) {
-				const uint8 = new Uint8Array(result.data);
-				return {
-					success: true,
-					data: uint8.buffer.slice(
-						uint8.byteOffset,
-						uint8.byteOffset + uint8.byteLength,
-					) as ArrayBuffer,
-					path: result.path,
-				};
+			const result: { success: boolean; path?: string; message?: string } = await invoke(
+				"read_binary_file_to_temp",
+				{ filePath },
+			);
+			if (!result.success) {
+				return result;
 			}
-			return result;
+			const approvedPath = result.path!;
+			const data = await readFromPath(approvedPath);
+			return {
+				success: true,
+				data,
+				path: approvedPath,
+			};
 		},
+
 		saveProjectFile: (projectData, suggestedName, existingProjectPath) =>
 			invoke("save_project_file", {
 				projectData,
