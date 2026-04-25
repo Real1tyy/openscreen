@@ -1,4 +1,5 @@
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
+import { isTauri, toAssetUrl } from "@/lib/tauriBridge";
 import { clamp } from "@/lib/mathUtils";
 import type { ProjectMedia } from "@/lib/recordingSession";
 import { normalizeProjectMedia } from "@/lib/recordingSession";
@@ -91,6 +92,10 @@ function encodePathSegments(pathname: string, keepWindowsDrive = false): string 
 }
 
 export function toFileUrl(filePath: string): string {
+	if (isTauri()) {
+		return toAssetUrl(filePath);
+	}
+
 	const normalized = filePath.replace(/\\/g, "/");
 
 	// Windows drive path: C:/Users/...

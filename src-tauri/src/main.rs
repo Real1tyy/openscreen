@@ -93,8 +93,7 @@ fn main() {
                 eprintln!("[OpenScreen] Approved paths: {:?}", app_state.approved_paths);
             }
 
-            // Open devtools in debug builds
-            #[cfg(debug_assertions)]
+            // Open devtools in all builds for debugging
             if let Some(editor) = app.get_webview_window("editor") {
                 editor.open_devtools();
             }

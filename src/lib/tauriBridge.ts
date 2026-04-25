@@ -1,9 +1,16 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { StoreRecordedSessionInput } from "./recordingSession";
 
 export function isTauri(): boolean {
 	return "__TAURI_INTERNALS__" in window;
+}
+
+export function toAssetUrl(filePath: string): string {
+	if (!isTauri()) {
+		return filePath;
+	}
+	return convertFileSrc(filePath);
 }
 
 type ElectronAPI = Window["electronAPI"];
