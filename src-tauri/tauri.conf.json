@@ -29,7 +29,7 @@
     "longDescription": "Free, open-source alternative to Screen Studio for creating polished product demos and walkthroughs.",
     "linux": {
       "appimage": {
-        "bundleMediaFramework": true
+        "bundleMediaFramework": false
       }
     },
     "macOS": {

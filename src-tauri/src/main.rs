@@ -102,10 +102,12 @@ fn main() {
                 eprintln!("[OpenScreen] Approved paths: {:?}", app_state.approved_paths);
             }
 
-            // Open devtools in debug builds
-            #[cfg(debug_assertions)]
-            if let Some(editor) = app.get_webview_window("editor") {
-                editor.open_devtools();
+            // Devtools available in all builds (devtools Cargo feature enabled).
+            // Open automatically when OPENSCREEN_DEVTOOLS=1 is set.
+            if std::env::var("OPENSCREEN_DEVTOOLS").unwrap_or_default() == "1" {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.open_devtools();
+                }
             }
 
             // Build application menu
