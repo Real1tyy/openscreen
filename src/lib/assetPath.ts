@@ -7,10 +7,6 @@ function encodeRelativeAssetPath(relativePath: string): string {
 		.join("/");
 }
 
-function ensureTrailingSlash(value: string): string {
-	return value.endsWith("/") ? value : `${value}/`;
-}
-
 export async function getAssetPath(relativePath: string): Promise<string> {
 	const encodedRelativePath = encodeRelativeAssetPath(relativePath);
 
@@ -25,11 +21,19 @@ export async function getAssetPath(relativePath: string): Promise<string> {
 				return `/${encodedRelativePath}`;
 			}
 
-			const api = (await import("@/lib/tauriBridge")).getAPI();
+			// Tauri production: get base path from Rust, then use convertFileSrc
+			const { getAPI, isTauri } = await import("@/lib/tauriBridge");
+			const api = getAPI();
 			if (api && typeof api.getAssetBasePath === "function") {
 				const base = await api.getAssetBasePath();
+				if (base && isTauri()) {
+					const { convertFileSrc } = await import("@tauri-apps/api/core");
+					const fullPath = `${base}/${relativePath.replace(/^\/+/, "")}`;
+					return convertFileSrc(fullPath);
+				}
 				if (base) {
-					return new URL(encodedRelativePath, ensureTrailingSlash(base)).toString();
+					const { URL } = globalThis;
+					return new URL(encodedRelativePath, base.endsWith("/") ? base : `${base}/`).toString();
 				}
 			}
 		}
@@ -37,7 +41,6 @@ export async function getAssetPath(relativePath: string): Promise<string> {
 		// ignore and use fallback
 	}
 
-	// Fallback for web/dev server: public/wallpapers are served at '/wallpapers/...'
 	return `/${encodedRelativePath}`;
 }
 

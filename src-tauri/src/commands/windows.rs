@@ -193,18 +193,23 @@ pub fn set_locale(_locale: String) {
 
 #[tauri::command]
 pub fn get_asset_base_path(app: AppHandle) -> Option<String> {
-    // In dev mode, assets are served from the Vite dev server
+    // In dev mode, assets are served by the Vite dev server at /
     if cfg!(debug_assertions) {
         return None;
     }
 
-    // In production, resolve from the resource directory
+    // In production, resolve from the resource directory.
+    // The resources are bundled at $RESOURCE/_up_/public/ (because tauri.conf.json
+    // specifies "../public/wallpapers/" as a resource path).
+    // Use the resource dir path directly — the frontend will use convertFileSrc
+    // to create an asset:// URL that Tauri can serve.
     app.path()
         .resource_dir()
         .ok()
         .map(|p| {
-            let asset_path = p.join("assets");
-            format!("file://{}/", asset_path.to_string_lossy())
+            // Resources from "../public/wallpapers/" end up at $RESOURCE/_up_/public/wallpapers/
+            let asset_path = p.join("_up_").join("public");
+            asset_path.to_string_lossy().to_string()
         })
 }
 
