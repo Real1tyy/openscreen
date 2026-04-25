@@ -22,7 +22,7 @@
 		"build:tauri:mac": "tauri build --target universal-apple-darwin",
 		"build:tauri:win": "tauri build --target x86_64-pc-windows-msvc",
 		"build:tauri:linux": "tauri build --bundles appimage",
-		"build:tauri:fast": "npm run build:frontend && cd src-tauri && cargo build --release",
+		"build:tauri:fast": "tauri build --no-bundle",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
