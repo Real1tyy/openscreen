@@ -665,7 +665,7 @@ pub async fn save_exported_video(
         .path()
         .download_dir()
         .unwrap_or_else(|_| PathBuf::from("."));
-    let default_path = downloads.join(&file_name);
+    let _default_path = downloads.join(&file_name);
 
     let file_path = app
         .dialog()
@@ -710,7 +710,7 @@ pub async fn open_video_file_picker(
     app: AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<GenericResult, String> {
-    let rec_dir = recordings_dir(&app);
+    let _rec_dir = recordings_dir(&app);
 
     let file_path = app
         .dialog()
@@ -802,7 +802,7 @@ pub async fn save_project_file(
         format!("{}.openscreen", safe_name)
     };
 
-    let rec_dir = recordings_dir(&app);
+    let _rec_dir = recordings_dir(&app);
     let file_path = app
         .dialog()
         .file()
@@ -852,7 +852,7 @@ pub async fn load_project_file(
     app: AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<ProjectLoadResult, String> {
-    let rec_dir = recordings_dir(&app);
+    let _rec_dir = recordings_dir(&app);
 
     let file_path = app
         .dialog()

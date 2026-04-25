@@ -7,7 +7,7 @@ use state::AppState;
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Emitter, Manager, RunEvent, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 fn main() {
     env_logger::init();
@@ -93,7 +93,8 @@ fn main() {
                 eprintln!("[OpenScreen] Approved paths: {:?}", app_state.approved_paths);
             }
 
-            // Open devtools in all builds for debugging
+            // Open devtools in debug builds
+            #[cfg(debug_assertions)]
             if let Some(editor) = app.get_webview_window("editor") {
                 editor.open_devtools();
             }

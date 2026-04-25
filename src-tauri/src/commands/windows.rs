@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
-use crate::commands::file_io::CursorTelemetryPoint;
 use crate::state::AppState;
 
 #[derive(Serialize)]

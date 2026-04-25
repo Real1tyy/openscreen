@@ -27,6 +27,11 @@
     "category": "Video",
     "shortDescription": "Screen recording and video editing tool",
     "longDescription": "Free, open-source alternative to Screen Studio for creating polished product demos and walkthroughs.",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    },
     "macOS": {
       "minimumSystemVersion": "13.0"
     },
