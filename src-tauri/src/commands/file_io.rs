@@ -257,19 +257,22 @@ pub fn read_binary_file_to_temp(
     app: AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> GenericResult {
+    eprintln!("[read_binary_file_to_temp] Requested: {}", file_path);
     let app_state = state.lock().unwrap();
     if !is_path_allowed(&file_path, &app, &app_state) {
+        eprintln!("[read_binary_file_to_temp] DENIED: path not in approved list or recordings dir");
+        eprintln!("[read_binary_file_to_temp] Approved paths: {:?}", app_state.approved_paths);
         return GenericResult {
             success: false,
             path: None,
-            message: Some("Access denied: path outside allowed directories".to_string()),
+            message: Some(format!("Access denied: {} is outside allowed directories", file_path)),
             error: None,
             canceled: None,
         };
     }
     drop(app_state);
 
-    // Return the approved path — frontend reads via fs plugin or convertFileSrc
+    eprintln!("[read_binary_file_to_temp] APPROVED: {}", file_path);
     GenericResult {
         success: true,
         path: Some(file_path),
@@ -499,12 +502,14 @@ pub fn set_current_video_path(
     app: AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> GenericResult {
+    eprintln!("[set_current_video_path] path={}", path);
     let mut app_state = state.lock().unwrap();
     if !is_path_allowed(&path, &app, &app_state) {
+        eprintln!("[set_current_video_path] DENIED — not in approved paths");
         return GenericResult {
             success: false,
             path: None,
-            message: Some("Video path has not been approved".to_string()),
+            message: Some(format!("Video path has not been approved: {}", path)),
             error: None,
             canceled: None,
         };

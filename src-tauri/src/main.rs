@@ -76,10 +76,28 @@ fn main() {
                 .expect("failed to resolve app data dir")
                 .join("recordings");
             std::fs::create_dir_all(&recordings_dir).ok();
-            log::info!("OpenScreen started, data dir: {:?}", recordings_dir);
+
+            // Always log startup info to stderr
+            eprintln!("[OpenScreen] Data dir: {:?}", recordings_dir);
+            eprintln!("[OpenScreen] Args: {:?}", std::env::args().collect::<Vec<_>>());
 
             // Parse CLI arguments
             commands::cli::parse_cli_args(&app_handle);
+
+            // Log parsed CLI state
+            {
+                let state = app_handle.state::<Mutex<AppState>>();
+                let app_state = state.lock().unwrap();
+                eprintln!("[OpenScreen] CLI input file: {:?}",
+                    commands::cli::get_cli_input_file());
+                eprintln!("[OpenScreen] Approved paths: {:?}", app_state.approved_paths);
+            }
+
+            // Open devtools in debug builds
+            #[cfg(debug_assertions)]
+            if let Some(editor) = app.get_webview_window("editor") {
+                editor.open_devtools();
+            }
 
             // Build application menu
             setup_app_menu(app)?;

@@ -66,6 +66,6 @@
       "iconAsTemplate": true,
       "tooltip": "OpenScreen"
     },
-    "withGlobalTauri": false
+    "withGlobalTauri": true
   }
 }
