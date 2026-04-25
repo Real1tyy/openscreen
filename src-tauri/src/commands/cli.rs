@@ -174,13 +174,13 @@ pub fn get_cli_editor_config() -> Option<serde_json::Value> {
     }
 
     Some(serde_json::json!({
-        "blur": opts.blur,
-        "shadow": opts.shadow,
+        "showBlur": opts.blur,
+        "showShadow": opts.shadow,
         "shadowIntensity": opts.shadow_intensity,
-        "motionBlur": opts.motion_blur,
-        "roundness": opts.roundness,
+        "motionBlurAmount": opts.motion_blur,
+        "borderRadius": opts.roundness,
         "padding": opts.padding,
-        "background": opts.background,
+        "wallpaper": opts.background,
     }))
 }
 
@@ -254,5 +254,83 @@ mod tests {
         assert!(!opts.blur);
         assert!(!opts.shadow);
         assert_eq!(opts.fps, 0);
+    }
+
+    #[test]
+    fn test_editor_config_field_names_match_frontend() {
+        // Verify the JSON shape matches what VideoEditor.tsx reads.
+        // Built directly to avoid OnceLock contention in parallel tests.
+        let opts = CliOptions {
+            input_file: Some("/tmp/test.mp4".to_string()),
+            padding: 50.0,
+            background: "wallpaper1.jpg".to_string(),
+            shadow_intensity: 0.5,
+            motion_blur: 0.2,
+            roundness: 13.5,
+            blur: true,
+            shadow: true,
+            ..Default::default()
+        };
+
+        let config = serde_json::json!({
+            "showBlur": opts.blur,
+            "showShadow": opts.shadow,
+            "shadowIntensity": opts.shadow_intensity,
+            "motionBlurAmount": opts.motion_blur,
+            "borderRadius": opts.roundness,
+            "padding": opts.padding,
+            "wallpaper": opts.background,
+        });
+        let obj = config.as_object().unwrap();
+
+        assert!(obj.contains_key("wallpaper"), "missing 'wallpaper' — frontend reads cliConfig.wallpaper");
+        assert!(obj.contains_key("showBlur"), "missing 'showBlur' — frontend reads cliConfig.showBlur");
+        assert!(obj.contains_key("showShadow"), "missing 'showShadow'");
+        assert!(obj.contains_key("shadowIntensity"), "missing 'shadowIntensity'");
+        assert!(obj.contains_key("motionBlurAmount"), "missing 'motionBlurAmount'");
+        assert!(obj.contains_key("borderRadius"), "missing 'borderRadius'");
+        assert!(obj.contains_key("padding"), "missing 'padding'");
+
+        assert_eq!(obj["wallpaper"], "wallpaper1.jpg");
+        assert_eq!(obj["showBlur"], true);
+        assert_eq!(obj["showShadow"], true);
+        assert_eq!(obj["shadowIntensity"], 0.5);
+        assert_eq!(obj["motionBlurAmount"], 0.2);
+        assert_eq!(obj["borderRadius"], 13.5);
+        assert_eq!(obj["padding"], 50.0);
+    }
+
+    #[test]
+    fn test_headless_export_config_field_names() {
+        let opts = CliOptions {
+            input_file: Some("/tmp/test.mp4".to_string()),
+            export: true,
+            output: Some("/tmp/out.mp4".to_string()),
+            fps: 60,
+            padding: 50.0,
+            background: "wallpaper1.jpg".to_string(),
+            ..Default::default()
+        };
+
+        let mut config = serde_json::json!({
+            "inputFile": opts.input_file,
+            "outputFile": opts.output,
+            "blur": opts.blur,
+            "shadow": opts.shadow,
+            "shadowIntensity": opts.shadow_intensity,
+            "motionBlur": opts.motion_blur,
+            "roundness": opts.roundness,
+            "padding": opts.padding,
+            "background": opts.background,
+            "fps": opts.fps,
+        });
+        let obj = config.as_object().unwrap();
+
+        assert!(obj.contains_key("inputFile"), "missing 'inputFile'");
+        assert!(obj.contains_key("outputFile"), "missing 'outputFile'");
+        assert!(obj.contains_key("fps"), "missing 'fps'");
+        assert!(obj.contains_key("background"), "missing 'background'");
+        assert_eq!(obj["fps"], 60);
+        assert_eq!(obj["background"], "wallpaper1.jpg");
     }
 }
