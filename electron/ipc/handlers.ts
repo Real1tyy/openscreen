@@ -952,7 +952,11 @@ export function registerIpcHandlers(
 
 	ipcMain.handle("write-text-file", async (_, filePath: string, content: string) => {
 		try {
-			await fs.writeFile(filePath, content, "utf-8");
+			const resolved = path.resolve(filePath);
+			if (!isPathAllowed(resolved)) {
+				return { success: false, error: "Path not allowed" };
+			}
+			await fs.writeFile(resolved, content, "utf-8");
 			return { success: true };
 		} catch (error) {
 			console.error("Failed to write text file:", error);

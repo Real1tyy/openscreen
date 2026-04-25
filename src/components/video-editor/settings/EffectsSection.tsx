@@ -6,6 +6,7 @@ import {
 	AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Slider } from "@/components/ui/slider";
+import { SliderControl } from "@/components/ui/slider-control";
 import { Switch } from "@/components/ui/switch";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { WebcamLayoutPreset } from "../types";
@@ -132,38 +133,3 @@ export function EffectsSection({
 	);
 }
 
-function SliderControl({
-	label,
-	value,
-	display,
-	onChange,
-	onCommit,
-	min,
-	max,
-	step,
-}: {
-	label: string;
-	value: number;
-	display: string;
-	onChange?: (v: number) => void;
-	onCommit?: () => void;
-	min: number;
-	max: number;
-	step: number;
-}) {
-	return (
-		<div className="p-2 rounded-lg bg-white/5 border border-white/5">
-			<div className="flex items-center justify-between mb-1">
-				<div className="text-[10px] font-medium text-slate-300">{label}</div>
-				<span className="text-[10px] text-slate-500 font-mono">{display}</span>
-			</div>
-			<Slider
-				value={[value]}
-				onValueChange={(values) => onChange?.(values[0])}
-				onValueCommit={() => onCommit?.()}
-				min={min} max={max} step={step}
-				className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
-			/>
-		</div>
-	);
-}

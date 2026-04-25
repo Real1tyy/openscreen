@@ -53,7 +53,7 @@ import {
 import { adaptiveSmoothFactor, smoothCursorFocus } from "./videoPlayback/cursorFollowUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
-import { clamp01 } from "./videoPlayback/mathUtils";
+import { clamp01 } from "../../lib/mathUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
@@ -220,7 +220,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const prevTargetProgressRef = useRef(0);
 
 		const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
-			return clampFocusToStageUtil(focus, depth, stageSizeRef.current);
+			return clampFocusToStageUtil(focus, depth);
 		}, []);
 
 		const updateOverlayForRegion = useCallback(

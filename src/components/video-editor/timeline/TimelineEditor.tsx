@@ -44,6 +44,7 @@ import type {
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import Row from "./Row";
+import { computeNewRegionSpan, normalizeRegionSpan } from "./regionUtils";
 import {
 	calculateAxisScale,
 	calculateTimelineScale,
@@ -983,50 +984,30 @@ export default function TimelineEditor({
 		}
 
 		zoomRegionsRef.current.forEach((region) => {
-			const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
-			const minEnd = clampedStart + safeMinDurationMs;
-			const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
-			const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs));
-			const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
-
-			if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
-				onZoomSpanChange(region.id, { start: normalizedStart, end: normalizedEnd });
+			const normalized = normalizeRegionSpan(region, totalMs, safeMinDurationMs);
+			if (normalized) {
+				onZoomSpanChange(region.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 
 		trimRegionsRef.current.forEach((region) => {
-			const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
-			const minEnd = clampedStart + safeMinDurationMs;
-			const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
-			const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs));
-			const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
-
-			if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
-				onTrimSpanChange?.(region.id, { start: normalizedStart, end: normalizedEnd });
+			const normalized = normalizeRegionSpan(region, totalMs, safeMinDurationMs);
+			if (normalized) {
+				onTrimSpanChange?.(region.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 
 		speedRegionsRef.current.forEach((region) => {
-			const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
-			const minEnd = clampedStart + safeMinDurationMs;
-			const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
-			const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs));
-			const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
-
-			if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
-				onSpeedSpanChange?.(region.id, { start: normalizedStart, end: normalizedEnd });
+			const normalized = normalizeRegionSpan(region, totalMs, safeMinDurationMs);
+			if (normalized) {
+				onSpeedSpanChange?.(region.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 
 		chaptersRef.current.forEach((ch) => {
-			const clampedStart = Math.max(0, Math.min(ch.startMs, totalMs));
-			const minEnd = clampedStart + safeMinDurationMs;
-			const clampedEnd = Math.min(totalMs, Math.max(minEnd, ch.endMs));
-			const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs));
-			const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
-
-			if (normalizedStart !== ch.startMs || normalizedEnd !== ch.endMs) {
-				onChapterSpanChange?.(ch.id, { start: normalizedStart, end: normalizedEnd });
+			const normalized = normalizeRegionSpan(ch, totalMs, safeMinDurationMs);
+			if (normalized) {
+				onChapterSpanChange?.(ch.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 	}, [totalMs, safeMinDurationMs, onZoomSpanChange, onTrimSpanChange, onSpeedSpanChange, onChapterSpanChange]);
@@ -1089,24 +1070,18 @@ export default function TimelineEditor({
 
 		// Always place zoom at playhead
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-		// Find the next zoom region after the playhead
-		const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
-		const nextRegion = sorted.find((region) => region.startMs > startPos);
-		const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-
-		// Check if playhead is inside any zoom region
-		const isOverlapping = sorted.some(
-			(region) => startPos >= region.startMs && startPos < region.endMs,
+		const { startMs, endMs, isOverlapping } = computeNewRegionSpan(
+			zoomRegions, startPos, defaultRegionDurationMs, totalMs,
 		);
-		if (isOverlapping || gapToNext <= 0) {
+
+		if (isOverlapping || endMs <= startMs) {
 			toast.error(t("errors.cannotPlaceZoom"), {
 				description: t("errors.zoomExistsAtLocation"),
 			});
 			return;
 		}
 
-		const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
-		onZoomAdded({ start: startPos, end: startPos + actualDuration });
+		onZoomAdded({ start: startMs, end: endMs });
 	}, [videoDuration, totalMs, currentTimeMs, zoomRegions, onZoomAdded, defaultRegionDurationMs, t]);
 
 	const handleSuggestZooms = useCallback(() => {
@@ -1218,24 +1193,18 @@ export default function TimelineEditor({
 
 		// Always place trim at playhead
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-		// Find the next trim region after the playhead
-		const sorted = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
-		const nextRegion = sorted.find((region) => region.startMs > startPos);
-		const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-
-		// Check if playhead is inside any trim region
-		const isOverlapping = sorted.some(
-			(region) => startPos >= region.startMs && startPos < region.endMs,
+		const { startMs, endMs, isOverlapping } = computeNewRegionSpan(
+			trimRegions, startPos, defaultRegionDurationMs, totalMs,
 		);
-		if (isOverlapping || gapToNext <= 0) {
+
+		if (isOverlapping || endMs <= startMs) {
 			toast.error(t("errors.cannotPlaceTrim"), {
 				description: t("errors.trimExistsAtLocation"),
 			});
 			return;
 		}
 
-		const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
-		onTrimAdded({ start: startPos, end: startPos + actualDuration });
+		onTrimAdded({ start: startMs, end: endMs });
 	}, [videoDuration, totalMs, currentTimeMs, trimRegions, onTrimAdded, defaultRegionDurationMs, t]);
 
 	const handleAddSpeed = useCallback(() => {

@@ -3,11 +3,11 @@ import { ZOOM_DEPTH_SCALES } from "../types";
 import { TRANSITION_WINDOW_MS, ZOOM_IN_TRANSITION_WINDOW_MS } from "./constants";
 import { interpolateCursorAt } from "./cursorFollowUtils";
 import { clampFocusToScale } from "./focusUtils";
-import { clamp01, cubicBezier, easeOutScreenStudio } from "./mathUtils";
+import { clamp01, cubicBezier, easeOutScreenStudio } from "../../../lib/mathUtils";
 
 const CHAINED_ZOOM_PAN_GAP_MS = 1500;
 const CONNECTED_ZOOM_PAN_DURATION_MS = 1000;
-const ZOOM_IN_OVERLAP_MS = 500;
+export const ZOOM_IN_OVERLAP_MS = 500;
 
 type DominantRegionOptions = {
 	connectZooms?: boolean;

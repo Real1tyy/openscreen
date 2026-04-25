@@ -36,10 +36,7 @@ export function updateOverlayIndicator(params: OverlayUpdateParams) {
 	}
 
 	const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
-	const focus = clampFocusToStage(focusOverride ?? region.focus, region.depth, {
-		width: stageWidth,
-		height: stageHeight,
-	});
+	const focus = clampFocusToStage(focusOverride ?? region.focus, region.depth);
 
 	// Zoom window shows the stage area that will be visible after zooming (1/zoomScale of stage dimensions)
 	const indicatorWidth = stageWidth / zoomScale;

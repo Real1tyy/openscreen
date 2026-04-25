@@ -1,12 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ZoomRegion } from "../types";
-import { computeRegionStrength, findDominantRegion } from "./zoomRegionUtils";
-
-// Constants duplicated from source for clarity in tests
-const TRANSITION_WINDOW_MS = 1015.05;
-const ZOOM_IN_TRANSITION_WINDOW_MS = TRANSITION_WINDOW_MS * 1.5;
-const ZOOM_IN_OVERLAP_MS = 500;
+import { TRANSITION_WINDOW_MS, ZOOM_IN_TRANSITION_WINDOW_MS } from "./constants";
+import { computeRegionStrength, findDominantRegion, ZOOM_IN_OVERLAP_MS } from "./zoomRegionUtils";
 
 function makeRegion(overrides: Partial<ZoomRegion> & { startMs: number; endMs: number }): ZoomRegion {
 	return {

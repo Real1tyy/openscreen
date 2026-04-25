@@ -28,7 +28,9 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useScopedT } from "@/contexts/I18nContext";
+import { BRAND_GREEN } from "@/lib/constants/colors";
 import { type CustomFont, getCustomFonts } from "@/lib/customFonts";
+import { handleImageFileUpload } from "@/lib/imageHandling";
 import { cn } from "@/lib/utils";
 import { AddCustomFontDialog } from "./AddCustomFontDialog";
 import { getArrowComponent } from "./ArrowSvgs";
@@ -97,46 +99,31 @@ export function AnnotationSettingsPanel({
 		"#FF5722", // Deep Orange
 		"#8BC34A", // Light Green
 		"#FFC107", // Amber
-		"#34B27B", // Brand Green
+		BRAND_GREEN, // Brand Green
 		"#000000", // Black
 		"#607D8B", // Blue Grey
 		"#795548", // Brown
 	];
 
 	const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-		const files = event.target.files;
-		if (!files || files.length === 0) return;
-
-		const file = files[0];
-
-		// Validate file type
 		const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
-		if (!validTypes.includes(file.type)) {
-			toast.error(t("annotation.invalidImageType"), {
-				description: t("annotation.imageFormatsOnly"),
-			});
-			event.target.value = "";
-			return;
-		}
-
-		const reader = new FileReader();
-
-		reader.onload = (e) => {
-			const dataUrl = e.target?.result as string;
-			if (dataUrl) {
+		handleImageFileUpload(event, {
+			validateType: (file) => validTypes.includes(file.type),
+			onInvalidType: () => {
+				toast.error(t("annotation.invalidImageType"), {
+					description: t("annotation.imageFormatsOnly"),
+				});
+			},
+			onSuccess: (dataUrl) => {
 				onContentChange(dataUrl);
 				toast.success(t("annotation.imageUploadSuccess"));
-			}
-		};
-
-		reader.onerror = () => {
-			toast.error(t("annotation.failedImageUpload"), {
-				description: "There was an error reading the file.",
-			});
-		};
-
-		reader.readAsDataURL(file);
-		event.target.value = "";
+			},
+			onError: () => {
+				toast.error(t("annotation.failedImageUpload"), {
+					description: "There was an error reading the file.",
+				});
+			},
+		});
 	};
 
 	return (
@@ -568,17 +555,17 @@ export function AnnotationSettingsPanel({
 									>
 										<div
 											className="w-5 h-5 rounded-full border border-white/20"
-											style={{ backgroundColor: annotation.figureData?.color || "#34B27B" }}
+											style={{ backgroundColor: annotation.figureData?.color || BRAND_GREEN }}
 										/>
 										<span className="text-xs text-slate-300 truncate flex-1 text-left">
-											{annotation.figureData?.color || "#34B27B"}
+											{annotation.figureData?.color || BRAND_GREEN}
 										</span>
 										<ChevronDown className="h-3 w-3 opacity-50" />
 									</Button>
 								</PopoverTrigger>
 								<PopoverContent className="w-[260px] p-3 bg-[#1a1a1c] border border-white/10 rounded-xl shadow-xl">
 									<Block
-										color={annotation.figureData?.color || "#34B27B"}
+										color={annotation.figureData?.color || BRAND_GREEN}
 										colors={colorPalette}
 										onChange={(color) => {
 											const newFigureData: FigureData = {

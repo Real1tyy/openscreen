@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useScopedT } from "@/contexts/I18nContext";
 import { getAssetPath } from "@/lib/assetPath";
+import { handleImageFileUpload } from "@/lib/imageHandling";
 import { cn } from "@/lib/utils";
 
 const WALLPAPER_COUNT = 18;
@@ -88,24 +89,17 @@ export function BackgroundSection({ selected, onWallpaperChange }: BackgroundSec
 
 	const handleImageUpload = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const file = e.target.files?.[0];
-			if (!file) return;
-			if (!file.type.startsWith("image/")) {
-				toast.error(t("background.invalidFileType"));
-				return;
-			}
-			const reader = new FileReader();
-			reader.onload = () => {
-				const dataUrl = reader.result as string;
-				setCustomImages((prev) => {
-					const next = [dataUrl, ...prev];
-					localStorage.setItem(CUSTOM_IMAGES_KEY, JSON.stringify(next));
-					return next;
-				});
-				onWallpaperChange(dataUrl);
-			};
-			reader.readAsDataURL(file);
-			e.target.value = "";
+			handleImageFileUpload(e, {
+				onInvalidType: () => toast.error(t("background.invalidFileType")),
+				onSuccess: (dataUrl) => {
+					setCustomImages((prev) => {
+						const next = [dataUrl, ...prev];
+						localStorage.setItem(CUSTOM_IMAGES_KEY, JSON.stringify(next));
+						return next;
+					});
+					onWallpaperChange(dataUrl);
+				},
+			});
 		},
 		[onWallpaperChange, t],
 	);

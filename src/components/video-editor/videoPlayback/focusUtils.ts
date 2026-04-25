@@ -58,7 +58,6 @@ function getFocusBoundsForScale(zoomScale: number, viewportRatio?: ViewportRatio
 export function clampFocusToStage(
 	focus: ZoomFocus,
 	depth: ZoomDepth,
-	_stageSize: StageSize,
 ): ZoomFocus {
 	const baseFocus = clampFocusToDepth(focus, depth);
 	const bounds = getFocusBounds(depth);

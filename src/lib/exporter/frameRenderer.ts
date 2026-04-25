@@ -578,7 +578,7 @@ export class FrameRenderer {
 		depth: ZoomDepth,
 	): { cx: number; cy: number } {
 		if (!this.layoutCache) return focus;
-		return clampFocusToStageUtil(focus, depth, this.layoutCache.stageSize);
+		return clampFocusToStageUtil(focus, depth);
 	}
 
 	private updateAnimationState(timeMs: number): number {

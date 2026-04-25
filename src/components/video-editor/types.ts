@@ -1,4 +1,5 @@
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
+import { BRAND_GREEN } from "@/lib/constants/colors";
 import { clamp } from "@/lib/mathUtils";
 
 export type ZoomDepth = 1 | 2 | 3 | 4 | 5 | 6;
@@ -132,7 +133,7 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationTextStyle = {
 
 export const DEFAULT_FIGURE_DATA: FigureData = {
 	arrowDirection: "right",
-	color: "#34B27B",
+	color: BRAND_GREEN,
 	strokeWidth: 4,
 };
 

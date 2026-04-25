@@ -7,17 +7,15 @@ import {
 	stageFocusToVideoSpace,
 } from "./focusUtils";
 
-const dummyStage = { width: 800, height: 600 };
-
 describe("clampFocusToStage", () => {
 	it("keeps center focus unchanged at any depth", () => {
-		const result = clampFocusToStage({ cx: 0.5, cy: 0.5 }, 1, dummyStage);
+		const result = clampFocusToStage({ cx: 0.5, cy: 0.5 }, 1);
 		expect(result.cx).toBeCloseTo(0.5);
 		expect(result.cy).toBeCloseTo(0.5);
 	});
 
 	it("clamps extreme focus values back into bounds", () => {
-		const result = clampFocusToStage({ cx: -1, cy: 2 }, 3, dummyStage);
+		const result = clampFocusToStage({ cx: -1, cy: 2 }, 3);
 		expect(result.cx).toBeGreaterThanOrEqual(0);
 		expect(result.cx).toBeLessThanOrEqual(1);
 		expect(result.cy).toBeGreaterThanOrEqual(0);
@@ -25,8 +23,8 @@ describe("clampFocusToStage", () => {
 	});
 
 	it("restricts focus more at higher depths (tighter bounds → closer to center)", () => {
-		const low = clampFocusToStage({ cx: 0, cy: 0 }, 1, dummyStage);
-		const high = clampFocusToStage({ cx: 0, cy: 0 }, 6, dummyStage);
+		const low = clampFocusToStage({ cx: 0, cy: 0 }, 1);
+		const high = clampFocusToStage({ cx: 0, cy: 0 }, 6);
 		expect(high.cx).toBeCloseTo(0.1, 1);
 		expect(high.cy).toBeCloseTo(0.1, 1);
 		expect(low.cx).toBeCloseTo(0.4, 1);
@@ -34,7 +32,7 @@ describe("clampFocusToStage", () => {
 	});
 
 	it("returns value within [0, 1] for valid input", () => {
-		const result = clampFocusToStage({ cx: 0.8, cy: 0.2 }, 4, dummyStage);
+		const result = clampFocusToStage({ cx: 0.8, cy: 0.2 }, 4);
 		expect(result.cx).toBeGreaterThanOrEqual(0);
 		expect(result.cx).toBeLessThanOrEqual(1);
 		expect(result.cy).toBeGreaterThanOrEqual(0);

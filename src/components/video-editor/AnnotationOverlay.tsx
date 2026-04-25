@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { Rnd } from "react-rnd";
+import { BRAND_GREEN } from "@/lib/constants/colors";
 import { cn } from "@/lib/utils";
 import { getArrowComponent } from "./ArrowSvgs";
 import type { AnnotationRegion } from "./types";
@@ -36,7 +37,7 @@ export function AnnotationOverlay({
 
 	const renderArrow = () => {
 		const direction = annotation.figureData?.arrowDirection || "right";
-		const color = annotation.figureData?.color || "#34B27B";
+		const color = annotation.figureData?.color || BRAND_GREEN;
 		const strokeWidth = annotation.figureData?.strokeWidth || 4;
 
 		const ArrowComponent = getArrowComponent(direction);
@@ -166,7 +167,7 @@ export function AnnotationOverlay({
 					width: "12px",
 					height: "12px",
 					backgroundColor: isSelected ? "white" : "transparent",
-					border: isSelected ? "2px solid #34B27B" : "none",
+					border: isSelected ? `2px solid ${BRAND_GREEN}` : "none",
 					borderRadius: "50%",
 					left: "-6px",
 					top: "-6px",
@@ -176,7 +177,7 @@ export function AnnotationOverlay({
 					width: "12px",
 					height: "12px",
 					backgroundColor: isSelected ? "white" : "transparent",
-					border: isSelected ? "2px solid #34B27B" : "none",
+					border: isSelected ? `2px solid ${BRAND_GREEN}` : "none",
 					borderRadius: "50%",
 					right: "-6px",
 					top: "-6px",
@@ -186,7 +187,7 @@ export function AnnotationOverlay({
 					width: "12px",
 					height: "12px",
 					backgroundColor: isSelected ? "white" : "transparent",
-					border: isSelected ? "2px solid #34B27B" : "none",
+					border: isSelected ? `2px solid ${BRAND_GREEN}` : "none",
 					borderRadius: "50%",
 					left: "-6px",
 					bottom: "-6px",
@@ -196,7 +197,7 @@ export function AnnotationOverlay({
 					width: "12px",
 					height: "12px",
 					backgroundColor: isSelected ? "white" : "transparent",
-					border: isSelected ? "2px solid #34B27B" : "none",
+					border: isSelected ? `2px solid ${BRAND_GREEN}` : "none",
 					borderRadius: "50%",
 					right: "-6px",
 					bottom: "-6px",

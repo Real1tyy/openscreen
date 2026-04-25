@@ -1074,7 +1074,23 @@ pub fn save_shortcuts(shortcuts: serde_json::Value, app: AppHandle) -> GenericRe
 }
 
 #[tauri::command]
-pub fn write_text_file(file_path: String, content: String) -> GenericResult {
+pub fn write_text_file(
+    file_path: String,
+    content: String,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> GenericResult {
+    let app_state = state.lock().unwrap();
+    if !is_path_allowed(&file_path, &app, &app_state) {
+        return GenericResult {
+            success: false,
+            path: None,
+            message: Some("Path not allowed".to_string()),
+            error: Some("Path not allowed".to_string()),
+            canceled: None,
+        };
+    }
+    drop(app_state);
     match std::fs::write(&file_path, &content) {
         Ok(_) => GenericResult {
             success: true,
