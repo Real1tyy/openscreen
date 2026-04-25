@@ -66,7 +66,7 @@ describe("handleImageFileUpload", () => {
 			result: null,
 		};
 
-		globalThis.FileReader = vi.fn(() => mockReaderInstance) as any;
+		globalThis.FileReader = vi.fn(function () { return mockReaderInstance; }) as any;
 
 		const onSuccess = vi.fn();
 		const file = new File(["pixels"], "photo.png", { type: "image/png" });
@@ -118,7 +118,7 @@ describe("handleImageFileUpload", () => {
 			readAsDataURL: vi.fn(),
 			result: null,
 		};
-		globalThis.FileReader = vi.fn(() => mockReaderInstance) as any;
+		globalThis.FileReader = vi.fn(function () { return mockReaderInstance; }) as any;
 
 		const onSuccess = vi.fn();
 		const file = new File(["pixels"], "photo.png", { type: "image/png" });
@@ -150,7 +150,7 @@ describe("handleImageFileUpload", () => {
 			readAsDataURL: vi.fn(),
 			result: null,
 		};
-		globalThis.FileReader = vi.fn(() => mockReaderInstance) as any;
+		globalThis.FileReader = vi.fn(function () { return mockReaderInstance; }) as any;
 
 		const onSuccess = vi.fn();
 		const onError = vi.fn();
@@ -176,7 +176,7 @@ describe("handleImageFileUpload", () => {
 			readAsDataURL: vi.fn(),
 			result: null,
 		};
-		globalThis.FileReader = vi.fn(() => mockReaderInstance) as any;
+		globalThis.FileReader = vi.fn(function () { return mockReaderInstance; }) as any;
 
 		const onSuccess = vi.fn();
 		const customValidator = vi.fn().mockReturnValue(true);
@@ -202,7 +202,7 @@ describe("handleImageFileUpload", () => {
 			readAsDataURL: vi.fn(),
 			result: null,
 		};
-		globalThis.FileReader = vi.fn(() => mockReaderInstance) as any;
+		globalThis.FileReader = vi.fn(function () { return mockReaderInstance; }) as any;
 
 		const onSuccess = vi.fn();
 		const file = new File(["pixels"], "photo.jpg", { type: "image/jpeg" });

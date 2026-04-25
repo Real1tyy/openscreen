@@ -53,11 +53,14 @@ export class VideoMuxer {
 			throw new Error("Muxer not initialized");
 		}
 
-		// Convert WebCodecs chunk to Mediabunny packet
 		const packet = EncodedPacket.fromEncodedChunk(chunk);
-
-		// Add metadata with the first chunk
-		await this.videoSource.add(packet, meta);
+		try {
+			await this.videoSource.add(packet, meta);
+		} catch (error) {
+			throw new Error(
+				`Failed to mux video chunk (ts=${chunk.timestamp}): ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 	}
 
 	async addAudioChunk(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata): Promise<void> {
@@ -65,11 +68,14 @@ export class VideoMuxer {
 			throw new Error("Audio not configured for this muxer");
 		}
 
-		// Convert WebCodecs chunk to Mediabunny packet
 		const packet = EncodedPacket.fromEncodedChunk(chunk);
-
-		// Add metadata with the first chunk
-		await this.audioSource.add(packet, meta);
+		try {
+			await this.audioSource.add(packet, meta);
+		} catch (error) {
+			throw new Error(
+				`Failed to mux audio chunk (ts=${chunk.timestamp}): ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 	}
 
 	async finalize(): Promise<Blob> {
@@ -77,11 +83,18 @@ export class VideoMuxer {
 			throw new Error("Muxer not initialized");
 		}
 
-		await this.output.finalize();
+		try {
+			await this.output.finalize();
+		} catch (error) {
+			throw new Error(
+				`MP4 finalization failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+
 		const buffer = this.target.buffer;
 
 		if (!buffer) {
-			throw new Error("Failed to finalize output");
+			throw new Error("MP4 finalization produced no output data");
 		}
 
 		return new Blob([buffer], { type: "video/mp4" });

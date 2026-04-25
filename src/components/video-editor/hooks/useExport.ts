@@ -231,6 +231,7 @@ export function useExport({
 
 					// Try NVENC hardware encoding in Tauri, fall back to WebCodecs
 					let exported = false;
+					let nvencFailReason: string | null = null;
 					if (isTauri()) {
 						try {
 							const { NvencVideoExporter } = await import("@/lib/exporter/nvencExporter");
@@ -259,10 +260,12 @@ export function useExport({
 								);
 								exported = true;
 							} else {
-								console.warn("[Export] NVENC export returned failure, falling back:", result.error);
+								nvencFailReason = result.error || "NVENC returned failure";
+								console.warn("[Export] NVENC export failed, falling back:", nvencFailReason);
 							}
 						} catch (nvencError) {
-							console.warn("[Export] NVENC path failed, falling back to WebCodecs:", nvencError);
+							nvencFailReason = nvencError instanceof Error ? nvencError.message : String(nvencError);
+							console.warn("[Export] NVENC path failed, falling back to WebCodecs:", nvencFailReason);
 						}
 					}
 
@@ -287,8 +290,12 @@ export function useExport({
 								chapters, trimRegions,
 							);
 						} else {
-							setExportError(result.error || "Export failed");
-							toast.error(result.error || "Export failed");
+							const baseError = result.error || "Export failed";
+							const fullError = nvencFailReason
+								? `${baseError} (NVENC also failed: ${nvencFailReason})`
+								: baseError;
+							setExportError(fullError);
+							toast.error(fullError);
 						}
 					}
 				}
@@ -296,7 +303,7 @@ export function useExport({
 				if (wasPlaying) videoPlaybackRef.current?.play();
 			} catch (error) {
 				console.error("Export error:", error);
-				const msg = error instanceof Error ? error.message : "Unknown error";
+				const msg = error instanceof Error ? error.message : String(error);
 				setExportError(msg);
 				toast.error(`Export failed: ${msg}`);
 			} finally {

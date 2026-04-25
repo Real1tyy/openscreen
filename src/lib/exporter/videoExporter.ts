@@ -61,6 +61,7 @@ export class VideoExporter {
 	private chunkCount = 0;
 	private lastEncoderOutputAt = 0;
 	private fatalEncoderError: Error | null = null;
+	private muxingError: Error | null = null;
 
 	constructor(config: VideoExporterConfig) {
 		this.config = config;
@@ -226,6 +227,9 @@ export class VideoExporter {
 						if (this.fatalEncoderError) {
 							throw this.fatalEncoderError;
 						}
+						if (this.muxingError) {
+							throw this.muxingError;
+						}
 
 						const timestamp = frameIndex * frameDuration;
 						webcamFrame = webcamFrameQueue ? await webcamFrameQueue.dequeue() : null;
@@ -322,6 +326,10 @@ export class VideoExporter {
 
 			await Promise.all(this.muxingPromises);
 
+			if (this.muxingError) {
+				throw this.muxingError;
+			}
+
 			this.reportProgress({
 				currentFrame: totalFrames,
 				totalFrames,
@@ -335,14 +343,20 @@ export class VideoExporter {
 				if (demuxer) {
 					console.log("[VideoExporter] Processing audio track...");
 					this.audioProcessor = new AudioProcessor();
-					await this.audioProcessor.process(
-						demuxer,
-						muxer,
-						this.config.videoUrl,
-						this.config.trimRegions,
-						this.config.speedRegions,
-						readEndSec,
-					);
+					try {
+						await this.audioProcessor.process(
+							demuxer,
+							muxer,
+							this.config.videoUrl,
+							this.config.trimRegions,
+							this.config.speedRegions,
+							readEndSec,
+						);
+					} catch (audioError) {
+						throw new Error(
+							`Audio processing failed: ${audioError instanceof Error ? audioError.message : String(audioError)}`,
+						);
+					}
 				}
 			}
 
@@ -364,6 +378,7 @@ export class VideoExporter {
 		this.chunkCount = 0;
 		this.lastEncoderOutputAt = Date.now();
 		this.fatalEncoderError = null;
+		this.muxingError = null;
 		let videoDescription: Uint8Array | undefined;
 
 		this.encoder = new VideoEncoder({
@@ -412,7 +427,12 @@ export class VideoExporter {
 							await this.muxer!.addVideoChunk(chunk, meta);
 						}
 					} catch (error) {
-						console.error("Muxing error:", error);
+						const muxErr =
+							error instanceof Error ? error : new Error(`Muxing error: ${String(error)}`);
+						console.error("Muxing error:", muxErr);
+						if (!this.muxingError) {
+							this.muxingError = muxErr;
+						}
 					}
 				})();
 
@@ -516,6 +536,7 @@ export class VideoExporter {
 		this.videoColorSpace = undefined;
 		this.lastEncoderOutputAt = 0;
 		this.fatalEncoderError = null;
+		this.muxingError = null;
 	}
 
 	private getEncoderPreferences(): HardwareAcceleration[] {
