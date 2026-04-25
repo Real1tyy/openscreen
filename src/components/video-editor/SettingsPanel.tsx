@@ -19,13 +19,6 @@ import {
 	Accordion,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
@@ -43,7 +36,6 @@ import type {
 	FigureData,
 	PlaybackSpeed,
 	WebcamLayoutPreset,
-	WebcamMaskShape,
 	WebcamSizePreset,
 	ZoomDepth,
 	ZoomFocusMode,
@@ -120,8 +112,6 @@ interface SettingsPanelProps {
 	onWebcamSizePresetChange?: (size: WebcamSizePreset) => void;
 	onWebcamSizePresetCommit?: () => void;
 }
-
-export default SettingsPanel;
 
 export function SettingsPanel({
 	selected,
