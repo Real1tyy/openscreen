@@ -125,6 +125,7 @@ export class FrameRenderer {
 	private prevAnimationTimeMs: number | null = null;
 	private prevTargetProgress = 0;
 	private destroyed = false;
+	private needsReadPixelsFallback = false;
 
 	constructor(config: FrameRenderConfig) {
 		this.config = config;
@@ -222,6 +223,53 @@ export class FrameRenderer {
 		this.maskGraphics = new Graphics();
 		this.videoContainer.addChild(this.maskGraphics);
 		this.videoContainer.mask = this.maskGraphics;
+
+		// Probe whether drawImage(webglCanvas) works on this platform.
+		// On Linux/Wayland with EGL/Ozone, it can produce green/empty frames.
+		// We test once here and use readPixels fallback only when needed.
+		this.needsReadPixelsFallback = this.probeGpuReadbackBroken();
+		if (this.needsReadPixelsFallback) {
+			console.warn("[FrameRenderer] GPU→2D drawImage path broken, using readPixels fallback");
+		} else {
+			console.log("[FrameRenderer] GPU→2D drawImage path works, using fast composite path");
+		}
+	}
+
+	private probeGpuReadbackBroken(): boolean {
+		if (!this.app) return true;
+		try {
+			const glCanvas = this.app.canvas as HTMLCanvasElement;
+			const w = glCanvas.width;
+			const h = glCanvas.height;
+
+			// Render a full-screen red rectangle via PixiJS
+			const g = new Graphics();
+			g.rect(0, 0, w, h);
+			g.fill({ color: 0xff0000 });
+			this.app.stage.addChild(g);
+			this.app.renderer.render(this.app.stage);
+			this.app.stage.removeChild(g);
+			g.destroy();
+
+			// Try drawImage from the WebGL canvas to a small 2D probe canvas
+			const probeCanvas = document.createElement("canvas");
+			probeCanvas.width = 2;
+			probeCanvas.height = 2;
+			const probeCtx = probeCanvas.getContext("2d");
+			if (!probeCtx) return true;
+
+			// Sample from the center of the canvas to avoid edge artifacts
+			const cx = Math.floor(w / 2);
+			const cy = Math.floor(h / 2);
+			probeCtx.drawImage(glCanvas, cx, cy, 2, 2, 0, 0, 2, 2);
+			const pixel = probeCtx.getImageData(0, 0, 1, 1).data;
+
+			// If red channel is near zero, drawImage produced an empty/green frame
+			const working = pixel[0] > 200 && pixel[1] < 50 && pixel[2] < 50;
+			return !working;
+		} catch {
+			return true;
+		}
 	}
 
 	private async setupBackground(): Promise<void> {
@@ -689,12 +737,16 @@ export class FrameRenderer {
 		);
 	}
 
-	// On Linux/Wayland the implicit GPU→2D texture-sharing path
-	// used by drawImage(webglCanvas) can fail silently (EGL/Ozone),
-	// producing green/empty frames. Explicit gl.readPixels always
-	// copies from GPU to CPU memory, bypassing that path.
+	// Returns the WebGL canvas content as a drawable source.
+	// Fast path: return the WebGL canvas directly (GPU→GPU via drawImage).
+	// Fallback: readPixels + row-flip for Linux/Wayland EGL/Ozone broken path.
 	private readbackVideoCanvas(): HTMLCanvasElement {
 		const glCanvas = this.app!.canvas as HTMLCanvasElement;
+
+		if (!this.needsReadPixelsFallback) {
+			return glCanvas;
+		}
+
 		const gl =
 			(glCanvas.getContext("webgl2") as WebGL2RenderingContext | null) ??
 			(glCanvas.getContext("webgl") as WebGLRenderingContext | null);
@@ -708,7 +760,6 @@ export class FrameRenderer {
 		const buf = new Uint8Array(w * h * 4);
 		gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
 
-		// readPixels returns rows bottom-to-top; flip vertically
 		const rowSize = w * 4;
 		const temp = new Uint8Array(rowSize);
 		for (let top = 0, bot = h - 1; top < bot; top++, bot--) {
