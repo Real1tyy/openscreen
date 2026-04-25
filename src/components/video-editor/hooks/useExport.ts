@@ -251,13 +251,21 @@ export function useExport({
 							exporterRef.current = nvencExporter as unknown as VideoExporter;
 							const result = await nvencExporter.export();
 
-							if (result.success && result.blob) {
-								await saveExportResult(
-									result.blob, "mp4", "Video", handleExportSaved,
-									(data) => setUnsavedExport(data),
-									(msg) => setExportError(msg),
-									chapters, trimRegions,
-								);
+							if (result.success && result.path) {
+								// File is already on disk — show save dialog to move it
+								const { invoke } = await import("@tauri-apps/api/core");
+								const saveResult: { success: boolean; path?: string; canceled?: boolean } =
+									await invoke("save_exported_video_from_file", {
+										tempPath: result.path,
+										fileName: `export-${Date.now()}.mp4`,
+									});
+								if (saveResult.success && saveResult.path) {
+									handleExportSaved("Video", saveResult.path);
+								} else if (saveResult.canceled) {
+									toast.info("Export canceled");
+								} else {
+									setExportError("Failed to save exported video");
+								}
 								exported = true;
 							} else {
 								nvencFailReason = result.error || "NVENC returned failure";

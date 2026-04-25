@@ -11,7 +11,7 @@ import { getNvencAPI } from "@/lib/tauriBridge";
 import { AsyncVideoFrameQueue } from "./asyncVideoFrameQueue";
 import { FrameRenderer } from "./frameRenderer";
 import { StreamingVideoDecoder } from "./streamingDecoder";
-import type { ExportConfig, ExportProgress, ExportResult } from "./types";
+import type { ExportConfig, ExportProgress } from "./types";
 
 interface NvencExporterConfig extends ExportConfig {
 	videoUrl: string;
@@ -40,6 +40,12 @@ interface NvencExporterConfig extends ExportConfig {
 	outputPath: string;
 }
 
+export interface NvencExportResult {
+	success: boolean;
+	path?: string;
+	error?: string;
+}
+
 export class NvencVideoExporter {
 	private config: NvencExporterConfig;
 	private cancelled = false;
@@ -48,7 +54,7 @@ export class NvencVideoExporter {
 		this.config = config;
 	}
 
-	async export(): Promise<ExportResult> {
+	async export(): Promise<NvencExportResult> {
 		const nvencAPI = getNvencAPI();
 		if (!nvencAPI) {
 			return { success: false, error: "NVENC API not available" };
@@ -97,7 +103,6 @@ export class NvencVideoExporter {
 			});
 			await renderer.initialize();
 
-			// Start NVENC session
 			const startResult = await nvencAPI.startNvencExport({
 				width: this.config.width,
 				height: this.config.height,
@@ -124,7 +129,6 @@ export class NvencVideoExporter {
 
 			console.log(`[NvencExporter] Total frames: ${totalFrames}`);
 
-			// Set up webcam decode if needed
 			webcamFrameQueue = this.config.webcamVideoUrl ? new AsyncVideoFrameQueue() : null;
 			const webcamDecodePromise =
 				webcamDecoder && webcamFrameQueue
@@ -142,7 +146,6 @@ export class NvencVideoExporter {
 						})()
 					: null;
 
-			// Main frame loop
 			await decoder.decodeAll(
 				this.config.frameRate,
 				this.config.trimRegions,
@@ -164,14 +167,12 @@ export class NvencVideoExporter {
 						const ctx = canvas.getContext("2d")!;
 						const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-						// Write RGBA pixels to temp file
 						const { writeFile } = await import("@tauri-apps/plugin-fs");
 						const { tempDir } = await import("@tauri-apps/api/path");
 						const dir = await tempDir();
 						const framePath = `${dir}nvenc-frame-${frameIndex}.raw`;
 						await writeFile(framePath, new Uint8Array(imageData.data.buffer));
 
-						// Feed to NVENC encoder
 						const result = await nvencAPI.feedFrame(
 							sessionId!,
 							framePath,
@@ -204,7 +205,6 @@ export class NvencVideoExporter {
 				return { success: false, error: "Export cancelled" };
 			}
 
-			// Clean up webcam
 			webcamFrameQueue?.destroy();
 			webcamDecoder?.cancel();
 			if (webcamDecodePromise) await webcamDecodePromise;
@@ -217,7 +217,6 @@ export class NvencVideoExporter {
 				phase: "finalizing",
 			});
 
-			// Finalize — flush encoder, write MP4 trailer
 			const finishResult = await nvencAPI.finishExport(sessionId);
 			sessionId = null;
 
@@ -232,12 +231,8 @@ export class NvencVideoExporter {
 				`[NvencExporter] Complete: ${finishResult.totalFrames} frames → ${finishResult.path}`,
 			);
 
-			// Read the output file as a blob for compatibility with the existing save flow
-			const { readFile } = await import("@tauri-apps/plugin-fs");
-			const outputData = await readFile(finishResult.path!);
-			const blob = new Blob([outputData], { type: "video/mp4" });
-
-			return { success: true, blob };
+			// File is already on disk — return the path directly, no blob round-trip
+			return { success: true, path: finishResult.path };
 		} catch (error) {
 			if (sessionId) {
 				await nvencAPI.cancelExport(sessionId).catch(() => {});
