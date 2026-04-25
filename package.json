@@ -107,6 +107,7 @@
 		"electron-icon-builder": "^2.0.1",
 		"electron-rebuild": "^3.2.9",
 		"fast-check": "^4.5.2",
+		"happy-dom": "^20.9.0",
 		"husky": "^9.1.7",
 		"jsdom": "^29.0.1",
 		"lint-staged": "^16.3.2",
