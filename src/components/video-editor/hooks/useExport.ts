@@ -236,7 +236,8 @@ export function useExport({
 						try {
 							const { NvencVideoExporter } = await import("@/lib/exporter/nvencExporter");
 							const { tempDir } = await import("@tauri-apps/api/path");
-							const dir = await tempDir();
+							let dir = await tempDir();
+							if (!dir.endsWith("/")) dir += "/";
 							const tmpOutput = `${dir}openscreen-export-${Date.now()}.mp4`;
 
 							const nvencExporter = new NvencVideoExporter({

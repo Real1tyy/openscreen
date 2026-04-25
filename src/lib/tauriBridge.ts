@@ -38,7 +38,8 @@ function nextTempName(ext: string): string {
 async function writeToTempFile(data: ArrayBuffer, ext: string): Promise<string> {
 	const { writeFile } = await import("@tauri-apps/plugin-fs");
 	const { tempDir } = await import("@tauri-apps/api/path");
-	const dir = await tempDir();
+	let dir = await tempDir();
+	if (!dir.endsWith("/")) dir += "/";
 	const name = nextTempName(ext);
 	const path = `${dir}${name}`;
 	await writeFile(path, new Uint8Array(data));

@@ -169,7 +169,8 @@ export class NvencVideoExporter {
 
 						const { writeFile } = await import("@tauri-apps/plugin-fs");
 						const { tempDir } = await import("@tauri-apps/api/path");
-						const dir = await tempDir();
+						let dir = await tempDir();
+						if (!dir.endsWith("/")) dir += "/";
 						const framePath = `${dir}nvenc-frame-${frameIndex}.raw`;
 						await writeFile(framePath, new Uint8Array(imageData.data.buffer));
 
