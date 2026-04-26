@@ -242,8 +242,8 @@ export class NvencVideoExporter {
 			console.error("[NvencExporter] Export failed:", message);
 			return { success: false, error: message };
 		} finally {
-			renderer?.destroy();
-			decoder.destroy();
+			try { renderer?.destroy(); } catch (e) { console.warn("[NvencExporter] Renderer cleanup error (non-fatal):", e); }
+			try { decoder.destroy(); } catch (e) { console.warn("[NvencExporter] Decoder cleanup error:", e); }
 			webcamFrameQueue?.destroy();
 			webcamDecoder?.cancel();
 		}

@@ -876,10 +876,17 @@ export class FrameRenderer {
 	destroy(): void {
 		this.destroyed = true;
 
-		// Detach mask before destroying to prevent PixiJS from accessing
-		// a destroyed Graphics object's geometry during a pending render tick.
+		// Detach masks, filters, and children before destroying to prevent
+		// PixiJS from accessing destroyed objects during cleanup.
 		if (this.videoContainer) {
 			this.videoContainer.mask = null;
+			this.videoContainer.filters = [];
+		}
+		if (this.cameraContainer) {
+			this.cameraContainer.removeChildren();
+		}
+		if (this.app?.stage) {
+			this.app.stage.removeChildren();
 		}
 		if (this.maskGraphics) {
 			this.maskGraphics.destroy();
