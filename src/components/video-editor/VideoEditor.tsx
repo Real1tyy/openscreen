@@ -1101,6 +1101,13 @@ export default function VideoEditor() {
 						}
 						onSpeedChange={handleSpeedChange}
 						onSpeedDelete={handleSpeedDelete}
+						zoomRegions={zoomRegions}
+						trimRegions={trimRegions}
+						speedRegions={speedRegions}
+						onZoomSpanChange={handleZoomSpanChange}
+						onTrimSpanChange={handleTrimSpanChange}
+						onSpeedSpanChange={handleSpeedSpanChange}
+						videoDuration={duration}
 						unsavedExport={unsavedExport}
 						onSaveUnsavedExport={handleSaveUnsavedExport}
 					/>

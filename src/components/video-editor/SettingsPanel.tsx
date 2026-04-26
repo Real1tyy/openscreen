@@ -35,12 +35,16 @@ import type {
 	CropRegion,
 	FigureData,
 	PlaybackSpeed,
+	SpeedRegion,
+	TrimRegion,
 	WebcamLayoutPreset,
 	WebcamSizePreset,
 	ZoomDepth,
 	ZoomFocusMode,
+	ZoomRegion,
 } from "./types";
 import { DEFAULT_WEBCAM_SIZE_PRESET } from "./types";
+import { TimestampInput } from "./settings/TimestampInput";
 
 
 interface SettingsPanelProps {
@@ -103,6 +107,14 @@ interface SettingsPanelProps {
 	selectedSpeedValue?: PlaybackSpeed | null;
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
 	onSpeedDelete?: (id: string) => void;
+	// Region data & span change handlers for precise editing
+	zoomRegions?: ZoomRegion[];
+	trimRegions?: TrimRegion[];
+	speedRegions?: SpeedRegion[];
+	onZoomSpanChange?: (id: string, span: { start: number; end: number }) => void;
+	onTrimSpanChange?: (id: string, span: { start: number; end: number }) => void;
+	onSpeedSpanChange?: (id: string, span: { start: number; end: number }) => void;
+	videoDuration?: number;
 	hasWebcam?: boolean;
 	webcamLayoutPreset?: WebcamLayoutPreset;
 	onWebcamLayoutPresetChange?: (preset: WebcamLayoutPreset) => void;
@@ -168,6 +180,13 @@ export function SettingsPanel({
 	selectedSpeedValue,
 	onSpeedChange,
 	onSpeedDelete,
+	zoomRegions = [],
+	trimRegions = [],
+	speedRegions = [],
+	onZoomSpanChange,
+	onTrimSpanChange,
+	onSpeedSpanChange,
+	videoDuration = 0,
 	hasWebcam = false,
 	webcamLayoutPreset = "picture-in-picture",
 	onWebcamLayoutPresetChange,
@@ -182,6 +201,29 @@ export function SettingsPanel({
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
 	const [cropAspectLocked, setCropAspectLocked] = useState(false);
 	const [cropAspectRatio, setCropAspectRatio] = useState("");
+
+	const selectedZoomRegion = selectedZoomId ? zoomRegions.find((r) => r.id === selectedZoomId) ?? null : null;
+	const selectedTrimRegion = selectedTrimId ? trimRegions.find((r) => r.id === selectedTrimId) ?? null : null;
+	const selectedSpeedRegion = selectedSpeedId ? speedRegions.find((r) => r.id === selectedSpeedId) ?? null : null;
+	const durationMs = videoDuration * 1000;
+
+	const handleTrimStartChange = useCallback(
+		(ms: number) => {
+			if (!selectedTrimRegion || !onTrimSpanChange) return;
+			if (ms >= selectedTrimRegion.endMs) return;
+			onTrimSpanChange(selectedTrimRegion.id, { start: ms, end: selectedTrimRegion.endMs });
+		},
+		[selectedTrimRegion, onTrimSpanChange],
+	);
+
+	const handleTrimEndChange = useCallback(
+		(ms: number) => {
+			if (!selectedTrimRegion || !onTrimSpanChange) return;
+			if (ms <= selectedTrimRegion.startMs) return;
+			onTrimSpanChange(selectedTrimRegion.id, { start: selectedTrimRegion.startMs, end: ms });
+		},
+		[selectedTrimRegion, onTrimSpanChange],
+	);
 
 	const videoWidth = videoElement?.videoWidth || 1920;
 	const videoHeight = videoElement?.videoHeight || 1080;
@@ -336,10 +378,39 @@ export function SettingsPanel({
 					hasCursorTelemetry={hasCursorTelemetry}
 					selectedZoomId={selectedZoomId ?? null}
 					onZoomDelete={onZoomDelete}
+					selectedZoomRegion={selectedZoomRegion}
+					onZoomSpanChange={onZoomSpanChange}
+					videoDuration={videoDuration}
 				/>
 
 				{trimEnabled && (
 					<div className="mb-4">
+						<div className="flex items-center justify-between mb-3">
+							<span className="text-sm font-medium text-slate-200">{t("trim.title")}</span>
+							{selectedTrimRegion && (
+								<span className="text-[10px] uppercase tracking-wider font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+									{t("region.active")}
+								</span>
+							)}
+						</div>
+						{selectedTrimRegion && (
+							<div className="space-y-1.5 bg-white/[0.02] rounded-lg p-2 border border-white/5 mb-2">
+								<TimestampInput
+									label={t("region.start")}
+									valueMs={selectedTrimRegion.startMs}
+									minMs={0}
+									maxMs={selectedTrimRegion.endMs - 100}
+									onChange={handleTrimStartChange}
+								/>
+								<TimestampInput
+									label={t("region.end")}
+									valueMs={selectedTrimRegion.endMs}
+									minMs={selectedTrimRegion.startMs + 100}
+									maxMs={durationMs}
+									onChange={handleTrimEndChange}
+								/>
+							</div>
+						)}
 						<Button
 							onClick={() => selectedTrimId && onTrimDelete?.(selectedTrimId)}
 							variant="destructive"
@@ -357,6 +428,9 @@ export function SettingsPanel({
 					selectedSpeedValue={selectedSpeedValue ?? null}
 					onSpeedChange={onSpeedChange}
 					onSpeedDelete={onSpeedDelete}
+					selectedSpeedRegion={selectedSpeedRegion}
+					onSpeedSpanChange={onSpeedSpanChange}
+					videoDuration={videoDuration}
 				/>
 
 				<Accordion

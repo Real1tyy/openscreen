@@ -4,14 +4,18 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
-import type { PlaybackSpeed } from "../types";
+import type { PlaybackSpeed, SpeedRegion } from "../types";
 import { MAX_PLAYBACK_SPEED, SPEED_OPTIONS } from "../types";
+import { TimestampInput } from "./TimestampInput";
 
 interface SpeedSectionProps {
 	selectedSpeedId: string | null;
 	selectedSpeedValue: PlaybackSpeed | null;
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
 	onSpeedDelete?: (id: string) => void;
+	selectedSpeedRegion?: SpeedRegion | null;
+	onSpeedSpanChange?: (id: string, span: { start: number; end: number }) => void;
+	videoDuration?: number;
 }
 
 function CustomSpeedInput({
@@ -80,8 +84,30 @@ export function SpeedSection({
 	selectedSpeedValue,
 	onSpeedChange,
 	onSpeedDelete,
+	selectedSpeedRegion,
+	onSpeedSpanChange,
+	videoDuration = 0,
 }: SpeedSectionProps) {
 	const t = useScopedT("settings");
+	const durationMs = videoDuration * 1000;
+
+	const handleStartChange = useCallback(
+		(ms: number) => {
+			if (!selectedSpeedRegion || !onSpeedSpanChange) return;
+			if (ms >= selectedSpeedRegion.endMs) return;
+			onSpeedSpanChange(selectedSpeedRegion.id, { start: ms, end: selectedSpeedRegion.endMs });
+		},
+		[selectedSpeedRegion, onSpeedSpanChange],
+	);
+
+	const handleEndChange = useCallback(
+		(ms: number) => {
+			if (!selectedSpeedRegion || !onSpeedSpanChange) return;
+			if (ms <= selectedSpeedRegion.startMs) return;
+			onSpeedSpanChange(selectedSpeedRegion.id, { start: selectedSpeedRegion.startMs, end: ms });
+		},
+		[selectedSpeedRegion, onSpeedSpanChange],
+	);
 
 	return (
 		<div className="mb-4">
@@ -144,6 +170,24 @@ export function SpeedSection({
 			</div>
 			{!selectedSpeedId && (
 				<p className="text-[10px] text-slate-500 mt-2 text-center">{t("speed.selectRegion")}</p>
+			)}
+			{selectedSpeedRegion && (
+				<div className="mt-3 space-y-1.5 bg-white/[0.02] rounded-lg p-2 border border-white/5">
+					<TimestampInput
+						label={t("region.start")}
+						valueMs={selectedSpeedRegion.startMs}
+						minMs={0}
+						maxMs={selectedSpeedRegion.endMs - 100}
+						onChange={handleStartChange}
+					/>
+					<TimestampInput
+						label={t("region.end")}
+						valueMs={selectedSpeedRegion.endMs}
+						minMs={selectedSpeedRegion.startMs + 100}
+						maxMs={durationMs}
+						onChange={handleEndChange}
+					/>
+				</div>
 			)}
 			{selectedSpeedId && (
 				<Button

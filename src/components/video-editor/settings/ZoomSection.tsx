@@ -1,9 +1,11 @@
 import { Trash2 } from "lucide-react";
+import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
-import type { ZoomDepth, ZoomFocusMode } from "../types";
+import type { ZoomDepth, ZoomFocusMode, ZoomRegion } from "../types";
 import { KeyboardShortcutsHelp } from "../KeyboardShortcutsHelp";
+import { TimestampInput } from "./TimestampInput";
 
 interface ZoomSectionProps {
 	selectedZoomDepth: ZoomDepth | null;
@@ -13,6 +15,9 @@ interface ZoomSectionProps {
 	hasCursorTelemetry?: boolean;
 	selectedZoomId: string | null;
 	onZoomDelete?: (id: string) => void;
+	selectedZoomRegion?: ZoomRegion | null;
+	onZoomSpanChange?: (id: string, span: { start: number; end: number }) => void;
+	videoDuration?: number;
 }
 
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
@@ -32,9 +37,31 @@ export function ZoomSection({
 	hasCursorTelemetry = false,
 	selectedZoomId,
 	onZoomDelete,
+	selectedZoomRegion,
+	onZoomSpanChange,
+	videoDuration = 0,
 }: ZoomSectionProps) {
 	const t = useScopedT("settings");
 	const zoomEnabled = Boolean(selectedZoomDepth);
+	const durationMs = videoDuration * 1000;
+
+	const handleStartChange = useCallback(
+		(ms: number) => {
+			if (!selectedZoomRegion || !onZoomSpanChange) return;
+			if (ms >= selectedZoomRegion.endMs) return;
+			onZoomSpanChange(selectedZoomRegion.id, { start: ms, end: selectedZoomRegion.endMs });
+		},
+		[selectedZoomRegion, onZoomSpanChange],
+	);
+
+	const handleEndChange = useCallback(
+		(ms: number) => {
+			if (!selectedZoomRegion || !onZoomSpanChange) return;
+			if (ms <= selectedZoomRegion.startMs) return;
+			onZoomSpanChange(selectedZoomRegion.id, { start: selectedZoomRegion.startMs, end: ms });
+		},
+		[selectedZoomRegion, onZoomSpanChange],
+	);
 
 	return (
 		<div className="mb-4">
@@ -108,6 +135,24 @@ export function ZoomSection({
 							{t("zoom.focusMode.autoDescription")}
 						</p>
 					)}
+				</div>
+			)}
+			{zoomEnabled && selectedZoomRegion && (
+				<div className="mt-3 space-y-1.5 bg-white/[0.02] rounded-lg p-2 border border-white/5">
+					<TimestampInput
+						label={t("region.start")}
+						valueMs={selectedZoomRegion.startMs}
+						minMs={0}
+						maxMs={selectedZoomRegion.endMs - 100}
+						onChange={handleStartChange}
+					/>
+					<TimestampInput
+						label={t("region.end")}
+						valueMs={selectedZoomRegion.endMs}
+						minMs={selectedZoomRegion.startMs + 100}
+						maxMs={durationMs}
+						onChange={handleEndChange}
+					/>
 				</div>
 			)}
 			{zoomEnabled && selectedZoomId && (
