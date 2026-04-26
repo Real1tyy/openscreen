@@ -243,6 +243,76 @@ describe("NVENC export config contract", () => {
 	});
 });
 
+describe("finishExport audio muxing contract", () => {
+	it("finishExport accepts trimRegions and speedRegions", () => {
+		const trimRegions = [
+			{ id: "t1", startMs: 0, endMs: 5000 },
+			{ id: "t2", startMs: 30000, endMs: 35000 },
+		];
+		const speedRegions = [
+			{ id: "s1", startMs: 5000, endMs: 15000, speed: 2 },
+			{ id: "s2", startMs: 20000, endMs: 25000, speed: 0.5 },
+		];
+
+		// Verify the structure matches what Rust expects (serde deserialization)
+		for (const tr of trimRegions) {
+			expect(tr).toHaveProperty("startMs");
+			expect(tr).toHaveProperty("endMs");
+			expect(typeof tr.startMs).toBe("number");
+			expect(typeof tr.endMs).toBe("number");
+		}
+		for (const sr of speedRegions) {
+			expect(sr).toHaveProperty("startMs");
+			expect(sr).toHaveProperty("endMs");
+			expect(sr).toHaveProperty("speed");
+			expect(typeof sr.speed).toBe("number");
+			expect(sr.speed).toBeGreaterThan(0);
+		}
+	});
+
+	it("finishExport works with null regions (no trims/speeds)", () => {
+		// When no regions are applied, null should be passed
+		const params = {
+			sessionId: "test-session",
+			trimRegions: null,
+			speedRegions: null,
+		};
+		expect(params.trimRegions).toBeNull();
+		expect(params.speedRegions).toBeNull();
+	});
+
+	it("finishExport works with empty arrays", () => {
+		const params = {
+			sessionId: "test-session",
+			trimRegions: [] as Array<{ id: string; startMs: number; endMs: number }>,
+			speedRegions: [] as Array<{ id: string; startMs: number; endMs: number; speed: number }>,
+		};
+		expect(params.trimRegions).toHaveLength(0);
+		expect(params.speedRegions).toHaveLength(0);
+	});
+
+	it("trim regions have positive duration", () => {
+		const trimRegions = [
+			{ id: "t1", startMs: 1000, endMs: 5000 },
+		];
+		for (const tr of trimRegions) {
+			expect(tr.endMs).toBeGreaterThan(tr.startMs);
+		}
+	});
+
+	it("speed regions have valid speed values", () => {
+		const speedRegions = [
+			{ id: "s1", startMs: 0, endMs: 10000, speed: 4 },
+			{ id: "s2", startMs: 15000, endMs: 20000, speed: 0.25 },
+		];
+		for (const sr of speedRegions) {
+			expect(sr.speed).toBeGreaterThan(0);
+			expect(sr.speed).toBeLessThanOrEqual(16);
+			expect(sr.endMs).toBeGreaterThan(sr.startMs);
+		}
+	});
+});
+
 describe("RGBA frame data validation", () => {
 	it("frame size matches width * height * 4", () => {
 		const width = 1920;

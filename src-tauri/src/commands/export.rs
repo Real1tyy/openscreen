@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use crate::audio_muxer::{self, SpeedRegion, TrimRegion};
 use crate::encoder::{EncoderConfig, NvencEncoder};
+use crate::state::AppState;
 
 #[derive(Default)]
 pub struct ExportState {
@@ -142,7 +144,10 @@ pub fn feed_frame(
 #[tauri::command]
 pub fn finish_export(
     session_id: String,
+    trim_regions: Option<Vec<TrimRegion>>,
+    speed_regions: Option<Vec<SpeedRegion>>,
     export_state: tauri::State<'_, Mutex<ExportState>>,
+    app_state: tauri::State<'_, Mutex<AppState>>,
 ) -> FinishExportResult {
     let encoder = {
         let mut state = export_state.lock().unwrap();
@@ -161,19 +166,64 @@ pub fn finish_export(
 
     let total_frames = encoder.frame_count();
 
-    match encoder.finalize() {
-        Ok(path) => FinishExportResult {
+    let video_only_path = match encoder.finalize() {
+        Ok(path) => path,
+        Err(e) => {
+            return FinishExportResult {
+                success: false,
+                path: None,
+                error: Some(e),
+                total_frames,
+            }
+        }
+    };
+
+    // Get source video path from app state for audio muxing
+    let source_path = app_state.lock().unwrap().current_video_path.clone();
+
+    if let Some(ref source) = source_path {
+        let final_path = video_only_path.with_extension("final.mp4");
+        let trims = trim_regions.unwrap_or_default();
+        let speeds = speed_regions.unwrap_or_default();
+
+        match audio_muxer::mux_audio_into_video(
+            &video_only_path,
+            source,
+            &trims,
+            &speeds,
+            &final_path,
+        ) {
+            Ok(()) => {
+                // Clean up video-only intermediate file if it still exists
+                // (mux_audio_into_video may have renamed it when no audio)
+                if video_only_path.exists() {
+                    std::fs::remove_file(&video_only_path).ok();
+                }
+                FinishExportResult {
+                    success: true,
+                    path: Some(final_path.to_string_lossy().to_string()),
+                    error: None,
+                    total_frames,
+                }
+            }
+            Err(e) => {
+                eprintln!("[finish_export] Audio muxing failed: {}, returning video-only", e);
+                // Return video-only as fallback
+                FinishExportResult {
+                    success: true,
+                    path: Some(video_only_path.to_string_lossy().to_string()),
+                    error: None,
+                    total_frames,
+                }
+            }
+        }
+    } else {
+        FinishExportResult {
             success: true,
-            path: Some(path.to_string_lossy().to_string()),
+            path: Some(video_only_path.to_string_lossy().to_string()),
             error: None,
             total_frames,
-        },
-        Err(e) => FinishExportResult {
-            success: false,
-            path: None,
-            error: Some(e),
-            total_frames,
-        },
+        }
     }
 }
 

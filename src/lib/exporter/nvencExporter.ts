@@ -218,7 +218,11 @@ export class NvencVideoExporter {
 				phase: "finalizing",
 			});
 
-			const finishResult = await nvencAPI.finishExport(sessionId);
+			const finishResult = await nvencAPI.finishExport(
+					sessionId,
+					this.config.trimRegions,
+					this.config.speedRegions,
+				);
 			sessionId = null;
 
 			if (!finishResult.success) {

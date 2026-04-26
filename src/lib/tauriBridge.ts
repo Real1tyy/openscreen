@@ -253,6 +253,8 @@ export interface NvencExportAPI {
 	) => Promise<{ success: boolean; frameCount: number; error?: string }>;
 	finishExport: (
 		sessionId: string,
+		trimRegions?: Array<{ id: string; startMs: number; endMs: number }>,
+		speedRegions?: Array<{ id: string; startMs: number; endMs: number; speed: number }>,
 	) => Promise<{
 		success: boolean;
 		path?: string;
@@ -269,7 +271,8 @@ export function getNvencAPI(): NvencExportAPI | null {
 		startNvencExport: (config) => invoke("start_nvenc_export", { config }),
 		feedFrame: (sessionId, framePath, width, height, isKeyframe) =>
 			invoke("feed_frame", { sessionId, framePath, width, height, isKeyframe }),
-		finishExport: (sessionId) => invoke("finish_export", { sessionId }),
+		finishExport: (sessionId, trimRegions, speedRegions) =>
+			invoke("finish_export", { sessionId, trimRegions: trimRegions ?? null, speedRegions: speedRegions ?? null }),
 		cancelExport: (sessionId) => invoke("cancel_export", { sessionId }),
 	};
 }
