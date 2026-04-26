@@ -18,7 +18,13 @@
 		"maxSpeedError": "La velocidad no puede superar 16×"
 	},
 	"trim": {
+		"title": "Región de recorte",
 		"deleteRegion": "Eliminar región de recorte"
+	},
+	"region": {
+		"start": "Inicio",
+		"end": "Fin",
+		"active": "Activo"
 	},
 	"layout": {
 		"title": "Diseño",

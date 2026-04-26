@@ -18,7 +18,13 @@
 		"maxSpeedError": "速度不能超过 16×"
 	},
 	"trim": {
+		"title": "剪辑区域",
 		"deleteRegion": "删除剪辑区域"
+	},
+	"region": {
+		"start": "开始",
+		"end": "结束",
+		"active": "活跃"
 	},
 	"layout": {
 		"title": "布局",

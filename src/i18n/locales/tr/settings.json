@@ -16,7 +16,13 @@
 		"deleteRegion": "Hız Bölgesini Sil"
 	},
 	"trim": {
+		"title": "Kırpma Bölgesi",
 		"deleteRegion": "Kırpma Bölgesini Sil"
+	},
+	"region": {
+		"start": "Başlangıç",
+		"end": "Bitiş",
+		"active": "Aktif"
 	},
 	"layout": {
 		"title": "Düzen",

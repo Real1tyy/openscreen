@@ -18,7 +18,13 @@
 		"maxSpeedError": "Speed can't go higher than 16×"
 	},
 	"trim": {
+		"title": "Trim Region",
 		"deleteRegion": "Delete Trim Region"
+	},
+	"region": {
+		"start": "Start",
+		"end": "End",
+		"active": "Active"
 	},
 	"layout": {
 		"title": "Layout",

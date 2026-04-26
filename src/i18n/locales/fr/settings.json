@@ -16,7 +16,13 @@
 		"deleteRegion": "Supprimer la région de vitesse"
 	},
 	"trim": {
+		"title": "Région de coupe",
 		"deleteRegion": "Supprimer la région de coupe"
+	},
+	"region": {
+		"start": "Début",
+		"end": "Fin",
+		"active": "Actif"
 	},
 	"layout": {
 		"title": "Mise en page",
