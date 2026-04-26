@@ -1029,13 +1029,13 @@ export default function TimelineEditor({
 			const checkOverlap = (regions: (ZoomRegion | TrimRegion | SpeedRegion)[]) => {
 				return regions.some((region) => {
 					if (region.id === excludeId) return false;
-					// True overlap: regions actually intersect (not just adjacent)
 					return newSpan.end > region.startMs && newSpan.start < region.endMs;
 				});
 			};
 
 			if (isZoomItem) {
-				return checkOverlap(zoomRegions);
+				// Zoom cannot overlap other zooms OR trim regions
+				return checkOverlap(zoomRegions) || checkOverlap(trimRegions);
 			}
 
 			if (isTrimItem) {
@@ -1043,7 +1043,8 @@ export default function TimelineEditor({
 			}
 
 			if (isSpeedItem) {
-				return checkOverlap(speedRegions);
+				// Speed cannot overlap other speeds OR trim regions
+				return checkOverlap(speedRegions) || checkOverlap(trimRegions);
 			}
 
 			return false;
@@ -1058,6 +1059,13 @@ export default function TimelineEditor({
 		[totalMs],
 	);
 
+	const isInsideTrimRegion = useCallback(
+		(posMs: number): boolean => {
+			return trimRegions.some((t) => posMs >= t.startMs && posMs < t.endMs);
+		},
+		[trimRegions],
+	);
+
 	const handleAddZoom = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
 			return;
@@ -1070,6 +1078,14 @@ export default function TimelineEditor({
 
 		// Always place zoom at playhead
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
+
+		if (isInsideTrimRegion(startPos)) {
+			toast.error(t("errors.cannotPlaceZoom"), {
+				description: t("errors.cannotPlaceInsideTrim"),
+			});
+			return;
+		}
+
 		const { startMs, endMs, isOverlapping } = computeNewRegionSpan(
 			zoomRegions, startPos, defaultRegionDurationMs, totalMs,
 		);
@@ -1082,7 +1098,7 @@ export default function TimelineEditor({
 		}
 
 		onZoomAdded({ start: startMs, end: endMs });
-	}, [videoDuration, totalMs, currentTimeMs, zoomRegions, onZoomAdded, defaultRegionDurationMs, t]);
+	}, [videoDuration, totalMs, currentTimeMs, zoomRegions, trimRegions, onZoomAdded, defaultRegionDurationMs, isInsideTrimRegion, t]);
 
 	const handleSuggestZooms = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
@@ -1219,6 +1235,14 @@ export default function TimelineEditor({
 
 		// Always place speed region at playhead
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
+
+		if (isInsideTrimRegion(startPos)) {
+			toast.error(t("errors.cannotPlaceSpeed"), {
+				description: t("errors.cannotPlaceInsideTrim"),
+			});
+			return;
+		}
+
 		// Find the next speed region after the playhead
 		const sorted = [...speedRegions].sort((a, b) => a.startMs - b.startMs);
 		const nextRegion = sorted.find((region) => region.startMs > startPos);
@@ -1242,8 +1266,10 @@ export default function TimelineEditor({
 		totalMs,
 		currentTimeMs,
 		speedRegions,
+		trimRegions,
 		onSpeedAdded,
 		defaultRegionDurationMs,
+		isInsideTrimRegion,
 		t,
 	]);
 

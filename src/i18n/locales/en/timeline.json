@@ -42,7 +42,8 @@
 		"cannotPlaceTrim": "Cannot place trim here",
 		"trimExistsAtLocation": "Trim already exists at this location or not enough space available.",
 		"cannotPlaceSpeed": "Cannot place speed here",
-		"speedExistsAtLocation": "Speed region already exists at this location or not enough space available."
+		"speedExistsAtLocation": "Speed region already exists at this location or not enough space available.",
+		"cannotPlaceInsideTrim": "Cannot place effects inside a trimmed region. The trimmed section will be removed on export."
 	},
 	"success": {
 		"addedZoomSuggestions": "Added {{count}} cursor-based zoom suggestion",

@@ -42,7 +42,8 @@
 		"cannotPlaceTrim": "无法在此处放置剪辑",
 		"trimExistsAtLocation": "此位置已存在剪辑或没有足够的空间。",
 		"cannotPlaceSpeed": "无法在此处放置速度",
-		"speedExistsAtLocation": "此位置已存在速度区域或没有足够的空间。"
+		"speedExistsAtLocation": "此位置已存在速度区域或没有足够的空间。",
+		"cannotPlaceInsideTrim": "Cannot place effects inside a trimmed region. The trimmed section will be removed on export."
 	},
 	"success": {
 		"addedZoomSuggestions": "已添加 {{count}} 个基于光标的缩放建议",
