@@ -18,7 +18,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { getAssetPath } from "@/lib/assetPath";
 import {
 	getWebcamLayoutCssBoxShadow,
 	type Size,
@@ -1153,55 +1152,30 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [webcamVideoPath]);
 
 		useEffect(() => {
-			let mounted = true;
-			(async () => {
-				try {
-					if (!wallpaper) {
-						const def = await getAssetPath("wallpapers/wallpaper1.jpg");
-						if (mounted) setResolvedWallpaper(def);
-						return;
-					}
+			if (!wallpaper) {
+				setResolvedWallpaper("/wallpapers/wallpaper1.jpg");
+				return;
+			}
 
-					if (
-						wallpaper.startsWith("#") ||
-						wallpaper.startsWith("linear-gradient") ||
-						wallpaper.startsWith("radial-gradient")
-					) {
-						if (mounted) setResolvedWallpaper(wallpaper);
-						return;
-					}
+			if (
+				wallpaper.startsWith("#") ||
+				wallpaper.startsWith("linear-gradient") ||
+				wallpaper.startsWith("radial-gradient") ||
+				wallpaper.startsWith("data:") ||
+				wallpaper.startsWith("http") ||
+				wallpaper.startsWith("file://") ||
+				wallpaper.startsWith("asset://")
+			) {
+				setResolvedWallpaper(wallpaper);
+				return;
+			}
 
-					// If it's a data URL (custom uploaded image), use as-is
-					if (wallpaper.startsWith("data:")) {
-						if (mounted) setResolvedWallpaper(wallpaper);
-						return;
-					}
+			if (wallpaper.startsWith("/")) {
+				setResolvedWallpaper(wallpaper);
+				return;
+			}
 
-					// If it's an absolute web/http or file path, use as-is
-					if (
-						wallpaper.startsWith("http") ||
-						wallpaper.startsWith("file://") ||
-						wallpaper.startsWith("/")
-					) {
-						// If it's an absolute server path (starts with '/'), resolve via getAssetPath as well
-						if (wallpaper.startsWith("/")) {
-							const rel = wallpaper.replace(/^\//, "");
-							const p = await getAssetPath(rel);
-							if (mounted) setResolvedWallpaper(p);
-							return;
-						}
-						if (mounted) setResolvedWallpaper(wallpaper);
-						return;
-					}
-					const p = await getAssetPath(wallpaper.replace(/^\//, ""));
-					if (mounted) setResolvedWallpaper(p);
-				} catch (_err) {
-					if (mounted) setResolvedWallpaper(wallpaper || "/wallpapers/wallpaper1.jpg");
-				}
-			})();
-			return () => {
-				mounted = false;
-			};
+			setResolvedWallpaper(`/${wallpaper}`);
 		}, [wallpaper]);
 
 		useEffect(() => {

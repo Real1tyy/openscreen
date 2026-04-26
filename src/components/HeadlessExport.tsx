@@ -120,29 +120,5 @@ function resolveBitrate(configBitrate: number | null, width: number, height: num
 }
 
 async function resolveBackground(background: string): Promise<string> {
-	// If it's a hex color or gradient, use as-is
-	if (
-		background.startsWith("#") ||
-		background.startsWith("linear-gradient") ||
-		background.startsWith("radial-gradient") ||
-		background.startsWith("http") ||
-		background.startsWith("data:")
-	) {
-		return background;
-	}
-
-	// If it's a relative wallpaper path (e.g. /wallpapers/wallpaper1.jpg),
-	// resolve it relative to the app's assets
-	if (background.startsWith("/")) {
-		const basePath = await getAPI().getAssetBasePath();
-		if (basePath) {
-			// basePath is like file:///path/to/assets/ — the wallpaper paths
-			// are stored as /wallpapers/X.jpg, so strip the leading slash
-			return basePath + background.slice(1);
-		}
-		// In dev mode, relative paths work as-is via the dev server
-		return background;
-	}
-
 	return background;
 }
