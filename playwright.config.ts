@@ -13,7 +13,7 @@ export default defineConfig({
 		},
 	},
 	webServer: {
-		command: "npm run dev:frontend",
+		command: "NODE_ENV=test npm run dev:frontend",
 		port: 5199,
 		reuseExistingServer: true,
 	},
