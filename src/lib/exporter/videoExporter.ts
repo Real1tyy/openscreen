@@ -8,7 +8,7 @@ import type {
 	ZoomRegion,
 } from "@/components/video-editor/types";
 import { AsyncVideoFrameQueue } from "./asyncVideoFrameQueue";
-import { AudioProcessor } from "./audioEncoder";
+import { AudioProcessor, detectBestAudioCodec } from "./audioEncoder";
 import { FrameRenderer } from "./frameRenderer";
 import { VideoMuxer } from "./muxer";
 import { StreamingVideoDecoder } from "./streamingDecoder";
@@ -154,12 +154,14 @@ export class VideoExporter {
 			await this.initializeEncoder(encoderPreference);
 
 			const hasAudio = videoInfo.hasAudio;
+			const audioCodec = hasAudio ? await detectBestAudioCodec() : undefined;
 			console.log("[VideoExporter] Audio detection:", {
 				hasAudio,
-				audioCodec: videoInfo.audioCodec,
+				sourceAudioCodec: videoInfo.audioCodec,
+				encodeCodec: audioCodec,
 				sourceUrl: this.config.videoUrl.slice(0, 100),
 			});
-			const muxer = new VideoMuxer(this.config, hasAudio);
+			const muxer = new VideoMuxer(this.config, hasAudio, audioCodec);
 			this.muxer = muxer;
 			await muxer.initialize();
 
@@ -363,6 +365,7 @@ export class VideoExporter {
 					this.config.trimRegions,
 					this.config.speedRegions,
 					readEndSec,
+					audioCodec,
 				);
 				console.log("[VideoExporter] Audio processing completed:", {
 					...audioResult,

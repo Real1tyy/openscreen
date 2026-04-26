@@ -103,7 +103,7 @@ export class NvencVideoExporter {
 			});
 			await renderer.initialize();
 
-			// Resolve optimal temp dir once (uses /dev/shm ramdisk on Linux)
+			// Resolve temp dir once instead of per-frame
 			const frameTempDir = await nvencAPI.getFrameTempDir();
 
 			const startResult = await nvencAPI.startNvencExport({

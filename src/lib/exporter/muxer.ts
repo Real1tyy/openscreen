@@ -6,6 +6,7 @@ import {
 	Mp4OutputFormat,
 	Output,
 } from "mediabunny";
+import type { AudioCodec } from "./audioEncoder";
 import type { ExportConfig } from "./types";
 
 export class VideoMuxer {
@@ -13,19 +14,20 @@ export class VideoMuxer {
 	private videoSource: EncodedVideoPacketSource | null = null;
 	private audioSource: EncodedAudioPacketSource | null = null;
 	private hasAudio: boolean;
+	private audioCodec: AudioCodec;
 	private target: BufferTarget | null = null;
 	private config: ExportConfig;
 	private videoChunkCount = 0;
 	private audioChunkCount = 0;
 
-	constructor(config: ExportConfig, hasAudio = false) {
+	constructor(config: ExportConfig, hasAudio = false, audioCodec: AudioCodec = "aac") {
 		this.config = config;
 		this.hasAudio = hasAudio;
-		console.log("[Muxer] Created with hasAudio:", hasAudio);
+		this.audioCodec = audioCodec;
+		console.log("[Muxer] Created with hasAudio:", hasAudio, "audioCodec:", audioCodec);
 	}
 
 	async initialize(): Promise<void> {
-		// Create the buffer target
 		this.target = new BufferTarget();
 
 		this.output = new Output({
@@ -35,22 +37,19 @@ export class VideoMuxer {
 			target: this.target,
 		});
 
-		// Create video source - codec will be deduced from metadata
 		this.videoSource = new EncodedVideoPacketSource("avc");
 		this.output.addVideoTrack(this.videoSource, {
 			frameRate: this.config.frameRate,
 		});
 
-		// Create audio source if needed
 		if (this.hasAudio) {
-			this.audioSource = new EncodedAudioPacketSource("opus");
+			this.audioSource = new EncodedAudioPacketSource(this.audioCodec);
 			this.output.addAudioTrack(this.audioSource);
-			console.log("[Muxer] Audio track added (opus)");
+			console.log("[Muxer] Audio track added:", this.audioCodec);
 		} else {
 			console.log("[Muxer] No audio track — video-only export");
 		}
 
-		// Start the output to begin accepting media data
 		await this.output.start();
 		console.log("[Muxer] Output started");
 	}

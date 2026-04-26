@@ -6,10 +6,24 @@ const AUDIO_BITRATE = 128_000;
 const DECODE_BACKPRESSURE_LIMIT = 20;
 const MIN_SPEED_REGION_DELTA_MS = 0.0001;
 
+export type AudioCodec = "aac" | "opus";
+
 export interface AudioProcessResult {
 	processed: boolean;
 	chunksEncoded: number;
+	codec?: AudioCodec;
 	error?: string;
+}
+
+export async function detectBestAudioCodec(): Promise<AudioCodec> {
+	const aacCheck = await AudioEncoder.isConfigSupported({
+		codec: "mp4a.40.2",
+		sampleRate: 48000,
+		numberOfChannels: 2,
+		bitrate: 128_000,
+	});
+	if (aacCheck.supported) return "aac";
+	return "opus";
 }
 
 export class AudioProcessor {
@@ -22,6 +36,7 @@ export class AudioProcessor {
 		trimRegions?: TrimRegion[],
 		speedRegions?: SpeedRegion[],
 		readEndSec?: number,
+		targetCodec?: AudioCodec,
 	): Promise<AudioProcessResult> {
 		const sortedTrims = trimRegions ? [...trimRegions].sort((a, b) => a.startMs - b.startMs) : [];
 		const sortedSpeedRegions = speedRegions
@@ -30,7 +45,7 @@ export class AudioProcessor {
 					.sort((a, b) => a.startMs - b.startMs)
 			: [];
 
-		return this.processAudio(demuxer, muxer, sortedTrims, sortedSpeedRegions, readEndSec);
+		return this.processAudio(demuxer, muxer, sortedTrims, sortedSpeedRegions, readEndSec, targetCodec);
 	}
 
 	private async processAudio(
@@ -39,6 +54,7 @@ export class AudioProcessor {
 		sortedTrims: TrimRegion[],
 		sortedSpeedRegions: SpeedRegion[],
 		readEndSec?: number,
+		targetCodec?: AudioCodec,
 	): Promise<AudioProcessResult> {
 		console.log("[AudioProcessor] === PHASE 0: Config ===");
 		console.log("[AudioProcessor] readEndSec:", readEndSec);
@@ -183,24 +199,24 @@ export class AudioProcessor {
 		const sampleRate = audioConfig.sampleRate || 48000;
 		const channels = audioConfig.numberOfChannels || 2;
 
+		const chosenCodec: AudioCodec = targetCodec ?? (await detectBestAudioCodec());
+		const webCodecString = chosenCodec === "aac" ? "mp4a.40.2" : "opus";
 		const encodeConfig: AudioEncoderConfig = {
-			codec: "opus",
+			codec: webCodecString,
 			sampleRate,
 			numberOfChannels: channels,
 			bitrate: AUDIO_BITRATE,
 		};
 
-		console.log("[AudioProcessor] Encode config:", encodeConfig);
-
 		const encodeSupport = await AudioEncoder.isConfigSupported(encodeConfig);
-		console.log("[AudioProcessor] AudioEncoder.isConfigSupported:", {
-			supported: encodeSupport.supported,
-			config: encodeSupport.config,
-		});
+		console.log("[AudioProcessor] Encode support for", chosenCodec, ":", encodeSupport.supported);
+
 		if (!encodeSupport.supported) {
 			for (const frame of decodedFrames) frame.close();
-			throw new Error("Opus audio encoding is not supported by this browser");
+			throw new Error(`Audio codec "${chosenCodec}" (${webCodecString}) is not supported for encoding`);
 		}
+
+		console.log("[AudioProcessor] Using codec:", chosenCodec, encodeConfig);
 
 		encoder.configure(encodeConfig);
 		console.log("[AudioProcessor] Encoder state after configure:", encoder.state);
@@ -282,7 +298,7 @@ export class AudioProcessor {
 			);
 		}
 
-		return { processed: true, chunksEncoded: muxedChunks };
+		return { processed: true, chunksEncoded: muxedChunks, codec: chosenCodec };
 	}
 
 	private cloneWithTimestamp(src: AudioData, newTimestamp: number): AudioData {

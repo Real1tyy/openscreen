@@ -7,6 +7,15 @@ use crate::encoder::EncoderConfig;
 use crate::pipeline::PipelinedEncoder;
 use crate::state::AppState;
 
+/// Resolves the source video path for audio muxing from the current app state.
+/// Returns the screen_video_path from the active recording session.
+pub fn resolve_source_video_path(app_state: &AppState) -> Option<String> {
+    app_state
+        .current_session
+        .as_ref()
+        .map(|s| s.screen_video_path.clone())
+}
+
 #[derive(Default)]
 pub struct ExportState {
     pub sessions: HashMap<String, PipelinedEncoder>,
@@ -179,8 +188,14 @@ pub fn finish_export(
         }
     };
 
-    // Get source video path from app state for audio muxing
-    let source_path = app_state.lock().unwrap().current_video_path.clone();
+    // Get source video path from app state for audio muxing.
+    // set_current_video_path stores the path in current_session.screen_video_path.
+    let source_path = resolve_source_video_path(&app_state.lock().unwrap());
+
+    eprintln!(
+        "[finish_export] source_path for audio muxing: {:?}",
+        source_path
+    );
 
     if let Some(ref source) = source_path {
         let final_path = video_only_path.with_extension("final.mp4");
@@ -195,8 +210,6 @@ pub fn finish_export(
             &final_path,
         ) {
             Ok(()) => {
-                // Clean up video-only intermediate file if it still exists
-                // (mux_audio_into_video may have renamed it when no audio)
                 if video_only_path.exists() {
                     std::fs::remove_file(&video_only_path).ok();
                 }
@@ -208,17 +221,17 @@ pub fn finish_export(
                 }
             }
             Err(e) => {
-                eprintln!("[finish_export] Audio muxing failed: {}, returning video-only", e);
-                // Return video-only as fallback
+                eprintln!("[finish_export] Audio muxing failed: {}", e);
                 FinishExportResult {
                     success: true,
                     path: Some(video_only_path.to_string_lossy().to_string()),
-                    error: None,
+                    error: Some(format!("Video exported but audio muxing failed: {}", e)),
                     total_frames,
                 }
             }
         }
     } else {
+        eprintln!("[finish_export] No source video path in app state — skipping audio mux");
         FinishExportResult {
             success: true,
             path: Some(video_only_path.to_string_lossy().to_string()),
@@ -239,13 +252,6 @@ pub fn cancel_export(
 
 #[tauri::command]
 pub fn get_frame_temp_dir() -> String {
-    #[cfg(target_os = "linux")]
-    {
-        let shm = std::path::Path::new("/dev/shm");
-        if shm.exists() && shm.is_dir() {
-            return "/dev/shm/".to_string();
-        }
-    }
     let mut dir = std::env::temp_dir().to_string_lossy().to_string();
     if !dir.ends_with('/') && !dir.ends_with('\\') {
         dir.push('/');
@@ -592,5 +598,73 @@ mod tests {
         assert!(dir.ends_with('/') || dir.ends_with('\\'));
         let p = std::path::Path::new(&dir);
         assert!(p.exists(), "Temp dir does not exist: {}", dir);
+    }
+
+    #[test]
+    fn test_resolve_source_path_from_session() {
+        let mut state = AppState::default();
+        assert!(
+            resolve_source_video_path(&state).is_none(),
+            "Empty state should return None"
+        );
+
+        state.current_session = Some(crate::state::RecordingSession {
+            screen_video_path: "/tmp/recording.mp4".to_string(),
+            webcam_video_path: None,
+            created_at: 0.0,
+        });
+
+        let path = resolve_source_video_path(&state);
+        assert_eq!(
+            path.as_deref(),
+            Some("/tmp/recording.mp4"),
+            "Must read from current_session.screen_video_path"
+        );
+    }
+
+    #[test]
+    fn test_resolve_source_path_ignores_stale_field() {
+        let mut state = AppState::default();
+        // The old current_video_path field should NOT be used
+        state.current_video_path = Some("/tmp/stale.mp4".to_string());
+
+        assert!(
+            resolve_source_video_path(&state).is_none(),
+            "Must NOT read from the stale current_video_path field"
+        );
+
+        // Only current_session matters
+        state.current_session = Some(crate::state::RecordingSession {
+            screen_video_path: "/tmp/correct.mp4".to_string(),
+            webcam_video_path: None,
+            created_at: 0.0,
+        });
+
+        let path = resolve_source_video_path(&state);
+        assert_eq!(
+            path.as_deref(),
+            Some("/tmp/correct.mp4"),
+            "Must use current_session, not current_video_path"
+        );
+    }
+
+    #[test]
+    fn test_resolve_source_path_matches_set_current_video_path() {
+        // Simulates what set_current_video_path does: sets current_session
+        let mut state = AppState::default();
+        let video_path = "/home/user/Videos/screen-recording.mp4".to_string();
+
+        state.current_session = Some(crate::state::RecordingSession {
+            screen_video_path: video_path.clone(),
+            webcam_video_path: None,
+            created_at: 1700000000.0,
+        });
+
+        // resolve_source_video_path must return the same path
+        assert_eq!(
+            resolve_source_video_path(&state),
+            Some(video_path),
+            "resolve must return what set_current_video_path stored"
+        );
     }
 }

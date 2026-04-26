@@ -377,6 +377,7 @@ export class StreamingVideoDecoder {
 			return true;
 		};
 
+		try {
 		while (!this.cancelled && segmentIdx < segments.length) {
 			const frame = await getNextFrame();
 			if (!frame) break;
@@ -477,6 +478,12 @@ export class StreamingVideoDecoder {
 			heldFrame.close();
 			heldFrame = null;
 		}
+		} finally {
+		// Clean up any frames leaked by an error in the onFrame callback
+		if (heldFrame) {
+			try { heldFrame.close(); } catch { /* already closed */ }
+			heldFrame = null;
+		}
 
 		// Drain leftover decoded frames
 		while (!decodeDone) {
@@ -498,6 +505,7 @@ export class StreamingVideoDecoder {
 			this.decoder.close();
 		}
 		this.decoder = null;
+		}
 
 		const requiredEndSec = segments.length > 0 ? segments[segments.length - 1].endSec : 0;
 		if (

@@ -10,7 +10,7 @@ function isValidMp4(bytes: Uint8Array): boolean {
 
 function mp4HasAudioTrack(bytes: Uint8Array): boolean {
 	const text = new TextDecoder("ascii", { fatal: false }).decode(bytes);
-	return text.includes("mp4a") || text.includes("Opus") || text.includes("opus");
+	return text.includes("mp4a") || text.includes("Opus") || text.includes("opus") || text.includes("esds");
 }
 
 describe("VideoExporter (real browser)", () => {
