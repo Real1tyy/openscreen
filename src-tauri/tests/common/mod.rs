@@ -351,6 +351,32 @@ pub fn assert_duration_approx(path: &Path, expected_secs: f64, tolerance_secs: f
     );
 }
 
+pub fn get_audio_duration_secs(path: &Path) -> Option<f64> {
+    let input = format::input(path).ok()?;
+    let stream = input.streams().best(media::Type::Audio)?;
+    let tb = stream.time_base();
+    let dur = stream.duration();
+    if dur > 0 {
+        Some(dur as f64 * tb.numerator() as f64 / tb.denominator() as f64)
+    } else {
+        // Fall back to container duration
+        Some(input.duration() as f64 / ffmpeg::ffi::AV_TIME_BASE as f64)
+    }
+}
+
+pub fn assert_audio_duration_approx(path: &Path, expected_secs: f64, tolerance_secs: f64) {
+    let dur = get_audio_duration_secs(path)
+        .unwrap_or_else(|| panic!("No audio duration in {}", path.display()));
+    assert!(
+        (dur - expected_secs).abs() <= tolerance_secs,
+        "Audio duration {:.2}s not within {:.2}s of expected {:.2}s (file: {})",
+        dur,
+        tolerance_secs,
+        expected_secs,
+        path.display()
+    );
+}
+
 pub fn assert_decodable(path: &Path) {
     let input = format::input(path).expect("Cannot open file");
 
