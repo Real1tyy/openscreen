@@ -262,6 +262,7 @@ export interface NvencExportAPI {
 		totalFrames: number;
 	}>;
 	cancelExport: (sessionId: string) => Promise<void>;
+	getFrameTempDir: () => Promise<string>;
 }
 
 export function getNvencAPI(): NvencExportAPI | null {
@@ -274,6 +275,7 @@ export function getNvencAPI(): NvencExportAPI | null {
 		finishExport: (sessionId, trimRegions, speedRegions) =>
 			invoke("finish_export", { sessionId, trimRegions: trimRegions ?? null, speedRegions: speedRegions ?? null }),
 		cancelExport: (sessionId) => invoke("cancel_export", { sessionId }),
+		getFrameTempDir: () => invoke("get_frame_temp_dir"),
 	};
 }
 

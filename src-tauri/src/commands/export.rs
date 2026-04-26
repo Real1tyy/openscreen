@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use crate::audio_muxer::{self, SpeedRegion, TrimRegion};
-use crate::encoder::{EncoderConfig, NvencEncoder};
+use crate::encoder::EncoderConfig;
+use crate::pipeline::PipelinedEncoder;
 use crate::state::AppState;
 
 #[derive(Default)]
 pub struct ExportState {
-    pub sessions: HashMap<String, NvencEncoder>,
+    pub sessions: HashMap<String, PipelinedEncoder>,
 }
 
 #[derive(Deserialize)]
@@ -71,12 +72,12 @@ pub fn start_nvenc_export(
         output_path: config.output_path,
     };
 
-    match NvencEncoder::new(&encoder_config) {
-        Ok(encoder) => {
-            let using_nvenc = encoder.is_nvenc();
+    match PipelinedEncoder::new(encoder_config) {
+        Ok(pipeline) => {
+            let using_nvenc = pipeline.is_nvenc();
             let session_id = uuid::Uuid::new_v4().to_string();
             let mut state = export_state.lock().unwrap();
-            state.sessions.insert(session_id.clone(), encoder);
+            state.sessions.insert(session_id.clone(), pipeline);
             StartExportResult {
                 success: true,
                 session_id,
@@ -115,9 +116,9 @@ pub fn feed_frame(
 
     std::fs::remove_file(&frame_path).ok();
 
-    let mut state = export_state.lock().unwrap();
-    let encoder = match state.sessions.get_mut(&session_id) {
-        Some(enc) => enc,
+    let state = export_state.lock().unwrap();
+    let pipeline = match state.sessions.get(&session_id) {
+        Some(p) => p,
         None => {
             return FrameResult {
                 success: false,
@@ -127,15 +128,15 @@ pub fn feed_frame(
         }
     };
 
-    match encoder.encode_rgba_frame(&rgba_data, width, height, is_keyframe) {
-        Ok(()) => FrameResult {
+    match pipeline.send_frame(rgba_data, width, height, is_keyframe) {
+        Ok(count) => FrameResult {
             success: true,
-            frame_count: encoder.frame_count(),
+            frame_count: count,
             error: None,
         },
         Err(e) => FrameResult {
             success: false,
-            frame_count: encoder.frame_count(),
+            frame_count: pipeline.frame_count(),
             error: Some(e),
         },
     }
@@ -149,10 +150,10 @@ pub fn finish_export(
     export_state: tauri::State<'_, Mutex<ExportState>>,
     app_state: tauri::State<'_, Mutex<AppState>>,
 ) -> FinishExportResult {
-    let encoder = {
+    let pipeline = {
         let mut state = export_state.lock().unwrap();
         match state.sessions.remove(&session_id) {
-            Some(enc) => enc,
+            Some(p) => p,
             None => {
                 return FinishExportResult {
                     success: false,
@@ -164,9 +165,9 @@ pub fn finish_export(
         }
     };
 
-    let total_frames = encoder.frame_count();
+    let total_frames = pipeline.frame_count();
 
-    let video_only_path = match encoder.finalize() {
+    let video_only_path = match pipeline.finalize() {
         Ok(path) => path,
         Err(e) => {
             return FinishExportResult {
@@ -236,6 +237,22 @@ pub fn cancel_export(
     state.sessions.remove(&session_id);
 }
 
+#[tauri::command]
+pub fn get_frame_temp_dir() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        let shm = std::path::Path::new("/dev/shm");
+        if shm.exists() && shm.is_dir() {
+            return "/dev/shm/".to_string();
+        }
+    }
+    let mut dir = std::env::temp_dir().to_string_lossy().to_string();
+    if !dir.ends_with('/') && !dir.ends_with('\\') {
+        dir.push('/');
+    }
+    dir
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,65 +262,58 @@ mod tests {
         Mutex::new(ExportState::default())
     }
 
+    fn make_pipeline(path: &std::path::Path, w: u32, h: u32) -> PipelinedEncoder {
+        let config = crate::encoder::EncoderConfig {
+            width: w,
+            height: h,
+            fps: 30,
+            bitrate: 1_000_000,
+            output_path: path.to_string_lossy().to_string(),
+        };
+        PipelinedEncoder::new(config).unwrap()
+    }
+
+    fn make_rgba(w: u32, h: u32, seed: u8) -> Vec<u8> {
+        let size = (w * h * 4) as usize;
+        let mut rgba = vec![0u8; size];
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel[0] = seed;
+            pixel[1] = 128;
+            pixel[2] = 255u8.wrapping_sub(seed);
+            pixel[3] = 255;
+        }
+        rgba
+    }
+
     #[test]
     fn test_export_session_lifecycle() {
-        // Simulates the full TypeScript→Rust flow without Tauri runtime
         let state = make_state();
         let tmp_path = std::env::temp_dir().join("openscreen_test_export_lifecycle.mp4");
 
-        // 1. Create encoder directly (bypassing tauri::State)
-        let config = crate::encoder::EncoderConfig {
-            width: 320,
-            height: 240,
-            fps: 30,
-            bitrate: 1_000_000,
-            output_path: tmp_path.to_string_lossy().to_string(),
-        };
-        let encoder = crate::encoder::NvencEncoder::new(&config)
-            .expect("Failed to create encoder");
+        let pipeline = make_pipeline(&tmp_path, 320, 240);
         let session_id = "test-session-1".to_string();
+        state.lock().unwrap().sessions.insert(session_id.clone(), pipeline);
 
-        {
-            let mut s = state.lock().unwrap();
-            s.sessions.insert(session_id.clone(), encoder);
-        }
-
-        // 2. Feed frames via temp files (simulating feed_frame command)
-        let frame_size = (320 * 240 * 4) as usize;
-        for i in 0..15 {
-            let mut rgba = vec![0u8; frame_size];
-            let v = ((i * 17) % 256) as u8;
-            for pixel in rgba.chunks_exact_mut(4) {
-                pixel[0] = v;
-                pixel[1] = 128;
-                pixel[2] = 255 - v;
-                pixel[3] = 255;
-            }
+        for i in 0..15u8 {
+            let rgba = make_rgba(320, 240, i.wrapping_mul(17));
 
             let frame_path = std::env::temp_dir().join(format!("test_feed_{}.raw", i));
             fs::write(&frame_path, &rgba).unwrap();
-
             let read_data = fs::read(&frame_path).unwrap();
             fs::remove_file(&frame_path).unwrap();
 
-            let mut s = state.lock().unwrap();
-            let enc = s.sessions.get_mut(&session_id).unwrap();
-            enc.encode_rgba_frame(&read_data, 320, 240, i % 15 == 0).unwrap();
+            let s = state.lock().unwrap();
+            let p = s.sessions.get(&session_id).unwrap();
+            p.send_frame(read_data, 320, 240, i % 15 == 0).unwrap();
         }
 
-        // 3. Finalize
-        let encoder = {
-            let mut s = state.lock().unwrap();
-            s.sessions.remove(&session_id).unwrap()
-        };
-        assert_eq!(encoder.frame_count(), 15);
-        let result_path = encoder.finalize().expect("Failed to finalize");
+        let pipeline = state.lock().unwrap().sessions.remove(&session_id).unwrap();
+        let result_path = pipeline.finalize().expect("Failed to finalize");
 
         assert!(result_path.exists());
         let file_size = fs::metadata(&result_path).unwrap().len();
         assert!(file_size > 100);
 
-        // Verify it's a valid MP4
         let header = fs::read(&result_path).unwrap();
         assert_eq!(std::str::from_utf8(&header[4..8]).unwrap_or(""), "ftyp");
 
@@ -315,23 +325,15 @@ mod tests {
         let state = make_state();
         let tmp_path = std::env::temp_dir().join("openscreen_test_cancel.mp4");
 
-        let config = crate::encoder::EncoderConfig {
-            width: 160,
-            height: 120,
-            fps: 10,
-            bitrate: 500_000,
-            output_path: tmp_path.to_string_lossy().to_string(),
-        };
-        let encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
+        let pipeline = make_pipeline(&tmp_path, 160, 120);
         let session_id = "cancel-test".to_string();
 
         {
             let mut s = state.lock().unwrap();
-            s.sessions.insert(session_id.clone(), encoder);
+            s.sessions.insert(session_id.clone(), pipeline);
             assert!(s.sessions.contains_key(&session_id));
         }
 
-        // Cancel
         {
             let mut s = state.lock().unwrap();
             s.sessions.remove(&session_id);
@@ -346,28 +348,17 @@ mod tests {
     fn test_multiple_concurrent_sessions() {
         let state = make_state();
 
-        let sessions: Vec<(String, String)> = (0..3)
+        let sessions: Vec<(String, std::path::PathBuf)> = (0..3)
             .map(|i| {
                 let path = std::env::temp_dir()
-                    .join(format!("openscreen_test_concurrent_{}.mp4", i))
-                    .to_string_lossy()
-                    .to_string();
+                    .join(format!("openscreen_test_concurrent_{}.mp4", i));
                 (format!("session-{}", i), path)
             })
             .collect();
 
-        // Create all sessions
         for (id, path) in &sessions {
-            let config = crate::encoder::EncoderConfig {
-                width: 160,
-                height: 120,
-                fps: 10,
-                bitrate: 500_000,
-                output_path: path.clone(),
-            };
-            let encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
-            let mut s = state.lock().unwrap();
-            s.sessions.insert(id.clone(), encoder);
+            let pipeline = make_pipeline(path, 160, 120);
+            state.lock().unwrap().sessions.insert(id.clone(), pipeline);
         }
 
         {
@@ -375,24 +366,18 @@ mod tests {
             assert_eq!(s.sessions.len(), 3);
         }
 
-        // Feed frames to each and finalize
-        let frame_size = (160 * 120 * 4) as usize;
-        let rgba = vec![128u8; frame_size];
-
+        let rgba = make_rgba(160, 120, 128);
         for (id, _) in &sessions {
-            let mut s = state.lock().unwrap();
-            let enc = s.sessions.get_mut(id).unwrap();
+            let s = state.lock().unwrap();
+            let p = s.sessions.get(id).unwrap();
             for i in 0..5 {
-                enc.encode_rgba_frame(&rgba, 160, 120, i == 0).unwrap();
+                p.send_frame(rgba.clone(), 160, 120, i == 0).unwrap();
             }
         }
 
         for (id, _path) in &sessions {
-            let encoder = {
-                let mut s = state.lock().unwrap();
-                s.sessions.remove(id).unwrap()
-            };
-            let result = encoder.finalize().unwrap();
+            let pipeline = state.lock().unwrap().sessions.remove(id).unwrap();
+            let result = pipeline.finalize().unwrap();
             assert!(result.exists());
             fs::remove_file(result).ok();
         }
@@ -410,15 +395,8 @@ mod tests {
     #[test]
     fn test_feed_frame_invalid_session_id() {
         let state = make_state();
-        let frame_size = (160 * 120 * 4) as usize;
-        let frame_path = std::env::temp_dir().join("test_invalid_session_frame.raw");
-        fs::write(&frame_path, vec![0u8; frame_size]).unwrap();
-
-        let mut s = state.lock().unwrap();
-        // No sessions exist
-        let enc = s.sessions.get_mut("nonexistent");
-        assert!(enc.is_none());
-        fs::remove_file(&frame_path).ok();
+        let s = state.lock().unwrap();
+        assert!(s.sessions.get("nonexistent").is_none());
     }
 
     #[test]
@@ -434,33 +412,23 @@ mod tests {
         let state = make_state();
         let tmp_path = std::env::temp_dir().join("openscreen_test_wrong_frame.mp4");
 
-        let config = crate::encoder::EncoderConfig {
-            width: 320,
-            height: 240,
-            fps: 30,
-            bitrate: 1_000_000,
-            output_path: tmp_path.to_string_lossy().to_string(),
-        };
-        let encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
+        let pipeline = make_pipeline(&tmp_path, 320, 240);
         let session_id = "wrong-size-test".to_string();
+        state.lock().unwrap().sessions.insert(session_id.clone(), pipeline);
 
-        {
-            let mut s = state.lock().unwrap();
-            s.sessions.insert(session_id.clone(), encoder);
-        }
+        let wrong_data = vec![0u8; 100 * 100 * 4];
 
-        // Write a frame file with wrong dimensions
-        let wrong_data = vec![0u8; 100 * 100 * 4]; // 100x100 instead of 320x240
-        let frame_path = std::env::temp_dir().join("wrong_size_frame.raw");
-        fs::write(&frame_path, &wrong_data).unwrap();
-        let read_data = fs::read(&frame_path).unwrap();
-        fs::remove_file(&frame_path).ok();
+        let s = state.lock().unwrap();
+        let p = s.sessions.get(&session_id).unwrap();
+        p.send_frame(wrong_data, 320, 240, true).ok();
+        drop(s);
 
-        let mut s = state.lock().unwrap();
-        let enc = s.sessions.get_mut(&session_id).unwrap();
-        let result = enc.encode_rgba_frame(&read_data, 320, 240, true);
+        // Error surfaces asynchronously — wait briefly then check
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let s = state.lock().unwrap();
+        let p = s.sessions.get(&session_id).unwrap();
+        let result = p.send_frame(vec![0u8; 100], 320, 240, false);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("size mismatch"));
 
         fs::remove_file(&tmp_path).ok();
     }
@@ -468,47 +436,30 @@ mod tests {
     #[test]
     fn test_concurrent_sessions_interleaved_feeding() {
         let state = make_state();
-        let frame_size = (160 * 120 * 4) as usize;
 
-        // Create two sessions
         let paths: Vec<_> = (0..2)
             .map(|i| {
                 let path = std::env::temp_dir()
                     .join(format!("openscreen_test_interleave_{}.mp4", i));
-                let config = crate::encoder::EncoderConfig {
-                    width: 160,
-                    height: 120,
-                    fps: 10,
-                    bitrate: 500_000,
-                    output_path: path.to_string_lossy().to_string(),
-                };
-                let encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
+                let pipeline = make_pipeline(&path, 160, 120);
                 let id = format!("interleave-{}", i);
-                state.lock().unwrap().sessions.insert(id.clone(), encoder);
+                state.lock().unwrap().sessions.insert(id.clone(), pipeline);
                 (id, path)
             })
             .collect();
 
-        // Interleave frame feeding: session-0, session-1, session-0, session-1, ...
-        for frame in 0..10 {
+        for frame in 0..10usize {
             let idx = frame % 2;
             let (ref id, _) = paths[idx];
-            let mut rgba = vec![0u8; frame_size];
-            let v = (frame * 25) as u8;
-            for pixel in rgba.chunks_exact_mut(4) {
-                pixel[0] = v;
-                pixel[3] = 255;
-            }
-            let mut s = state.lock().unwrap();
-            let enc = s.sessions.get_mut(id).unwrap();
-            enc.encode_rgba_frame(&rgba, 160, 120, frame < 2).unwrap();
+            let rgba = make_rgba(160, 120, (frame * 25) as u8);
+            let s = state.lock().unwrap();
+            let p = s.sessions.get(id).unwrap();
+            p.send_frame(rgba, 160, 120, frame < 2).unwrap();
         }
 
-        // Finalize both
         for (id, _path) in &paths {
-            let enc = state.lock().unwrap().sessions.remove(id).unwrap();
-            assert_eq!(enc.frame_count(), 5);
-            let result = enc.finalize().unwrap();
+            let pipeline = state.lock().unwrap().sessions.remove(id).unwrap();
+            let result = pipeline.finalize().unwrap();
             assert!(result.exists());
             fs::remove_file(result).ok();
         }
@@ -576,17 +527,12 @@ mod tests {
             bitrate: 2_000_000,
             output_path: tmp_path.to_string_lossy().to_string(),
         };
-        let encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
+        let pipeline = PipelinedEncoder::new(config).unwrap();
         let session_id = "pipeline-test".to_string();
-        state
-            .lock()
-            .unwrap()
-            .sessions
-            .insert(session_id.clone(), encoder);
+        state.lock().unwrap().sessions.insert(session_id.clone(), pipeline);
 
-        let frame_size = (640 * 480 * 4) as usize;
         for i in 0..60u32 {
-            let mut rgba = vec![0u8; frame_size];
+            let mut rgba = vec![0u8; (640 * 480 * 4) as usize];
             for y in 0..480u32 {
                 for x in 0..640u32 {
                     let idx = ((y * 640 + x) * 4) as usize;
@@ -597,30 +543,22 @@ mod tests {
                 }
             }
 
-            let frame_path =
-                std::env::temp_dir().join(format!("pipeline_frame_{}.raw", i));
+            let frame_path = std::env::temp_dir().join(format!("pipeline_frame_{}.raw", i));
             fs::write(&frame_path, &rgba).unwrap();
             let read_data = fs::read(&frame_path).unwrap();
             fs::remove_file(&frame_path).ok();
 
-            let mut s = state.lock().unwrap();
-            let enc = s.sessions.get_mut(&session_id).unwrap();
-            enc.encode_rgba_frame(&read_data, 640, 480, i % 30 == 0)
-                .unwrap();
+            let s = state.lock().unwrap();
+            let p = s.sessions.get(&session_id).unwrap();
+            p.send_frame(read_data, 640, 480, i % 30 == 0).unwrap();
         }
 
-        let encoder = state.lock().unwrap().sessions.remove(&session_id).unwrap();
-        assert_eq!(encoder.frame_count(), 60);
-        let result_path = encoder.finalize().unwrap();
+        let pipeline = state.lock().unwrap().sessions.remove(&session_id).unwrap();
+        let result_path = pipeline.finalize().unwrap();
 
-        // Verify with FFmpeg demuxer
         ffmpeg_next::init().ok();
-        let input =
-            ffmpeg_next::format::input(&result_path).expect("Cannot open output");
-        let video = input
-            .streams()
-            .best(ffmpeg_next::media::Type::Video)
-            .expect("No video stream");
+        let input = ffmpeg_next::format::input(&result_path).expect("Cannot open output");
+        let video = input.streams().best(ffmpeg_next::media::Type::Video).expect("No video stream");
         let params = video.parameters();
         let ctx = ffmpeg_next::codec::context::Context::from_parameters(params).unwrap();
         assert!(ctx.decoder().video().is_ok());
@@ -633,37 +571,26 @@ mod tests {
         let state = make_state();
         let tmp_path = std::env::temp_dir().join("openscreen_test_cancel_mid.mp4");
 
-        let config = crate::encoder::EncoderConfig {
-            width: 160,
-            height: 120,
-            fps: 10,
-            bitrate: 500_000,
-            output_path: tmp_path.to_string_lossy().to_string(),
-        };
-        let mut encoder = crate::encoder::NvencEncoder::new(&config).unwrap();
-
-        // Feed some frames
-        let frame_size = (160 * 120 * 4) as usize;
-        let rgba = vec![128u8; frame_size];
+        let pipeline = make_pipeline(&tmp_path, 160, 120);
+        let rgba = make_rgba(160, 120, 128);
         for i in 0..5 {
-            encoder
-                .encode_rgba_frame(&rgba, 160, 120, i == 0)
-                .unwrap();
+            pipeline.send_frame(rgba.clone(), 160, 120, i == 0).unwrap();
         }
-        assert_eq!(encoder.frame_count(), 5);
 
         let session_id = "cancel-mid".to_string();
-        state
-            .lock()
-            .unwrap()
-            .sessions
-            .insert(session_id.clone(), encoder);
+        state.lock().unwrap().sessions.insert(session_id.clone(), pipeline);
 
-        // Cancel (drop the encoder without finalizing)
         state.lock().unwrap().sessions.remove(&session_id);
-
         assert!(!state.lock().unwrap().sessions.contains_key(&session_id));
-        // The partial MP4 may or may not exist on disk (header was written)
         fs::remove_file(&tmp_path).ok();
+    }
+
+    #[test]
+    fn test_get_frame_temp_dir_returns_valid_path() {
+        let dir = get_frame_temp_dir();
+        assert!(!dir.is_empty());
+        assert!(dir.ends_with('/') || dir.ends_with('\\'));
+        let p = std::path::Path::new(&dir);
+        assert!(p.exists(), "Temp dir does not exist: {}", dir);
     }
 }

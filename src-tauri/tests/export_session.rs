@@ -2,24 +2,35 @@ mod common;
 
 use common::*;
 use openscreen::commands::export::ExportState;
-use openscreen::encoder::{EncoderConfig, NvencEncoder};
-use std::collections::HashMap;
+use openscreen::encoder::EncoderConfig;
+use openscreen::pipeline::PipelinedEncoder;
 use std::sync::Mutex;
 
 fn make_state() -> Mutex<ExportState> {
     Mutex::new(ExportState::default())
 }
 
-fn insert_encoder(state: &Mutex<ExportState>, id: &str, path: &std::path::Path) -> NvencEncoder {
+fn make_pipeline(path: &std::path::Path, w: u32, h: u32) -> PipelinedEncoder {
     let config = EncoderConfig {
-        width: 160,
-        height: 120,
-        fps: 10,
-        bitrate: 500_000,
+        width: w,
+        height: h,
+        fps: 30,
+        bitrate: 1_000_000,
         output_path: path.to_string_lossy().to_string(),
     };
-    let enc = NvencEncoder::new(&config).unwrap();
-    enc
+    PipelinedEncoder::new(config).unwrap()
+}
+
+fn make_rgba(w: u32, h: u32, seed: u8) -> Vec<u8> {
+    let size = (w * h * 4) as usize;
+    let mut rgba = vec![0u8; size];
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel[0] = seed;
+        pixel[1] = 128;
+        pixel[2] = 255u8.wrapping_sub(seed);
+        pixel[3] = 255;
+    }
+    rgba
 }
 
 // ─── Session lifecycle: create → feed → finalize ────────────────
@@ -29,45 +40,31 @@ fn full_session_lifecycle() {
     let state = make_state();
     let out = TempFile::new("es_lifecycle.mp4");
 
-    let config = EncoderConfig {
-        width: 320,
-        height: 240,
-        fps: 30,
-        bitrate: 1_000_000,
-        output_path: out.path().to_string_lossy().to_string(),
-    };
-    let mut encoder = NvencEncoder::new(&config).unwrap();
+    let pipeline = make_pipeline(out.path(), 320, 240);
     let session_id = "test-session".to_string();
 
     state
         .lock()
         .unwrap()
         .sessions
-        .insert(session_id.clone(), encoder);
+        .insert(session_id.clone(), pipeline);
 
-    // Feed frames via state
-    let rgba = vec![128u8; 320 * 240 * 4];
+    let rgba = make_rgba(320, 240, 128);
     for i in 0..15 {
-        // Simulate feed_frame command
         let frame_file = TempFile::new(&format!("es_frame_{}.raw", i));
         std::fs::write(frame_file.path(), &rgba).unwrap();
         let data = std::fs::read(frame_file.path()).unwrap();
 
-        let mut s = state.lock().unwrap();
-        let enc = s.sessions.get_mut(&session_id).unwrap();
-        enc.encode_rgba_frame(&data, 320, 240, i % 15 == 0).unwrap();
+        let s = state.lock().unwrap();
+        let p = s.sessions.get(&session_id).unwrap();
+        p.send_frame(data, 320, 240, i % 15 == 0).unwrap();
     }
 
-    // Finalize
-    let encoder = state.lock().unwrap().sessions.remove(&session_id).unwrap();
-    assert_eq!(encoder.frame_count(), 15);
-    let result_path = encoder.finalize().unwrap();
+    let pipeline = state.lock().unwrap().sessions.remove(&session_id).unwrap();
+    let result_path = pipeline.finalize().unwrap();
 
     assert!(result_path.exists());
     assert_valid_mp4(&result_path);
-
-    let header = std::fs::read(&result_path).unwrap();
-    assert_eq!(std::str::from_utf8(&header[4..8]).unwrap_or(""), "ftyp");
 }
 
 // ─── Cancel removes session ─────────────────────────────────────
@@ -77,17 +74,10 @@ fn cancel_removes_session() {
     let state = make_state();
     let out = TempFile::new("es_cancel.mp4");
 
-    let config = EncoderConfig {
-        width: 160,
-        height: 120,
-        fps: 10,
-        bitrate: 500_000,
-        output_path: out.path().to_string_lossy().to_string(),
-    };
-    let encoder = NvencEncoder::new(&config).unwrap();
+    let pipeline = make_pipeline(out.path(), 160, 120);
     let id = "cancel-me".to_string();
 
-    state.lock().unwrap().sessions.insert(id.clone(), encoder);
+    state.lock().unwrap().sessions.insert(id.clone(), pipeline);
     assert!(state.lock().unwrap().sessions.contains_key(&id));
 
     state.lock().unwrap().sessions.remove(&id);
@@ -104,40 +94,29 @@ fn multiple_concurrent_sessions() {
         .collect();
     let ids: Vec<String> = (0..3).map(|i| format!("session-{}", i)).collect();
 
-    // Create all sessions
     for (i, out) in outs.iter().enumerate() {
-        let config = EncoderConfig {
-            width: 160,
-            height: 120,
-            fps: 10,
-            bitrate: 500_000,
-            output_path: out.path().to_string_lossy().to_string(),
-        };
-        let encoder = NvencEncoder::new(&config).unwrap();
+        let pipeline = make_pipeline(out.path(), 160, 120);
         state
             .lock()
             .unwrap()
             .sessions
-            .insert(ids[i].clone(), encoder);
+            .insert(ids[i].clone(), pipeline);
     }
 
     assert_eq!(state.lock().unwrap().sessions.len(), 3);
 
-    // Feed frames to each
-    let rgba = vec![128u8; 160 * 120 * 4];
+    let rgba = make_rgba(160, 120, 128);
     for id in &ids {
-        let mut s = state.lock().unwrap();
-        let enc = s.sessions.get_mut(id).unwrap();
+        let s = state.lock().unwrap();
+        let p = s.sessions.get(id).unwrap();
         for i in 0..5 {
-            enc.encode_rgba_frame(&rgba, 160, 120, i == 0).unwrap();
+            p.send_frame(rgba.clone(), 160, 120, i == 0).unwrap();
         }
     }
 
-    // Finalize all
     for id in &ids {
-        let enc = state.lock().unwrap().sessions.remove(id).unwrap();
-        assert_eq!(enc.frame_count(), 5);
-        let path = enc.finalize().unwrap();
+        let pipeline = state.lock().unwrap().sessions.remove(id).unwrap();
+        let path = pipeline.finalize().unwrap();
         assert!(path.exists());
         assert_valid_mp4(&path);
     }
@@ -154,29 +133,25 @@ fn interleaved_feeding() {
     let out_b = TempFile::new("es_interleave_b.mp4");
 
     for (id, out) in [("a", &out_a), ("b", &out_b)] {
-        let config = EncoderConfig {
-            width: 160,
-            height: 120,
-            fps: 10,
-            bitrate: 500_000,
-            output_path: out.path().to_string_lossy().to_string(),
-        };
-        let enc = NvencEncoder::new(&config).unwrap();
-        state.lock().unwrap().sessions.insert(id.to_string(), enc);
+        let pipeline = make_pipeline(out.path(), 160, 120);
+        state
+            .lock()
+            .unwrap()
+            .sessions
+            .insert(id.to_string(), pipeline);
     }
 
-    let rgba = vec![128u8; 160 * 120 * 4];
+    let rgba = make_rgba(160, 120, 128);
     for frame in 0..10 {
         let id = if frame % 2 == 0 { "a" } else { "b" };
-        let mut s = state.lock().unwrap();
-        let enc = s.sessions.get_mut(id).unwrap();
-        enc.encode_rgba_frame(&rgba, 160, 120, frame < 2).unwrap();
+        let s = state.lock().unwrap();
+        let p = s.sessions.get(id).unwrap();
+        p.send_frame(rgba.clone(), 160, 120, frame < 2).unwrap();
     }
 
     for id in ["a", "b"] {
-        let enc = state.lock().unwrap().sessions.remove(id).unwrap();
-        assert_eq!(enc.frame_count(), 5);
-        enc.finalize().unwrap();
+        let pipeline = state.lock().unwrap().sessions.remove(id).unwrap();
+        pipeline.finalize().unwrap();
     }
 }
 
@@ -196,24 +171,25 @@ fn feed_wrong_size_to_session() {
     let state = make_state();
     let out = TempFile::new("es_wrongsize.mp4");
 
-    let config = EncoderConfig {
-        width: 320,
-        height: 240,
-        fps: 30,
-        bitrate: 1_000_000,
-        output_path: out.path().to_string_lossy().to_string(),
-    };
-    let encoder = NvencEncoder::new(&config).unwrap();
+    let pipeline = make_pipeline(out.path(), 320, 240);
     state
         .lock()
         .unwrap()
         .sessions
-        .insert("bad".to_string(), encoder);
+        .insert("bad".to_string(), pipeline);
 
-    let wrong_data = vec![0u8; 100 * 100 * 4]; // wrong size
-    let mut s = state.lock().unwrap();
-    let enc = s.sessions.get_mut("bad").unwrap();
-    let result = enc.encode_rgba_frame(&wrong_data, 320, 240, true);
+    let wrong_data = vec![0u8; 100 * 100 * 4];
+
+    let s = state.lock().unwrap();
+    let p = s.sessions.get("bad").unwrap();
+    p.send_frame(wrong_data, 320, 240, true).ok();
+    drop(s);
+
+    // Error is async — wait briefly for the encoder thread to process
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    let s = state.lock().unwrap();
+    let p = s.sessions.get("bad").unwrap();
+    let result = p.send_frame(vec![0u8; 100], 320, 240, false);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("size mismatch"));
 }

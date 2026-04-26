@@ -71,6 +71,7 @@ fn main() {
             commands::export::feed_frame,
             commands::export::finish_export,
             commands::export::cancel_export,
+            commands::export::get_frame_temp_dir,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

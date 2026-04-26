@@ -36,11 +36,14 @@ pub struct NvencEncoder {
     using_nvenc: bool,
     width: u32,
     height: u32,
+    rgba_frame: frame::Video,
+    yuv_frame: frame::Video,
 }
 
 // NvencEncoder is accessed only through Mutex<ExportState>
 unsafe impl Send for NvencEncoder {}
 
+#[derive(Clone)]
 pub struct EncoderConfig {
     pub width: u32,
     pub height: u32,
@@ -92,6 +95,10 @@ impl NvencEncoder {
             opts.set("tune", "hq");
             opts.set("rc", "vbr");
             opts.set("profile", "high");
+            opts.set("spatial-aq", "1");
+            opts.set("temporal-aq", "1");
+            opts.set("rc-lookahead", "32");
+            opts.set("surfaces", "32");
         } else {
             opts.set("preset", "fast");
             opts.set("profile", "high");
@@ -119,6 +126,9 @@ impl NvencEncoder {
         )
         .map_err(|e| format!("Failed to create scaler: {}", e))?;
 
+        let rgba_frame = frame::Video::new(Pixel::RGBA, config.width, config.height);
+        let yuv_frame = frame::Video::new(Pixel::YUV420P, config.width, config.height);
+
         Ok(Self {
             output_ctx,
             encoder,
@@ -130,6 +140,8 @@ impl NvencEncoder {
             using_nvenc,
             width: config.width,
             height: config.height,
+            rgba_frame,
+            yuv_frame,
         })
     }
 
@@ -153,9 +165,8 @@ impl NvencEncoder {
             ));
         }
 
-        let mut rgba_frame = frame::Video::new(Pixel::RGBA, width, height);
-        let stride = rgba_frame.stride(0);
-        let frame_data = rgba_frame.data_mut(0);
+        let stride = self.rgba_frame.stride(0);
+        let frame_data = self.rgba_frame.data_mut(0);
 
         let src_stride = (width * 4) as usize;
         for y in 0..height as usize {
@@ -166,20 +177,19 @@ impl NvencEncoder {
                 .copy_from_slice(&rgba_data[src_offset..src_offset + copy_len]);
         }
 
-        let mut yuv_frame = frame::Video::empty();
         self.scaler
-            .run(&rgba_frame, &mut yuv_frame)
+            .run(&self.rgba_frame, &mut self.yuv_frame)
             .map_err(|e| format!("Scaling failed: {}", e))?;
 
-        yuv_frame.set_pts(Some(self.frame_count));
-        yuv_frame.set_kind(if keyframe {
+        self.yuv_frame.set_pts(Some(self.frame_count));
+        self.yuv_frame.set_kind(if keyframe {
             ffmpeg::picture::Type::I
         } else {
             ffmpeg::picture::Type::None
         });
 
         self.encoder
-            .send_frame(&yuv_frame)
+            .send_frame(&self.yuv_frame)
             .map_err(|e| format!("Failed to send frame to encoder: {}", e))?;
 
         self.receive_and_write_packets()?;

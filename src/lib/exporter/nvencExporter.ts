@@ -103,6 +103,9 @@ export class NvencVideoExporter {
 			});
 			await renderer.initialize();
 
+			// Resolve optimal temp dir once (uses /dev/shm ramdisk on Linux)
+			const frameTempDir = await nvencAPI.getFrameTempDir();
+
 			const startResult = await nvencAPI.startNvencExport({
 				width: this.config.width,
 				height: this.config.height,
@@ -168,10 +171,7 @@ export class NvencVideoExporter {
 						const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
 						const { writeFile } = await import("@tauri-apps/plugin-fs");
-						const { tempDir } = await import("@tauri-apps/api/path");
-						let dir = await tempDir();
-						if (!dir.endsWith("/")) dir += "/";
-						const framePath = `${dir}nvenc-frame-${frameIndex}.raw`;
+						const framePath = `${frameTempDir}nvenc-frame-${frameIndex}.raw`;
 						await writeFile(framePath, new Uint8Array(imageData.data.buffer));
 
 						const result = await nvencAPI.feedFrame(
