@@ -278,6 +278,7 @@ export default function VideoEditor() {
 			setDuration(0);
 
 			setError(null);
+			await getAPI().setCurrentVideoPath(sourcePath);
 			setVideoSourcePath(sourcePath);
 			setVideoPath(await toPlayableUrl(sourcePath));
 			setWebcamVideoSourcePath(webcamSourcePath);
@@ -391,6 +392,7 @@ export default function VideoEditor() {
 				if (cliFile) {
 					const videoUrl = await toPlayableUrl(cliFile);
 					console.log("[VideoEditor] Video URL:", videoUrl);
+					await getAPI().setCurrentVideoPath(cliFile);
 					setVideoSourcePath(cliFile);
 					setVideoPath(videoUrl);
 					setWebcamVideoSourcePath(null);

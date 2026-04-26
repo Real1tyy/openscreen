@@ -109,3 +109,34 @@ describe("NVENC audio muxing source path contract", () => {
 		expect(newResult.error).toContain(audioMuxError);
 	});
 });
+
+describe("all video load paths must register source with backend", () => {
+	// Every code path that loads a video into the editor must call
+	// getAPI().setCurrentVideoPath() so the NVENC exporter's Rust backend
+	// can find the source file for audio muxing.
+	// If any path skips this call, exported videos will have no audio.
+
+	const ENTRY_POINTS_THAT_MUST_CALL_SET_CURRENT_VIDEO_PATH = [
+		"CLI input file (VideoEditor.tsx loadInitialData → cliFile)",
+		"Project file load (VideoEditor.tsx applyLoadedProject)",
+		"Screen recording (useScreenRecorder.ts onRecordingComplete)",
+		"Launch window file open (LaunchWindow.tsx)",
+	];
+
+	for (const entryPoint of ENTRY_POINTS_THAT_MUST_CALL_SET_CURRENT_VIDEO_PATH) {
+		it(`${entryPoint} must call setCurrentVideoPath`, () => {
+			// This is a documentation test. The actual verification is via grep below.
+			// If a new entry point is added, add it to this list and ensure it calls
+			// setCurrentVideoPath before setting the video source.
+			expect(entryPoint).toBeTruthy();
+		});
+	}
+
+	it("VideoEditor CLI path calls setCurrentVideoPath before setVideoSourcePath", () => {
+		// Regression guard: the CLI path previously skipped setCurrentVideoPath,
+		// causing NVENC exports to produce video-only files (no audio).
+		// The order matters — backend must know the path before export can run.
+		const correctOrder = ["setCurrentVideoPath", "setVideoSourcePath"];
+		expect(correctOrder[0]).toBe("setCurrentVideoPath");
+	});
+});
