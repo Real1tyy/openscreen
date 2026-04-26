@@ -1,12 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod audio_muxer;
-mod commands;
-mod encoder;
-mod state;
-
-use commands::export::ExportState;
-use state::AppState;
+use openscreen::commands;
+use openscreen::commands::export::ExportState;
+use openscreen::state::AppState;
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};

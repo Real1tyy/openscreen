@@ -233,7 +233,7 @@ impl NvencEncoder {
     }
 }
 
-fn find_best_h264_encoder() -> (codec::codec::Codec, bool) {
+pub fn find_best_h264_encoder() -> (codec::codec::Codec, bool) {
     if let Some(nvenc) = encoder::find_by_name("h264_nvenc") {
         return (nvenc, true);
     }
