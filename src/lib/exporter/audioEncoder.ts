@@ -6,6 +6,12 @@ const AUDIO_BITRATE = 128_000;
 const DECODE_BACKPRESSURE_LIMIT = 20;
 const MIN_SPEED_REGION_DELTA_MS = 0.0001;
 
+export interface AudioProcessResult {
+	processed: boolean;
+	chunksEncoded: number;
+	error?: string;
+}
+
 export class AudioProcessor {
 	private cancelled = false;
 
@@ -16,7 +22,7 @@ export class AudioProcessor {
 		trimRegions?: TrimRegion[],
 		speedRegions?: SpeedRegion[],
 		readEndSec?: number,
-	): Promise<void> {
+	): Promise<AudioProcessResult> {
 		const sortedTrims = trimRegions ? [...trimRegions].sort((a, b) => a.startMs - b.startMs) : [];
 		const sortedSpeedRegions = speedRegions
 			? [...speedRegions]
@@ -24,7 +30,7 @@ export class AudioProcessor {
 					.sort((a, b) => a.startMs - b.startMs)
 			: [];
 
-		await this.processAudio(demuxer, muxer, sortedTrims, sortedSpeedRegions, readEndSec);
+		return this.processAudio(demuxer, muxer, sortedTrims, sortedSpeedRegions, readEndSec);
 	}
 
 	private async processAudio(
@@ -33,19 +39,21 @@ export class AudioProcessor {
 		sortedTrims: TrimRegion[],
 		sortedSpeedRegions: SpeedRegion[],
 		readEndSec?: number,
-	): Promise<void> {
+	): Promise<AudioProcessResult> {
 		let audioConfig: AudioDecoderConfig;
 		try {
 			audioConfig = (await demuxer.getDecoderConfig("audio")) as AudioDecoderConfig;
-		} catch {
-			console.warn("[AudioProcessor] No audio track found, skipping");
-			return;
+		} catch (e) {
+			throw new Error(
+				`Failed to get audio decoder config: ${e instanceof Error ? e.message : String(e)}`,
+			);
 		}
 
 		const codecCheck = await AudioDecoder.isConfigSupported(audioConfig);
 		if (!codecCheck.supported) {
-			console.warn("[AudioProcessor] Audio codec not supported:", audioConfig.codec);
-			return;
+			throw new Error(
+				`Audio codec "${audioConfig.codec}" is not supported by this browser`,
+			);
 		}
 
 		// Phase 1: Decode audio from source, skipping trimmed regions
@@ -95,9 +103,13 @@ export class AudioProcessor {
 			decoder.close();
 		}
 
-		if (this.cancelled || decodedFrames.length === 0) {
+		if (this.cancelled) {
 			for (const frame of decodedFrames) frame.close();
-			return;
+			return { processed: false, chunksEncoded: 0 };
+		}
+
+		if (decodedFrames.length === 0) {
+			throw new Error("Audio decoding produced no frames — the audio track may be corrupt or empty");
 		}
 
 		// Phase 2: Re-encode with timestamps adjusted for trim gaps and speed regions
@@ -122,9 +134,8 @@ export class AudioProcessor {
 
 		const encodeSupport = await AudioEncoder.isConfigSupported(encodeConfig);
 		if (!encodeSupport.supported) {
-			console.warn("[AudioProcessor] Opus encoding not supported, skipping audio");
 			for (const frame of decodedFrames) frame.close();
-			return;
+			throw new Error("Opus audio encoding is not supported by this browser");
 		}
 
 		encoder.configure(encodeConfig);
@@ -156,14 +167,22 @@ export class AudioProcessor {
 		}
 
 		// Phase 3: Flush encoded chunks to muxer
+		let muxedChunks = 0;
 		for (const { chunk, meta } of encodedChunks) {
 			if (this.cancelled) break;
 			await muxer.addAudioChunk(chunk, meta);
+			muxedChunks++;
+		}
+
+		if (!this.cancelled && muxedChunks === 0) {
+			throw new Error("Audio encoding produced no output chunks");
 		}
 
 		console.log(
-			`[AudioProcessor] Processed ${decodedFrames.length} audio frames, encoded ${encodedChunks.length} chunks`,
+			`[AudioProcessor] Processed ${decodedFrames.length} audio frames, encoded ${muxedChunks} chunks`,
 		);
+
+		return { processed: true, chunksEncoded: muxedChunks };
 	}
 
 	private cloneWithTimestamp(src: AudioData, newTimestamp: number): AudioData {

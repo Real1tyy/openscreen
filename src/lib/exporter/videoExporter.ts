@@ -340,24 +340,25 @@ export class VideoExporter {
 
 			if (hasAudio && !this.cancelled) {
 				const demuxer = streamingDecoder.getDemuxer();
-				if (demuxer) {
-					console.log("[VideoExporter] Processing audio track...");
-					this.audioProcessor = new AudioProcessor();
-					try {
-						await this.audioProcessor.process(
-							demuxer,
-							muxer,
-							this.config.videoUrl,
-							this.config.trimRegions,
-							this.config.speedRegions,
-							readEndSec,
-						);
-					} catch (audioError) {
-						throw new Error(
-							`Audio processing failed: ${audioError instanceof Error ? audioError.message : String(audioError)}`,
-						);
-					}
+				if (!demuxer) {
+					throw new Error("Audio track detected but demuxer is unavailable");
 				}
+				console.log("[VideoExporter] Processing audio track...");
+				this.audioProcessor = new AudioProcessor();
+				const audioResult = await this.audioProcessor.process(
+					demuxer,
+					muxer,
+					this.config.videoUrl,
+					this.config.trimRegions,
+					this.config.speedRegions,
+					readEndSec,
+				);
+				if (!audioResult.processed || audioResult.chunksEncoded === 0) {
+					throw new Error(
+						audioResult.error || "Audio processing completed but produced no output",
+					);
+				}
+				console.log(`[VideoExporter] Audio: ${audioResult.chunksEncoded} chunks muxed`);
 			}
 
 			const blob = await muxer.finalize();
