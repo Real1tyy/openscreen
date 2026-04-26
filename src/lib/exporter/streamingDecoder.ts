@@ -216,6 +216,13 @@ export class StreamingVideoDecoder {
 			audioCodec: audioStream?.codec_string,
 		};
 
+		console.log("[StreamingDecoder] Metadata result:", {
+			hasAudio: this.metadata.hasAudio,
+			audioCodec: this.metadata.audioCodec,
+			videoDuration: this.metadata.duration,
+			videoCodec: this.metadata.codec,
+		});
+
 		return this.metadata;
 	}
 

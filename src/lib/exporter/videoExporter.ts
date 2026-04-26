@@ -154,6 +154,11 @@ export class VideoExporter {
 			await this.initializeEncoder(encoderPreference);
 
 			const hasAudio = videoInfo.hasAudio;
+			console.log("[VideoExporter] Audio detection:", {
+				hasAudio,
+				audioCodec: videoInfo.audioCodec,
+				sourceUrl: this.config.videoUrl.slice(0, 100),
+			});
 			const muxer = new VideoMuxer(this.config, hasAudio);
 			this.muxer = muxer;
 			await muxer.initialize();
@@ -338,12 +343,18 @@ export class VideoExporter {
 				phase: "finalizing",
 			});
 
+			console.log("[VideoExporter] Pre-audio state:", {
+				hasAudio,
+				cancelled: this.cancelled,
+				demuxerAvailable: !!streamingDecoder.getDemuxer(),
+			});
 			if (hasAudio && !this.cancelled) {
 				const demuxer = streamingDecoder.getDemuxer();
 				if (!demuxer) {
 					throw new Error("Audio track detected but demuxer is unavailable");
 				}
-				console.log("[VideoExporter] Processing audio track...");
+				console.log("[VideoExporter] Starting audio processing...");
+				const audioStartTime = performance.now();
 				this.audioProcessor = new AudioProcessor();
 				const audioResult = await this.audioProcessor.process(
 					demuxer,
@@ -353,12 +364,19 @@ export class VideoExporter {
 					this.config.speedRegions,
 					readEndSec,
 				);
+				console.log("[VideoExporter] Audio processing completed:", {
+					...audioResult,
+					durationMs: Math.round(performance.now() - audioStartTime),
+				});
 				if (!audioResult.processed || audioResult.chunksEncoded === 0) {
 					throw new Error(
 						audioResult.error || "Audio processing completed but produced no output",
 					);
 				}
-				console.log(`[VideoExporter] Audio: ${audioResult.chunksEncoded} chunks muxed`);
+			} else if (!hasAudio) {
+				console.log("[VideoExporter] Skipping audio — source has no audio track");
+			} else {
+				console.log("[VideoExporter] Skipping audio — export was cancelled");
 			}
 
 			const blob = await muxer.finalize();

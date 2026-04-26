@@ -1222,8 +1222,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					resolvedWallpaper.startsWith("asset://")),
 		);
 		const backgroundStyle: React.CSSProperties = isImageUrl
-			? { background: `url("${resolvedWallpaper}") center / cover no-repeat` }
-			: { background: resolvedWallpaper || "" };
+			? {
+					backgroundImage: `url("${resolvedWallpaper}")`,
+					backgroundSize: "cover",
+					backgroundPosition: "center",
+					backgroundRepeat: "no-repeat",
+				}
+			: {
+					backgroundImage: "none",
+					background: resolvedWallpaper || "",
+				};
 
 		return (
 			<div
