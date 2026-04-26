@@ -1,163 +1,156 @@
-# Code Quality Audit: Entire Repository
+# Code Quality Audit: OpenScreen (Full Repository)
 
-**Date**: 2026-04-25
-**Scope**: Full repository audit — `src/`, `electron/`, `src-tauri/`
-**Source files analyzed**: 108
-**Test files analyzed**: 40
-**Total lines of source (non-test)**: ~18,500
-**Total lines of test**: ~4,500
+**Date**: 2026-04-26
+**Scope**: Full repository — `src/`, `electron/`, `src-tauri/`
+**Source files analyzed**: 134 (118 TS/TSX + 9 Rust + 7 Electron)
+**Test files analyzed**: 42
+**Total lines of source (non-test)**: ~21,600
+**Total lines of test**: ~5,200
 
 ---
 
 ## Executive Summary
 
-OpenScreen is a screen recorder + video editor supporting Electron and Tauri backends. The codebase has **solid TypeScript foundations** and **well-tested utility modules**, but suffers from **god components** (3 files over 1000 lines), **massive duplication** between Electron/Tauri layers, **zero integration tests**, and **untested critical paths** (export pipeline, recording, UI components). The biggest quality risk is the export pipeline: `frameRenderer.ts` (912 lines, 0 tests) renders every exported frame and has potential VideoFrame memory leaks. A secondary concern is **two security vulnerabilities** in both Electron and Tauri `write-text-file` handlers that accept arbitrary file paths without validation.
+OpenScreen is a dual-runtime (Tauri + Electron) desktop video editor with a React/TypeScript frontend and Rust backend. The codebase has **solid architecture in its hook/handler layer** (well-tested, good separation) but suffers from **5 god files totaling 5,534 lines** that concentrate 15+ responsibilities each, **85+ DRY violations** across the Electron/Tauri bridge layer, **3 security issues** (disabled webSecurity, symlink traversal, unsafe Send), and **64% of source files lacking any test coverage** — with the entire export pipeline (the highest-risk code) essentially untested.
 
 **Highest-impact improvements**:
-1. Fix `write-text-file` path validation (security)
-2. Split the 3 god components (VideoEditor, VideoPlayback, TimelineEditor)
-3. Add tests for `frameRenderer.ts`, `useExport.ts`, `useScreenRecorder.ts`
-4. Consolidate duplicated logic across Electron/Tauri
-5. Extract shared region operation utilities (DRY)
+1. Fix security issues (webSecurity, symlink traversal, write-text-file validation)
+2. Split the 3 god components (TimelineEditor, VideoPlayback, VideoEditor)
+3. Close export pipeline test gaps (frameRenderer, audioEncoder, videoExporter)
+4. Deduplicate IPC handler boilerplate (50+ handlers, ~1,200 lines of repetition)
+5. Extract shared region operation utilities
 
 ---
 
 ## Quality Scorecard
 
-| Module | Read | Maint | DRY | Mod | Test | Robust | Extend | Consist |
+| Module | Read | Maint | DRY | Mod | Test | Robust | Ext | Consist |
 |---|---|---|---|---|---|---|---|---|
-| `src/components/video-editor/` | 3 | 2 | 2 | 2 | 2 | 3 | 2 | 3 |
-| `src/components/video-editor/hooks/` | 4 | 4 | 3 | 4 | 4 | 3 | 4 | 4 |
-| `src/components/video-editor/videoPlayback/` | 4 | 3 | 3 | 3 | 4 | 3 | 3 | 4 |
-| `src/components/video-editor/timeline/` | 3 | 2 | 2 | 3 | 3 | 3 | 2 | 3 |
-| `src/components/video-editor/settings/` | 3 | 3 | 2 | 3 | 1 | 3 | 3 | 3 |
-| `src/lib/exporter/` | 3 | 2 | 3 | 3 | 2 | 2 | 2 | 3 |
-| `src/lib/` (utilities) | 4 | 4 | 3 | 4 | 4 | 4 | 4 | 4 |
+| `src/components/video-editor/` | 2 | 2 | 2 | 2 | 1 | 3 | 2 | 3 |
+| `src/components/video-editor/hooks/` | 4 | 4 | 3 | 4 | 5 | 4 | 4 | 4 |
+| `src/components/video-editor/timeline/` | 2 | 2 | 2 | 2 | 4 | 3 | 2 | 3 |
+| `src/components/video-editor/videoPlayback/` | 3 | 3 | 3 | 3 | 4 | 3 | 3 | 3 |
 | `src/hooks/` | 3 | 3 | 3 | 3 | 2 | 3 | 3 | 3 |
-| `electron/` | 3 | 2 | 2 | 2 | 1 | 2 | 2 | 3 |
-| `src-tauri/` | 3 | 2 | 2 | 2 | 3 | 2 | 2 | 3 |
+| `src/lib/exporter/` | 3 | 2 | 3 | 2 | 2 | 2 | 2 | 3 |
+| `src/lib/` (other) | 4 | 4 | 4 | 4 | 4 | 4 | 4 | 4 |
+| `src/utils/` | 4 | 4 | 4 | 4 | 3 | 4 | 4 | 4 |
+| `src/contexts/` | 3 | 3 | 4 | 3 | 1 | 3 | 3 | 3 |
+| `src-tauri/src/` | 3 | 3 | 3 | 3 | 2 | 2 | 3 | 3 |
+| `electron/` | 2 | 2 | 1 | 2 | 1 | 2 | 2 | 2 |
 
-Scale: 1 (poor) - 5 (excellent)
+Scale: 1 = poor, 5 = excellent
 
 ---
 
 ## Source Code Issues
 
-### Critical (High Impact, Safe to Fix)
+### Critical (High Impact)
 
 | Location | Smell | Dimension | Technique | Effort | Risk |
 |---|---|---|---|---|---|
-| `electron/ipc/handlers.ts:955` | **SECURITY**: `write-text-file` accepts arbitrary path, no validation | Robustness | Add `isPathAllowed()` check before write | Quick | Low |
-| `src-tauri/src/commands/file_io.rs:1077` | **SECURITY**: `write_text_file` accepts arbitrary path, no validation | Robustness | Add `is_path_allowed()` check before write | Quick | Low |
-| `TimelineEditor.tsx` (1698 lines) | God component: 52 props, 5 inner components, timeline + keyboard + context menu | Modularity | Extract inner components to files, group props into interfaces | Large | Medium |
-| `VideoPlayback.tsx` (1391 lines) | God component: 37 props, 21 refs, Pixi rendering + playback + zoom + annotations | Modularity | Split into VideoCanvas, VideoOverlays, PlaybackController | Large | Medium |
-| `VideoEditor.tsx` (1125 lines) | God component: 16 useState calls, 8 hooks, orchestrator + layout + persistence | Modularity | Extract useProjectState, reduce prop drilling with context | Large | Medium |
-| `frameRenderer.ts:584-738` | `updateAnimationState()` is 154 lines mixing zoom, smoothing, transitions, motion | Modularity | Extract `computeAutoFollowSmoothing()`, `applyZoomTransition()`, `computeMotionIntensity()` | Medium | Low |
-| `frameRenderer.ts:275-396` | `setupBackground()` is 121 lines handling 5 background types with nested async | Modularity | Extract handler per background type | Medium | Low |
-| `ipc/handlers.ts` (962 lines) | God module: 40+ IPC handlers, cursor telemetry, session storage, project loading | Modularity | Split into paths.ts, sessions.ts, telemetry.ts, projects.ts | Large | Medium |
-| `file_io.rs` (1347 lines) | God module: file I/O, telemetry, projects, dialogs, all mixed | Modularity | Split into paths.rs, sessions.rs, telemetry.rs, projects.rs | Large | Medium |
-| `TimelineEditor.tsx:985-1031` | 4 nearly identical forEach blocks normalizing zoom/trim/speed/chapter regions | DRY | Extract `normalizeRegionSpan(region, totalMs, minDurationMs)` | Quick | Low |
-| `TimelineEditor.tsx:1080-1110 vs 1209-1239` | `handleAddZoom` and `handleAddTrim` are near-identical (sort, find next, check overlap) | DRY | Extract `createRegionAtPosition(regions, startPos, duration)` | Quick | Low |
-| `SettingsPanel.tsx` (705 lines) | 54 props interface, crop modal + export controls inline | Modularity | Extract CropModal, ExportControls as separate components | Medium | Low |
-| `AnnotationSettingsPanel.tsx` (624 lines) | 6 tabs + styling + color selectors all in one file | Modularity | Extract TextStyleControls, ArrowControls, ColorPicker | Medium | Low |
+| `electron/windows.ts:100` | **SECURITY**: `webSecurity: false` disables CORS, allows mixed content, enables script injection | Robustness | Remove flag; add specific CORS exceptions if needed | Quick | High |
+| `electron/ipc/handlers.ts:43-47` + `src-tauri/src/commands/file_io.rs:23-27` | **SECURITY**: Symlink traversal — `path.resolve()` / `canonicalize()` fallback allows sandbox escape | Robustness | Always require canonicalization success; use `fs.realpathSync()` | Quick | High |
+| `electron/ipc/handlers.ts:955` + `src-tauri/src/commands/file_io.rs:1077` | **SECURITY**: `write-text-file` accepts arbitrary path without validation | Robustness | Add `isPathAllowed()` / `is_path_allowed()` check | Quick | Low |
+| `src-tauri/src/encoder.rs:12-13,42` | **SECURITY**: `unsafe impl Send` on `SendScaler` and `NvencEncoder` — FFmpeg `SwsContext` may not be thread-safe | Robustness | Add synchronization or document single-threaded access guarantee | Medium | High |
+| `TimelineEditor.tsx` (1,667 LOC) | God component: ~15 responsibilities (playback cursor, axis labels, context menus, keyboard shortcuts, zoom suggestions, trim/annotation/speed/chapter management, selection, state mutations) | Modularity | Extract `<TrimContextMenu>`, `useTimelineKeyboard` hook, zoom suggestion algorithm to pure utility | Large | Medium |
+| `VideoPlayback.tsx` (1,391 LOC) | Monolithic PixiJS renderer mixing video loading, layout calc, overlay rendering, zoom transforms, motion blur, webcam compositing, annotation rendering | Modularity | Extract rendering layers into composable modules | Large | Medium |
+| `VideoEditor.tsx` (1,125 LOC) | Orchestrator handling 15+ concerns: state sync, project persistence, undo/redo, export coordination, keyboard shortcuts, fullscreen, project dialogs, locale | Modularity | Create intermediate orchestrators for project management, export coordination | Large | Medium |
+| `frameRenderer.ts` (919 LOC) | Mixed abstraction: gradient parsing + annotation rendering + webcam masking + zoom transforms + motion blur all sequential in one `renderFrame()` call | Modularity, Testability | Split into gradientRenderer, annotationRenderer, webcamCompositor, zoomTransformer | Medium | Low |
+| `useScreenRecorder.ts` (732 LOC) | Single hook managing screen capture, webcam recording, audio mixing, media encoding, bitrate calc, device enumeration, codec selection | Modularity | Split into `useScreenCapture`, `useWebcamCapture`, `useAudioMixing` | Medium | Medium |
+| `handlers.ts` (966 LOC) | 50+ IPC handlers with identical try/catch/response boilerplate; no handler factory | DRY | Extract `createHandler<Args, Return>()` factory | Medium | Low |
+| `file_io.rs` (1,347 LOC) | God module: file I/O, telemetry, projects, dialogs all mixed | Modularity | Split into paths.rs, sessions.rs, telemetry.rs, projects.rs | Large | Medium |
 
 ### Important (Medium Impact)
 
 | Location | Smell | Dimension | Technique | Effort | Risk |
 |---|---|---|---|---|---|
+| `SettingsPanel.tsx` (695 LOC) | 54-prop interface, nested accordion sections for 8+ settings areas | Modularity | Extract per-section components | Medium | Low |
+| `AnnotationSettingsPanel.tsx` (611 LOC) | Handles text, image, figure annotations with complex font/color/style state in one render | Modularity | Extract per-annotation-type sub-panels | Medium | Low |
+| `streamingDecoder.ts` (624 LOC) | WebCodecs decoder + frame extraction + timestamp tracking + error handling mixed | Modularity | Separate decoder lifecycle from frame management | Medium | Medium |
+| `TimelineEditor.tsx:1334-1357` | `useEffect` with **21 dependencies** for keyboard handler | Maintainability | Extract to `useTimelineKeyboard` hook with `useRef` for mutable state | Medium | Low |
+| `TimelineEditor.tsx:647-685` | 5-level deep nesting in `handleTimelineWheel` | Readability | Guard clauses (early returns) | Quick | Low |
+| `VideoPlayback.tsx` zoom calc | 6-level deep nesting in zoom region calculation | Readability | Extract conditions into named helper functions | Quick | Low |
+| 68+ locations across codebase | Hardcoded magic numbers: `1800` (suggestion spacing), `45_000_000` (4K bitrate), `150` (keyframe snap), `500` (zoom overlap), etc. | Readability | Create `src/lib/constants/{timing,encoding,ui}.ts` | Medium | Low |
 | `projectPersistence.ts:182-403` | `normalizeProjectEditor()` is 221 lines doing 6 normalizations | Modularity | Extract normalizer per region type | Medium | Low |
-| `useScreenRecorder.ts` (732 lines) | Single hook managing stream acquisition, audio mixing, encoding, file I/O, state | Modularity | Split into useAudioMixing, useRecordingState | Large | Medium |
-| `compositeLayout.ts:128-270` | `computeCompositeLayout()` is 143 lines mixing layout, sizing, border radius | Modularity | Extract WebcamSizeCalculator, LayoutPresetHandler | Medium | Low |
-| `streamingDecoder.ts:366-399` | VideoFrame clone not closed if `onFrame()` throws | Robustness | Wrap in try/finally | Quick | Low |
-| `videoExporter.ts:256-269` | Busy-wait with 5ms sleep for encoder backpressure | Robustness | Increase to 10ms, add exponential backoff | Quick | Low |
-| `src/lib/mathUtils.ts` vs `videoPlayback/mathUtils.ts` | Two separate mathUtils modules with no shared code | DRY | Consolidate into single module | Quick | Low |
-| `useCameraDevices.ts` / `useMicrophoneDevices.ts` | Both implement identical device enumeration + devicechange pattern | DRY | Extract generic `useMediaDevices(kind)` hook | Medium | Low |
-| `LaunchWindow.tsx:258-374` | Mic and webcam selectors are identical structure, duplicated | DRY | Extract DeviceSelector component | Medium | Low |
-| `BackgroundSection.tsx` / `AnnotationSettingsPanel.tsx` | `handleImageUpload` duplicated in both files | DRY | Extract to shared `lib/imageHandling.ts` | Quick | Low |
-| `regionReducers.ts:24-31` | Unsafe `as Array<{...}>` cast loses type safety | Testability | Use TypeScript generics or discriminated unions | Quick | Low |
-| `electron/ipc/handlers.ts:554-615` | Cursor telemetry handler is 62 lines with nested parsing | Readability | Extract `parseCursorSamples()` helper | Quick | Low |
-| Color `"#34B27B"` | Hardcoded 50+ times across all components | Consistency | Extract `BRAND_COLOR` constant | Quick | Low |
-| `videoDecoder.ts` (58 lines) | Dead code: class never imported or used anywhere | Maintainability | Delete file | Quick | Low |
+| `cli.rs:66-98` | Lossy argument parsing silently defaults on parse failure | Robustness | Error on invalid input instead of silent default | Quick | Low |
+| `platform.rs:17-23` | `request_camera_access()` always returns `granted: true` without checking | Robustness | Implement platform-specific permission request | Medium | Medium |
+| `windows.rs:231-253` | Cursor capture thread spawned without lifecycle tracking; no join handle stored | Robustness | Store handle, join on app exit, add single-thread guard | Medium | Medium |
+| `export.rs:9,149` | Export session HashMap grows without cleanup/timeout for abandoned sessions | Robustness | Add session expiry or garbage collection | Medium | Low |
+| `main.rs:85-86` | `.expect()` on path operations crashes app on failure | Robustness | Propagate error with `?` | Quick | Low |
+| `encoder.rs:147-154` | No validation that width/height are even (required for YUV420P) | Robustness | Validate dimensions before encoding | Quick | Low |
+| `encoder.rs:54-183` | All errors propagated as `Result<(), String>` — no structured error types | Maintainability | Create custom `Error` enum | Medium | Low |
+| `electron/preload.ts:5-166` | `ipcRenderer.invoke()` returns `Promise<any>` — no type safety on returns | Robustness | Add type guards or return serializable DTOs | Medium | Low |
+| `electron/ipc/handlers.ts:33` | Global mutable `approvedPaths` Set with no synchronization for concurrent IPC | Robustness | Use typed state management | Quick | Low |
 
 ### Minor (Quick Wins)
 
 | Location | Smell | Dimension | Technique | Effort | Risk |
 |---|---|---|---|---|---|
-| `TimelineEditor.tsx:63` | `SUGGESTION_SPACING_MS = 1800` unexplained | Readability | Add const name or comment | Quick | Low |
-| `useScreenRecorder.ts:138-146` | Bitrate thresholds (45M, 28M, 18M) hardcoded | Readability | Extract BITRATE_4K, BITRATE_QHD, BITRATE_BASE constants | Quick | Low |
-| `frameRenderer.ts:819-825` | Shadow blur/alpha values (48,16,8 / 0.7,0.5,0.3) hardcoded | Readability | Extract SHADOW_LAYERS config | Quick | Low |
-| `gifExporter.ts:166` | `quality: 10` without explaining scale | Readability | Name constant with explanation | Quick | Low |
-| `windows.ts/windows.rs` | Window sizes (600x160, 1200x800, 620x420) hardcoded | Consistency | Extract window dimension constants | Quick | Low |
-| `VideoEditor.tsx:751,782` | Hardcoded color `#34B27B` in JSX | Consistency | Use BRAND_COLOR constant | Quick | Low |
-| `VideoPlayback.tsx:1319-1331` | Annotation filtering/sorting inline in render, not memoized | Extensibility | Extract to useMemo | Quick | Low |
-| `frameRenderer.ts:411,417` | Double cast `as unknown as TextureSourceLike` | Readability | Fix type alignment or single cast | Quick | Low |
-| `EffectsSection.tsx:135-169` | SliderControl defined inline, should be shared | DRY | Extract to `components/ui/slider-control.tsx` | Quick | Low |
-| `focusUtils.ts:61` | Parameter `_stageSize: StageSize` unused | Maintainability | Remove parameter | Quick | Low |
+| 15+ locations | `Math.max(0, Math.min(val, lim))` instead of `clamp()` | DRY | Add generic `clamp(value, min, max)` to mathUtils | Quick | Low |
+| `handlers.ts:316` | Local `clamp()` copy instead of importing from mathUtils | DRY | Import from shared module | Quick | Low |
+| 5 handler files | Identical "add region" boilerplate: ID generation, state push, selection | DRY | Extract `createRegionFactory<T>(prefix)` | Quick | Low |
+| 3 locations | `if (e.target instanceof HTMLInputElement \|\| e.target instanceof HTMLTextAreaElement)` | DRY | Extract `isInputTarget(target)` utility | Quick | Low |
+| 5 handler files | Identical "delete region + clear selection" pattern | DRY | Consolidate into shared handler | Quick | Low |
+| 8+ locations | `if (!videoDuration \|\| videoDuration === 0 \|\| totalMs === 0)` validation gate | DRY | Extract `isValidDuration()` guard | Quick | Low |
+| `useCameraDevices.ts`, `useMicrophoneDevices.ts` | Duplicate `MediaDevice` interface definitions | DRY | Use single shared type | Quick | Low |
+| Multiple files | Scattered hardcoded color `#34B27B` (50+ instances) | Consistency | Extract to Tailwind config or constants | Quick | Low |
+| 5 different approaches | ID generation: `nextIdRef++` vs `deriveNextIdFromList` vs `uuidv4()` | Consistency | Standardize per context | Quick | Low |
+| Various | Inconsistent error returns: `{ success, error }` vs throw vs toast | Consistency | Document and enforce convention | Medium | Low |
+| `videoDecoder.ts` (58 lines) | Dead code: class never imported or used | Maintainability | Delete file | Quick | Low |
+| `focusUtils.ts:61` | Unused parameter `_stageSize` | Maintainability | Remove parameter | Quick | Low |
+| `src/lib/mathUtils.ts` vs `videoPlayback/mathUtils.ts` | Two separate mathUtils modules | DRY | Consolidate into single module | Quick | Low |
+| `BackgroundSection.tsx` / `AnnotationSettingsPanel.tsx` | `handleImageUpload` duplicated | DRY | Extract to shared utility | Quick | Low |
 
 ---
 
 ## Duplication Map
 
-### 1. Region Operations (3-5 instances)
+### Group 1: IPC Handler Boilerplate (~1,200 lines)
+**Locations**: `electron/ipc/handlers.ts` (50+ handlers), `electron/preload.ts` (30+ proxies), `src/lib/tauriBridge.ts` (30+ proxies)
+**Pattern**: Every handler wraps try/catch with `{ success: true/false }` response. Every preload/bridge method proxies with identical structure.
+**Unifying pattern**: Handler factory `createHandler<Args, Return>()` + typed response builders `success<T>(data)`, `error(msg)`
+**Effort**: 3-4 hours | **Saves**: ~600 lines
 
-**Locations**:
-- `TimelineEditor.tsx:985-1031` (normalization, 4x)
-- `TimelineEditor.tsx:1080-1110` (add zoom) / `1209-1239` (add trim)
-- `TimelineEditor.tsx:935-958` (delete handlers, 5x)
-- `videoPlayback/zoomRegionUtils.ts` (overlap detection)
+### Group 2: Event Listener Registration (5 instances x 2 runtimes)
+**Locations**: `electron/preload.ts:56-143`, `src/lib/tauriBridge.ts:114-220`
+**Pattern**: 5 identical event listeners (`stop-recording-from-tray`, `menu-load-project`, `menu-save-project`, `menu-save-project-as`, `request-save-before-close`) with platform-specific cleanup
+**Unifying pattern**: `createEventListener(channel, callback)` abstraction
+**Effort**: 2-3 hours | **Saves**: ~80 lines
 
-**Unifying pattern**: Extract `regionOperations.ts` with:
-- `normalizeRegionSpan(region, totalMs, minDurationMs)`
-- `createRegionAtPosition(regions, startPos, defaults)`
-- `deleteRegion(regions, id)`
-- `detectOverlap(regions, startMs, endMs)`
+### Group 3: Region Handler Operations (5 files)
+**Locations**: `useTrimHandlers.ts`, `useZoomHandlers.ts`, `useSpeedHandlers.ts`, `useAnnotationHandlers.ts`, `useChapterHandlers.ts`
+**Pattern**: Each implements add (ID gen + state push + select), delete (filter + clear selection), span change
+**Unifying pattern**: Generic `createRegionHandler<T>(prefix, list, pushState, select)` factory
+**Effort**: 2-3 hours | **Saves**: ~150 lines
 
-### 2. Session Storage (3 implementations)
+### Group 4: Response Object Construction (40+ instances)
+**Locations**: `electron/ipc/handlers.ts` throughout, `electron-env.d.ts` type definitions (30+ inline types)
+**Pattern**: `{ success: true, path, ... }` / `{ success: false, message, error }` repeated 40+ times
+**Unifying pattern**: `type ApiResponse<T> = SuccessResponse<T> | ErrorResponse` + builder functions
+**Effort**: 2-3 hours | **Saves**: ~200 lines of type definitions
 
-**Locations**:
-- `electron/ipc/handlers.ts:257-299` (Electron)
-- `src-tauri/src/commands/file_io.rs:129-200` (Tauri from files)
-- `src-tauri/src/commands/file_io.rs:399-466` (Tauri from buffer)
+### Group 5: Path Validation Logic (3 files)
+**Locations**: `handlers.ts:39-52`, `file_io.rs:23-35`, `tauriBridge.ts:33-62`
+**Pattern**: Canonicalize path, check within approved directory, check against approved set
+**Unifying pattern**: Shared path validation module
+**Effort**: 2-3 hours
 
-**All three write**: video file + session manifest JSON + cursor telemetry JSON + update state.
-~92 lines duplicated between Electron/Tauri, plus Tauri duplicates itself internally.
+### Group 6: Math Clamping (15+ inline instances)
+**Locations**: `TimelineEditor.tsx` (lines 162, 254, 319, 628, 857, 909, 926, 1057, 1072), `handlers.ts:316-318`
+**Pattern**: `Math.max(0, Math.min(val, lim))` instead of `clamp()`
+**Unifying pattern**: Add `clamp(value, min, max)` to mathUtils, import everywhere
+**Effort**: 30 min | **Saves**: ~30 lines + readability
 
-### 3. Device Enumeration (2 hooks)
+### Group 7: Constants (scattered)
+**Locations**: `handlers.ts:24-27` (file extensions), `types.ts:55-69` (GIF presets), various (encoding bitrates, timing thresholds, UI dimensions)
+**Unifying pattern**: Centralized `src/lib/constants/` directory
+**Effort**: 1-2 hours
 
-**Locations**:
-- `src/hooks/useCameraDevices.ts`
-- `src/hooks/useMicrophoneDevices.ts`
-
-**Both implement**: selectedDeviceId tracking, devicechange listener, enumerate + filter by kind, fallback to first device.
-
-**Unifying pattern**: `useMediaDevices(kind: "audioinput" | "videoinput")`
-
-### 4. Path Validation (2 implementations)
-
-**Locations**:
-- `electron/ipc/handlers.ts:43-53` (`isPathWithinDir`, `isPathAllowed`)
-- `src-tauri/src/commands/file_io.rs:23-35` (`is_path_within_dir`, `is_path_allowed`)
-
-**Same intent**: Canonicalize path, check if within approved directory, check against approved set.
-Different implementations with different edge-case handling (symlinks, fallbacks).
-
-### 5. Cursor Telemetry Parsing (2 implementations)
-
-**Locations**:
-- `electron/ipc/handlers.ts:554-615`
-- `src-tauri/src/commands/file_io.rs:999-1044`
-
-**Both**: Read JSON file, handle array vs `{samples:[]}` format, filter, clamp, return.
-
-### 6. UI Patterns (not extracted)
-
-| Pattern | Locations | Count |
-|---|---|---|
-| Button grid (`grid-cols-N`, active/inactive styling) | SpeedSection, ZoomSection, WebcamSection | 3 |
-| Color selector popup | AnnotationSettingsPanel (text, bg, arrow) | 3 |
-| Tab UI (Radix Tabs with brand color active state) | BackgroundSection, AnnotationSettingsPanel, ExportDialog | 3 |
-| Image upload handler | BackgroundSection:89, AnnotationSettingsPanel:106 | 2 |
-| Device selector dropdown | LaunchWindow:258 (mic), LaunchWindow:302 (webcam) | 2 |
+### Group 8: Session Storage (3 implementations)
+**Locations**: `handlers.ts:257-299` (Electron), `file_io.rs:129-200` (Tauri from files), `file_io.rs:399-466` (Tauri from buffer)
+**Pattern**: All three write video file + session manifest + cursor telemetry + update state
+**Unifying pattern**: Shared session writer abstraction
+**Effort**: 2-3 hours
 
 ---
 
@@ -165,35 +158,55 @@ Different implementations with different edge-case handling (symlinks, fallbacks
 
 ### Unprotected Critical Logic
 
-| Module | Lines | Risk | Why it matters |
+| Source File | LOC | Risk | Why It Matters |
 |---|---|---|---|
-| `frameRenderer.ts` | 912 | **Critical** | Renders every exported frame. VideoFrame leaks, zoom animation, compositing untested |
-| `useExport.ts` | 337 | **Critical** | Export orchestration hook. No test file exists |
-| `useScreenRecorder.ts` | 732 | **Critical** | Recording state machine. Complex audio mixing, stream setup untested |
-| `annotationRenderer.ts` | 309 | High | Text rendering, arrow rendering, clipping logic untested |
-| `audioEncoder.ts` | 255 | High | Timestamp adjustment with trims/speed. Zero tests |
-| `muxer.ts` | 90 | Medium | Muxing logic untested |
-| `VideoEditor.tsx` | 1125 | High | Main orchestrator, project loading, state management |
-| `VideoPlayback.tsx` | 1391 | High | Pixi.js rendering, 167-line ticker function |
-| `TimelineEditor.tsx` | 1698 | High | Timeline interactions, zoom suggestions |
-| All `electron/*.ts` files | 2256 | High | Desktop app: IPC, windows, CLI, preload. Zero tests |
+| `lib/exporter/videoExporter.ts` | ~300 | **CRITICAL** | Main video export orchestration — no tests for frame pipeline, progress, cancellation |
+| `lib/exporter/audioEncoder.ts` | ~255 | **CRITICAL** | Audio processing with trim/speed — bugs cause silent audio loss, sync issues |
+| `lib/exporter/frameRenderer.ts` | 919 | **CRITICAL** | Complex PixiJS rendering with zoom, crop, filters, annotations — all untested |
+| `lib/exporter/nvencExporter.ts` | ~150 | **HIGH** | GPU-accelerated export path — no fallback testing |
+| `lib/exporter/muxer.ts` | ~90 | **HIGH** | MP4 muxing — muxing bugs produce corrupt files |
+| `lib/exporter/annotationRenderer.ts` | ~309 | **HIGH** | Text/arrow rendering, clipping logic untested |
+| `hooks/useScreenRecorder.ts` | 732 | **HIGH** | Bitrate calculation, device switching, recording lifecycle untested |
+| `hooks/useMediaDevices.ts` | 136 | **MEDIUM** | Permission flow, device enumeration untested |
+| `components/video-editor/VideoPlayback.tsx` | 1,391 | **MEDIUM** | Crop interaction, zoom viewport, webcam overlay untested |
+| `contexts/I18nContext.tsx` | ~100 | **MEDIUM** | Context consumers could break silently |
+| `contexts/ShortcutsContext.tsx` | ~100 | **MEDIUM** | Keyboard shortcut registration untested |
+| All `electron/*.ts` files | 2,256 | **HIGH** | Desktop app: IPC, windows, CLI, preload — zero tests |
 
 ### Weak Tests
 
 | Test File | Problem | Action |
 |---|---|---|
-| `zoomRegionUtils.test.ts` | Hardcodes `TRANSITION_WINDOW_MS = 1015.05` instead of importing from source | Import constants |
+| `gifExporter.test.ts` (19 lines) | Only 2 dimension calculation tests; no aspect ratio edge cases | Add 8+ test cases for edge cases |
+| `videoExporter.browser.test.ts` (43 lines) | Only 1 test checking `success === true` | Add error path, audio sync, progress tests |
+| `gifExporter.browser.test.ts` | Minimal — only blob type/size check | Add frame accuracy, color fidelity tests |
 | `overlayUtils.test.ts` | Assertions like `toBeGreaterThanOrEqual(0)` too weak | Assert specific values |
-| `useTrimHandlers.test.ts` | Only tests rounding direction, not precision; missing invalid ID case | Add edge cases |
-| `useAnnotationHandlers.test.ts` | Type switching tested but old data not cleared; no bounds check | Add data cleanup tests |
-| `gifExporter.test.ts` | Only 20 lines (2 tests) for 379-line module | Expand substantially |
+| `zoomRegionUtils.test.ts` | Hardcodes `TRANSITION_WINDOW_MS = 1015.05` instead of importing | Import constants from source |
 
 ### Missing Test Types
 
-- **Integration tests**: Zero. No tests verify VideoEditor + VideoPlayback + Timeline together
-- **Property-based tests**: `fast-check` is installed but only used in `mathUtils.test.ts`; good candidates: `gradientParser.ts`, `compositeLayout.ts`, `timelineScaleUtils.ts`
-- **E2E coverage**: Only `gif-export.spec.ts` exists; no record-edit-export flow test
-- **Electron tests**: Zero coverage for desktop-specific code
+- **Property-based tests**: Export dimension calculations, time-range clamping, region overlap detection (fast-check is a devDependency already)
+- **Integration tests**: No tests verify VideoEditor + VideoPlayback + Timeline together
+- **E2E tests**: Only 1 GIF export spec; need Record-Trim-Export, Load-Edit-Save, Zoom+Annotation+Export
+- **Visual regression tests**: No snapshot tests for complex rendering
+- **Performance assertions**: No export completion time tests, no frame rate benchmarks
+- **Electron tests**: Zero coverage for any desktop-specific code
+- **Accessibility tests**: No a11y testing at all
+
+### Coverage by Domain
+
+| Domain | Source Files | Tested | Coverage | Quality |
+|---|---|---|---|---|
+| Editor Hooks | 10 | 10 | 100% | Excellent |
+| Timeline/Playback Utils | 11 | 10 | 91% | Good |
+| Lib (math, shortcuts, etc.) | 10 | 8 | 80% | Good |
+| Export/Encoding | 12 | 4 | 33% | Poor |
+| Media Hooks | 3 | 1 | 33% | Poor |
+| UI Components | 54 | 0 | 0% | N/A (presentation) |
+| Contexts | 2 | 0 | 0% | Poor |
+| Electron IPC | 7 | 0 | 0% | Poor |
+| Rust Backend | 9 | 1 (inline) | 11% | Poor |
+| **Total** | **118 + 16** | **42** | **31%** | **Fair** |
 
 ---
 
@@ -203,227 +216,232 @@ Different implementations with different edge-case handling (symlinks, fallbacks
 
 | Location | Violation | Fix |
 |---|---|---|
-| `VideoPlayback.tsx` | Canvas rendering + video playback + zoom animation + webcam overlay + annotation rendering | Split into VideoCanvas, ZoomAnimator, OverlayRenderer |
-| `TimelineEditor.tsx` | Timeline rendering + keyboard shortcuts + context menus + zoom suggestions + keyframe management | Extract KeyboardShortcutsProvider, ZoomSuggestionEngine |
-| `useScreenRecorder.ts` | Stream acquisition + audio mixing + encoder selection + file I/O + state management | Split into useAudioMixing, useRecordingState, useStreamCapture |
-| `ipc/handlers.ts` | 40+ handlers for paths, sessions, telemetry, projects, dialogs | Split into handler modules |
+| `TimelineEditor.tsx` | 15+ responsibilities in one component | Extract sub-components and hooks per concern |
+| `VideoPlayback.tsx` | Mixes React state management with PixiJS rendering internals | Separate rendering engine from React lifecycle |
+| `VideoEditor.tsx` | Orchestrator + layout + persistence + export coordination | Create intermediate orchestrator components |
+| `frameRenderer.ts` | `renderFrame()` does gradient, annotation, webcam, zoom, motion blur | One function per rendering concern |
+| `useScreenRecorder.ts` | Screen + webcam + audio + encoding + bitrate + device enum | Split into single-concern hooks |
+| `handlers.ts` | 50+ IPC handlers with shared mutable state | Group by domain, extract to handler modules |
 | `file_io.rs` | File I/O + telemetry + projects + dialogs + path validation | Split into focused modules |
 
 ### Open/Closed
 
 | Location | Violation | Fix |
 |---|---|---|
-| `frameRenderer.ts:275-396` | 5-way if/else for background types | Strategy pattern: `BackgroundRenderer` interface per type |
-| `TimelineEditor.tsx:1401-1461` | Growing conditional for each region type (zoom, trim, speed, chapter, annotation) | Region type registry with render function per type |
-| `SettingsPanel.tsx` | New settings sections require modifying 705-line file | Composition: register sections via config array |
+| `frameRenderer.ts:275-396` | 5-way if/else for background types | Strategy pattern: renderer per background type |
+| `TimelineEditor.tsx:1401-1461` | Growing conditional for each region type | Region type registry with render function per type |
+| `AnnotationSettingsPanel.tsx` | Growing if/switch chains for annotation types | Type-keyed renderer strategy |
+| `cli.rs:66-98` | Growing match on argument types | Config struct with field-level parsing |
 
 ### Dependency Inversion
 
 | Location | Violation | Fix |
 |---|---|---|
+| `VideoPlayback.tsx` | Direct PixiJS dependency throughout component | Push PixiJS to boundary; abstract renderer |
+| `handlers.ts:33` | Global mutable `approvedPaths` Set | Inject via dependency; use state management |
 | `useExport.ts` | Directly imports VideoExporter, GifExporter constructors | Inject exporter factory |
-| `useScreenRecorder.ts` | Direct MediaRecorder construction, file system access inline | Inject recording backend interface |
-| `compositeLayout.ts` | Hardcoded layout presets | Accept preset config as parameter |
+
+### Interface Segregation
+
+| Location | Violation | Fix |
+|---|---|---|
+| `electron-env.d.ts` | `ElectronAPI` interface with 50+ methods | Group into focused sub-interfaces: `FileAPI`, `ExportAPI`, `RecordingAPI` |
+| `SettingsPanel.tsx` | 54-prop interface | Group into focused prop interfaces per section |
 
 ---
 
 ## Pattern Alignment Gaps
 
-### Inconsistent Error Handling
+| Pattern | Expected | Actual | Impact |
+|---|---|---|---|
+| Error handling | Consistent per layer | Electron: `.ok()` / `catch(()=>{})` / `console.error`. Tauri: `.ok()` / `Result<>`. Frontend: try-catch + state / unhandled rejections | Silent failures, inconsistent UX |
+| ID generation | One approach per context | 5 approaches: `nextIdRef++`, `deriveNextIdFromList`, `uuidv4()`, sequential, timestamp | Collision risk, maintainability |
+| Result types | Single `ApiResult<T>` | 6 different structs in Tauri, inline types in Electron | Frontend must handle multiple shapes |
+| Region state updates | All use `pushState` for undo | Some bypass with local state | Undo/redo inconsistency |
+| Hook return shape | Consistent `{ actions, state }` | `useZoomHandlers` returns functions; `useTrimHandlers` returns state + functions | API inconsistency |
+| Ref-state duplication | Documented convention | Some hooks sync refs every render, others don't | Stale closure bugs |
+| Platform bridge | Single abstraction | Two parallel implementations with different patterns | Maintenance burden doubles |
 
-- **Electron**: Mix of `.ok()` (silent), `catch(() => {})` (swallow), and `catch(e => console.error(e))` (log-only)
-- **Tauri**: Mix of `.ok()` (silent) and `Result<>` (propagate)
-- **Frontend hooks**: Mix of try-catch with state update and unhandled promise rejections
-- **Recommendation**: Adopt single pattern per layer; all file ops should propagate errors
+---
 
-### Inconsistent Result Types (Tauri)
+## Security Issues (Immediate Action Required)
 
-6 different result structs: `GenericResult`, `SessionResult`, `ReadBinaryResult`, `VideoPathResult`, `ProjectLoadResult`, `CursorTelemetryResult`
-
-All share `success: bool` + optional error. Should unify into generic `ApiResult<T>`.
-
-### Ref-State Duplication Pattern
-
-Multiple hooks maintain both a `useState` value and a `useRef` pointing to the same data:
-- `useTrimHandlers.ts:37-39` (trimMarkStartMsRef + state)
-- `VideoPlayback.tsx:163-220` (21 refs duplicating props)
-- `useChapterHandlers.ts:29-30` (chaptersRef synced every render)
-
-This is a valid React pattern for closure access but applied inconsistently. Should document as project convention or consolidate.
+| Issue | Location | Severity | Fix |
+|---|---|---|---|
+| `webSecurity: false` | `electron/windows.ts:100` | CRITICAL | Remove; add specific CORS exceptions if needed |
+| Symlink traversal | `electron/ipc/handlers.ts:43-47`, `file_io.rs:23-27` | HIGH | Always require canonicalization success |
+| Unvalidated write | `handlers.ts:955`, `file_io.rs:1077` | HIGH | Add path validation before write |
+| `unsafe impl Send` | `encoder.rs:12-13,42` | HIGH | Add synchronization or document invariant |
+| Unbounded path approval | `handlers.ts:33` | MEDIUM | Add size limit, TTL, or scope restriction |
+| No IPC schema validation | Cross-cutting | MEDIUM | Validate messages against TS interfaces |
+| Missing file size limits | `handlers.ts:518`, `file_io.rs:421-428` | MEDIUM | Add max file size check |
+| No dimension validation | `encoder.rs:147-154` | MEDIUM | Validate even width/height for YUV420P |
 
 ---
 
 ## Quality Plan
 
-### Phase 1: Quick Wins (Safe, Mechanical)
+### Phase 1: Quick Wins (1-2 days, safe mechanical changes)
 
-1. **Fix `write-text-file` security vulnerability** in both Electron and Tauri
-   - Add `isPathAllowed()` / `is_path_allowed()` check
-   - Effort: 30 min | Risk: None
+1. **Fix security: `write-text-file` path validation** in Electron and Tauri — 30 min
+2. **Fix security: remove `webSecurity: false`** in Electron windows.ts — 15 min
+3. **Add `clamp(value, min, max)` to mathUtils** and replace 15+ inline calls — 1 hour
+4. **Extract `isInputTarget(target)` utility** from 3 duplicated keyboard filters — 15 min
+5. **Extract `isValidDuration()` guard** from 8+ duplicated validation gates — 15 min
+6. **Import `clamp` in handlers.ts** instead of local copy — 5 min
+7. **Consolidate `MediaDevice` type** — remove duplicate interfaces — 30 min
+8. **Delete dead `videoDecoder.ts`** (never imported) — 5 min
+9. **Remove unused `_stageSize` parameter** from focusUtils — 5 min
+10. **Extract brand color `#34B27B`** to constants — 1 hour
+11. **Fix hardcoded constants in tests** (import from source) — 30 min
+12. **Fix `main.rs` `.expect()` calls** — propagate errors with `?` — 15 min
 
-2. **Delete dead code** `src/lib/exporter/videoDecoder.ts` (58 lines, never imported)
-   - Effort: 5 min | Risk: None
+### Phase 2: DRY Consolidation (3-5 days)
 
-3. **Extract brand color constant** `BRAND_COLOR = "#34B27B"` used 50+ times
-   - Create `src/lib/constants/colors.ts`
-   - Effort: 1 hour | Risk: None
+13. **Create IPC handler factory** — reduce 50+ handlers from ~20 to ~5 lines each — 3-4 hours
+14. **Create typed response builders** — `success<T>(data)`, `error(msg, err)` — 2-3 hours
+15. **Extract event listener abstraction** — unify Electron/Tauri cleanup patterns — 2-3 hours
+16. **Create `createRegionHandler<T>` factory** — unify add/delete/select boilerplate — 2-3 hours
+17. **Consolidate path validation** into shared module — 2-3 hours
+18. **Group `ElectronAPI` interface** into `FileAPI`, `ExportAPI`, `RecordingAPI` — 2 hours
+19. **Consolidate mathUtils modules** (lib/ + videoPlayback/) — 1 hour
+20. **Extract `handleImageUpload` to shared utility** — 30 min
+21. **Consolidate Tauri session storage** (two 90%-identical implementations) — 2 hours
 
-4. **Extract region normalization** from TimelineEditor
-   - `normalizeRegionSpan(region, totalMs, minDurationMs)` replaces 4 identical blocks
-   - Effort: 30 min | Risk: Low
+### Phase 3: Structural Cleanup (1-2 weeks)
 
-5. **Extract region creation** from TimelineEditor
-   - `createRegionAtPosition(regions, startPos, defaults)` replaces handleAddZoom/handleAddTrim
-   - Effort: 30 min | Risk: Low
-
-6. **Extract delete handlers** from VideoEditor
-   - Single `handleDeleteRegion(type, id)` replaces 5 identical callbacks
-   - Effort: 30 min | Risk: Low
-
-7. **Remove unused parameter** `_stageSize` from `focusUtils.ts:61`
-   - Effort: 5 min | Risk: None
-
-8. **Fix hardcoded constants in tests** (import from source instead)
-   - `zoomRegionUtils.test.ts:7-9`, `overlayUtils.test.ts:10`
-   - Effort: 30 min | Risk: None
-
-### Phase 2: DRY Consolidation
-
-9. **Consolidate mathUtils** (`src/lib/mathUtils.ts` + `videoPlayback/mathUtils.ts`)
-   - Move easing/bezier functions to shared module
-   - Effort: 1 hour | Risk: Low
-
-10. **Extract `useMediaDevices(kind)` hook**
-    - Replaces useCameraDevices + useMicrophoneDevices duplication
-    - Effort: 2 hours | Risk: Low
-
-11. **Extract `handleImageUpload` to shared utility**
-    - Used in BackgroundSection and AnnotationSettingsPanel
-    - Effort: 30 min | Risk: Low
-
-12. **Extract SliderControl component**
-    - Currently inline in EffectsSection, usable in WebcamSection
-    - Effort: 1 hour | Risk: Low
-
-13. **Extract DeviceSelector component from LaunchWindow**
-    - Mic and webcam selectors are structural duplicates
-    - Effort: 1 hour | Risk: Low
-
-14. **Consolidate Tauri session storage**
-    - `store_recorded_session_from_files()` and `store_recorded_session()` share 90% logic
-    - Effort: 2 hours | Risk: Medium
-
-### Phase 3: Structural Cleanup
-
-15. **Split TimelineEditor.tsx** (1698 lines)
-    - Extract inner components (PlaybackCursor, TimelineAxis, TrimContextMenuItems) to files
-    - Group 52 props into interfaces (RegionHandlers, SelectionHandlers, LayoutHandlers)
+22. **Split `TimelineEditor.tsx`** (1,667 LOC) into:
+    - `<TimelineEditor>` container/orchestrator (~400 LOC)
+    - `<TrimContextMenu>` component
+    - `useTimelineKeyboard` hook (21-dep useEffect extracted)
+    - Flatten 5-level nesting with guard clauses
     - Effort: 8 hours | Risk: Medium
 
-16. **Split VideoPlayback.tsx** (1391 lines)
-    - Extract ticker function (167 lines) to `usePlaybackTicker` hook
-    - Split into VideoCanvas (Pixi), VideoOverlays (annotations), PlaybackController
+23. **Split `VideoPlayback.tsx`** (1,391 LOC) into:
+    - `<VideoPlayback>` React lifecycle orchestrator
+    - `pixiRenderer.ts` rendering engine
+    - `zoomInterpolator.ts` zoom region interpolation
+    - `motionBlurEngine.ts` motion blur calculation
     - Effort: 12 hours | Risk: Medium
 
-17. **Split VideoEditor.tsx** (1125 lines)
-    - Extract `applyLoadedProject` (74 lines) to utility
-    - Introduce context for shared state to reduce prop drilling
+24. **Split `VideoEditor.tsx`** (1,125 LOC) into:
+    - `<VideoEditor>` layout orchestrator
+    - `useProjectManager` hook (project load/save/reset)
+    - `useExportCoordinator` hook (export state)
     - Effort: 8 hours | Risk: Medium
 
-18. **Split ipc/handlers.ts** (962 lines)
-    - pathHandlers.ts, sessionHandlers.ts, telemetryHandlers.ts, projectHandlers.ts
-    - Effort: 4 hours | Risk: Low
-
-19. **Split file_io.rs** (1347 lines)
-    - paths.rs, sessions.rs, telemetry.rs, projects.rs
-    - Effort: 4 hours | Risk: Low
-
-20. **Split frameRenderer.ts** (912 lines)
-    - Extract `updateAnimationState()` (154 lines) to ZoomStateComputer
-    - Extract `setupBackground()` (121 lines) to BackgroundRenderer
-    - Extract `compositeWithShadows()` (88 lines) to CompositeRenderer
+25. **Split `frameRenderer.ts`** (919 LOC) into:
+    - `frameRenderer.ts` orchestrator (~200 LOC)
+    - `gradientRenderer.ts` CSS gradient parsing + rendering
+    - `annotationFrameRenderer.ts` annotation overlay
+    - `webcamCompositor.ts` webcam mask + compositing
     - Effort: 6 hours | Risk: Medium
 
-21. **Split SettingsPanel.tsx** (705 lines) and AnnotationSettingsPanel.tsx (624 lines)
-    - Extract crop modal, export controls, color pickers to separate files
+26. **Split `useScreenRecorder.ts`** (732 LOC) into:
+    - `useScreenCapture` — screen/window capture
+    - `useWebcamCapture` — webcam recording
+    - `useAudioMixing` — audio track management
+    - Effort: 6 hours | Risk: Medium
+
+27. **Split `handlers.ts`** (966 LOC) into:
+    - `pathHandlers.ts`, `sessionHandlers.ts`, `telemetryHandlers.ts`, `projectHandlers.ts`
+    - Effort: 4 hours | Risk: Low
+
+28. **Split `file_io.rs`** (1,347 LOC) into:
+    - `paths.rs`, `sessions.rs`, `telemetry.rs`, `projects.rs`
+    - Effort: 4 hours | Risk: Low
+
+29. **Split `SettingsPanel.tsx`** (695 LOC) and `AnnotationSettingsPanel.tsx` (611 LOC)
+    - Extract per-section components
     - Effort: 6 hours | Risk: Low
 
-### Phase 4: Test Hardening
+30. **Fix `encoder.rs` unsafe Send** — add proper synchronization or document invariant — 4 hours
 
-22. **Add `frameRenderer.test.ts`** - highest priority untested module
-    - Test setupBackground per type, updateAnimationState zoom logic, VideoFrame cleanup
-    - Effort: 8 hours | Risk: None
+### Phase 4: Test Hardening (1-2 weeks)
 
-23. **Add `useExport.test.ts`** - untested export orchestration
-    - Test format selection, dimension calculation, cancellation, progress
-    - Effort: 4 hours | Risk: None
+31. **Export pipeline tests** (CRITICAL):
+    - `audioEncoder.test.ts` — trim/speed processing, codec validation (8+ tests)
+    - `videoExporter.test.ts` — happy path, error handling, progress, cancellation (10+ tests)
+    - `frameRenderer.test.ts` — basic render, with annotations, with zoom, with blur (12+ tests)
+    - `nvencExporter.test.ts` — success path, fallback logic (5+ tests)
+    - `muxer.test.ts` — basic mux, audio+video, corrupt input (6+ tests)
+    - Effort: 20 hours
 
-24. **Add `useScreenRecorder.test.ts`** - untested recording state machine
-    - Test start/pause/resume/stop lifecycle, audio mixing, device management
-    - Effort: 6 hours | Risk: None
+32. **Media device tests** (HIGH):
+    - `useScreenRecorder.test.ts` — bitrate calc, device switching, pause/resume (10+ tests)
+    - `useMediaDevices.test.ts` — permission flow, enumeration, disconnect (8+ tests)
+    - Effort: 8 hours
 
-25. **Add `audioEncoder.test.ts`** - untested timestamp adjustment
-    - Test computeAdjustedTimestamp with trims and speed regions
-    - Effort: 2 hours | Risk: None
+33. **Context tests** (MEDIUM):
+    - `I18nContext.test.tsx` — provider rendering, locale switching, fallback
+    - `ShortcutsContext.test.tsx` — registration, conflict detection, cleanup
+    - Effort: 4 hours
 
-26. **Strengthen existing test assertions**
+34. **Property-based tests** with fast-check (already installed):
+    - Export dimension calculations
+    - Time-range clamping
+    - Region overlap detection
+    - Gradient CSS parsing
+    - Effort: 4 hours
+
+35. **Strengthen weak tests**:
     - Replace `toBeGreaterThanOrEqual(0)` with specific values
     - Add edge cases to useTrimHandlers (invalid ID, boundary durations)
-    - Effort: 4 hours | Risk: None
+    - Expand gifExporter.test.ts from 2 to 10+ tests
+    - Import constants from source instead of hardcoding in tests
+    - Effort: 4 hours
 
-27. **Add property-based tests** (fast-check already installed)
-    - `gradientParser.ts`, `compositeLayout.ts`, `timelineScaleUtils.ts`
-    - Effort: 4 hours | Risk: None
+36. **E2E tests** (3-5 new Playwright specs):
+    - Record-Trim-Export workflow
+    - Load-Edit-Save project workflow
+    - Zoom + Annotation + Export workflow
+    - Effort: 12 hours
 
-28. **Add integration test scaffold** for VideoEditor
-    - Verify trim+zoom+speed regions propagate through editor pipeline
-    - Effort: 8 hours | Risk: None
+37. **Test infrastructure**:
+    - Create `src/__tests__/fixtures.ts` with mock factories (region builders, device mocks, Tauri bridge mock)
+    - Add coverage reporting to vitest config (target: 60% statements)
+    - Effort: 4 hours
 
-### Phase 5: Composition & Extensibility
+### Phase 5: Composition & Extensibility (ongoing)
 
-29. **Introduce EditorContext** for shared state
-    - Replace 54-prop drilling through SettingsPanel
-    - Replace 52-prop drilling through TimelineEditor
-    - Effort: 12 hours | Risk: Medium
-
-30. **Background renderer strategy pattern**
-    - Replace 5-way if/else in frameRenderer.setupBackground()
-    - Register renderer per background type
-    - Effort: 4 hours | Risk: Low
-
-31. **Region type registry** for TimelineEditor
-    - Register render function, normalization, creation per region type
-    - Replaces growing conditional chains
-    - Effort: 6 hours | Risk: Medium
-
-32. **Unify Electron/Tauri result types**
-    - Single `ApiResult<T>` envelope for all backend responses
-    - Effort: 4 hours | Risk: Medium
+38. **Annotation type strategy pattern** — replace growing if/switch in AnnotationSettingsPanel — 4 hours
+39. **Background renderer strategy pattern** — replace 5-way if/else in frameRenderer — 4 hours
+40. **Region type registry** for TimelineEditor — register per-type render/normalize/create — 6 hours
+41. **Standardize error handling** — document convention, enforce across layers — 4 hours
+42. **Standardize ID generation** — one approach per context, documented — 2 hours
+43. **Unify Electron/Tauri result types** — single `ApiResult<T>` envelope — 4 hours
 
 ---
 
 ## Changes Applied
 
-None (analysis only).
+None — this is an analysis-only audit. No source files were modified.
 
 ---
 
 ## Remaining Opportunities
 
-- **i18n gaps**: Several hardcoded strings in TimelineEditor ("Press C to add chapter"), VideoEditor ("trim start: X")
-- **Performance**: VideoPlayback ticker runs `findActiveTrimRegion()` and `findActiveSpeedRegion()` with O(n) array scans every frame; pre-sorting or binary search would help
-- **Accessibility**: No keyboard navigation tests, no ARIA roles on custom controls
-- **Electron/Tauri path validation unification**: Both have subtly different canonicalization behavior (symlinks, fallbacks) that could lead to security divergence
-- **State machine formalization**: Recording state (idle/recording/paused/stopped) and export state transitions are implicit; a formal state machine would prevent invalid transitions
+- Visual regression testing (Chromatic/Percy) for complex rendering
+- Structured logging framework (replace `console.error` / `eprintln!`)
+- Export session garbage collection with timeout
+- Cursor sample circular buffer (prevent OOM on 24+ hour recordings — currently unbounded at 10Hz)
+- CSS module consolidation for scattered inline Tailwind colors
+- Accessibility testing (no a11y tests exist)
+- Performance benchmarks for frame rendering pipeline
+- State machine formalization for recording (idle/recording/paused/stopped) and export states
+- i18n gaps: several hardcoded strings in TimelineEditor and VideoEditor
+- O(n) array scans per frame in VideoPlayback ticker (`findActiveTrimRegion`, `findActiveSpeedRegion`); pre-sorting or binary search would help
 
 ---
 
 ## Risk Areas
 
-| Area | Risk | Why skipped |
+| Area | Risk | Why to proceed carefully |
 |---|---|---|
-| Refactoring VideoPlayback Pixi.js ticker | Behavior change risk | 167-line function with animation state, motion blur, adaptive smoothing. Needs comprehensive tests first |
-| Changing Electron/Tauri path validation | Security regression risk | Both have different edge-case handling; unifying could introduce bypasses |
-| Moving types.ts definitions | Breaking import chains | 30+ files import from this; needs coordinated update |
-| Changing useEditorHistory undo/redo structure | Data loss risk | History snapshots stored in specific format; changing could corrupt undo stack |
-| Removing approval path accumulation | Feature regression | Security improvement but might break legitimate multi-file workflows |
+| VideoPlayback.tsx decomposition | GPU resource leaks | PixiJS lifecycle tightly coupled to React effects; splitting requires careful resource management |
+| TimelineEditor keyboard extraction | Behavior regression | 21-dependency useEffect; new hook must maintain same re-registration timing |
+| Encoder unsafe Send removal | Architecture change | May require FFmpeg context access patterns to change |
+| IPC handler factory | Response shape changes | Frontend depends on specific response fields; factory must preserve exact shapes |
+| Electron webSecurity removal | Media loading breakage | Local file access may depend on disabled CORS; test thoroughly |
+| Electron/Tauri path validation unification | Security regression | Both have different edge-case handling; unifying could introduce bypasses |
+| Changing useEditorHistory structure | Data loss | History snapshots stored in specific format; changing could corrupt undo stack |
