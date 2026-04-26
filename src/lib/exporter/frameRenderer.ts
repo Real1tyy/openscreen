@@ -287,7 +287,8 @@ export class FrameRenderer {
 				wallpaper.startsWith("file://") ||
 				wallpaper.startsWith("data:") ||
 				wallpaper.startsWith("/") ||
-				wallpaper.startsWith("http")
+				wallpaper.startsWith("http") ||
+				wallpaper.startsWith("asset://")
 			) {
 				// Image background
 				const img = new Image();
@@ -299,7 +300,7 @@ export class FrameRenderer {
 					if (!imageUrl.startsWith(window.location.origin)) {
 						img.crossOrigin = "anonymous";
 					}
-				} else if (wallpaper.startsWith("file://") || wallpaper.startsWith("data:")) {
+				} else if (wallpaper.startsWith("file://") || wallpaper.startsWith("data:") || wallpaper.startsWith("asset://")) {
 					imageUrl = wallpaper;
 				} else {
 					imageUrl = window.location.origin + wallpaper;
