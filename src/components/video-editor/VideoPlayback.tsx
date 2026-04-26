@@ -1218,10 +1218,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				(resolvedWallpaper.startsWith("file://") ||
 					resolvedWallpaper.startsWith("http") ||
 					resolvedWallpaper.startsWith("/") ||
-					resolvedWallpaper.startsWith("data:")),
+					resolvedWallpaper.startsWith("data:") ||
+					resolvedWallpaper.startsWith("asset://")),
 		);
-		const backgroundStyle = isImageUrl
-			? { backgroundImage: `url(${resolvedWallpaper || ""})` }
+		const backgroundStyle: React.CSSProperties = isImageUrl
+			? { background: `url("${resolvedWallpaper}") center / cover no-repeat` }
 			: { background: resolvedWallpaper || "" };
 
 		return (
