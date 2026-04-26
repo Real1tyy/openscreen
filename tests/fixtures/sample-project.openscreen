@@ -1,0 +1,61 @@
+{
+	"version": 1,
+	"media": {
+		"screenVideoPath": "file:///tmp/sample.webm"
+	},
+	"editor": {
+		"wallpaper": "gradient-blue",
+		"shadowIntensity": 0.5,
+		"showBlur": false,
+		"motionBlurAmount": 0,
+		"borderRadius": 12,
+		"padding": 50,
+		"cropRegion": null,
+		"aspectRatio": "16:9",
+		"webcamLayoutPreset": "picture-in-picture",
+		"webcamMaskShape": "circle",
+		"webcamSizePreset": "medium",
+		"webcamPosition": null,
+		"exportQuality": "good",
+		"exportFormat": "mp4",
+		"gifFrameRate": 15,
+		"gifLoop": true,
+		"gifSizePreset": "medium",
+		"zoomRegions": [
+			{
+				"id": "zoom-1",
+				"startMs": 0,
+				"endMs": 1000,
+				"depth": 1.5,
+				"focusX": 0.5,
+				"focusY": 0.5,
+				"focusMode": "manual"
+			},
+			{
+				"id": "zoom-2",
+				"startMs": 3000,
+				"endMs": 4000,
+				"depth": 2,
+				"focusX": 0.3,
+				"focusY": 0.7,
+				"focusMode": "manual"
+			}
+		],
+		"trimRegions": [
+			{
+				"id": "trim-1",
+				"startMs": 5000,
+				"endMs": 6000
+			}
+		],
+		"speedRegions": [
+			{
+				"id": "speed-1",
+				"startMs": 7000,
+				"endMs": 8000,
+				"speed": 2
+			}
+		],
+		"annotationRegions": []
+	}
+}
