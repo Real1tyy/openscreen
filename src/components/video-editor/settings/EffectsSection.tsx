@@ -9,47 +9,44 @@ import { Slider } from "@/components/ui/slider";
 import { SliderControl } from "@/components/ui/slider-control";
 import { Switch } from "@/components/ui/switch";
 import { useScopedT } from "@/contexts/I18nContext";
-import type { WebcamLayoutPreset } from "../types";
+import {
+	pauseEditorHistory,
+	resumeEditorHistory,
+	useEditorStore,
+} from "@/stores/useEditorStore";
 
 interface EffectsSectionProps {
-	showBlur?: boolean;
-	onBlurChange?: (v: boolean) => void;
-	motionBlurAmount: number;
-	onMotionBlurChange?: (v: number) => void;
-	onMotionBlurCommit?: () => void;
-	shadowIntensity: number;
-	onShadowChange?: (v: number) => void;
-	onShadowCommit?: () => void;
-	borderRadius: number;
-	onBorderRadiusChange?: (v: number) => void;
-	onBorderRadiusCommit?: () => void;
-	padding: number;
-	onPaddingChange?: (v: number) => void;
-	onPaddingCommit?: () => void;
-	webcamLayoutPreset?: WebcamLayoutPreset;
 	onCropToggle: () => void;
 }
 
 export function EffectsSection({
-	showBlur,
-	onBlurChange,
-	motionBlurAmount,
-	onMotionBlurChange,
-	onMotionBlurCommit,
-	shadowIntensity,
-	onShadowChange,
-	onShadowCommit,
-	borderRadius,
-	onBorderRadiusChange,
-	onBorderRadiusCommit,
-	padding,
-	onPaddingChange,
-	onPaddingCommit,
-	webcamLayoutPreset,
 	onCropToggle,
 }: EffectsSectionProps) {
 	const t = useScopedT("settings");
+
+	const showBlur = useEditorStore((s) => s.showBlur);
+	const setShowBlur = useEditorStore((s) => s.setShowBlur);
+	const motionBlurAmount = useEditorStore((s) => s.motionBlurAmount);
+	const setMotionBlurAmount = useEditorStore((s) => s.setMotionBlurAmount);
+	const shadowIntensity = useEditorStore((s) => s.shadowIntensity);
+	const setShadowIntensity = useEditorStore((s) => s.setShadowIntensity);
+	const borderRadius = useEditorStore((s) => s.borderRadius);
+	const setBorderRadius = useEditorStore((s) => s.setBorderRadius);
+	const padding = useEditorStore((s) => s.padding);
+	const setPadding = useEditorStore((s) => s.setPadding);
+	const webcamLayoutPreset = useEditorStore((s) => s.webcamLayoutPreset);
+
 	const isVerticalStack = webcamLayoutPreset === "vertical-stack";
+
+	const handleBlurChange = (v: boolean) => setShowBlur(v);
+	const handleMotionBlurChange = (v: number) => { pauseEditorHistory(); setMotionBlurAmount(v); };
+	const handleMotionBlurCommit = () => resumeEditorHistory();
+	const handleShadowChange = (v: number) => { pauseEditorHistory(); setShadowIntensity(v); };
+	const handleShadowCommit = () => resumeEditorHistory();
+	const handleBorderRadiusChange = (v: number) => { pauseEditorHistory(); setBorderRadius(v); };
+	const handleBorderRadiusCommit = () => resumeEditorHistory();
+	const handlePaddingChange = (v: number) => { pauseEditorHistory(); setPadding(v); };
+	const handlePaddingCommit = () => resumeEditorHistory();
 
 	return (
 		<AccordionItem value="effects" className="border-white/5 rounded-xl bg-white/[0.02] px-3">
@@ -67,7 +64,7 @@ export function EffectsSection({
 						</div>
 						<Switch
 							checked={showBlur}
-							onCheckedChange={onBlurChange}
+							onCheckedChange={handleBlurChange}
 							className="data-[state=checked]:bg-[#34B27B] scale-90"
 						/>
 					</div>
@@ -78,24 +75,24 @@ export function EffectsSection({
 						label={t("effects.motionBlur")}
 						value={motionBlurAmount}
 						display={motionBlurAmount === 0 ? t("effects.off") : motionBlurAmount.toFixed(2)}
-						onChange={onMotionBlurChange}
-						onCommit={onMotionBlurCommit}
+						onChange={handleMotionBlurChange}
+						onCommit={handleMotionBlurCommit}
 						min={0} max={1} step={0.01}
 					/>
 					<SliderControl
 						label={t("effects.shadow")}
 						value={shadowIntensity}
 						display={`${Math.round(shadowIntensity * 100)}%`}
-						onChange={onShadowChange}
-						onCommit={onShadowCommit}
+						onChange={handleShadowChange}
+						onCommit={handleShadowCommit}
 						min={0} max={1} step={0.01}
 					/>
 					<SliderControl
 						label={t("effects.roundness")}
 						value={borderRadius}
 						display={`${borderRadius}px`}
-						onChange={onBorderRadiusChange}
-						onCommit={onBorderRadiusCommit}
+						onChange={handleBorderRadiusChange}
+						onCommit={handleBorderRadiusCommit}
 						min={0} max={16} step={0.5}
 					/>
 					<div
@@ -111,8 +108,8 @@ export function EffectsSection({
 						</div>
 						<Slider
 							value={[isVerticalStack ? 0 : padding]}
-							onValueChange={(values) => onPaddingChange?.(values[0])}
-							onValueCommit={() => onPaddingCommit?.()}
+							onValueChange={(values) => handlePaddingChange(values[0])}
+							onValueCommit={() => handlePaddingCommit()}
 							min={0} max={100} step={1}
 							disabled={isVerticalStack}
 							className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
@@ -132,4 +129,3 @@ export function EffectsSection({
 		</AccordionItem>
 	);
 }
-

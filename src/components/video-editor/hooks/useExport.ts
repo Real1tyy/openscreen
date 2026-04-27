@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { EditorState } from "@/hooks/useEditorHistory";
+import type { EditorState } from "@/stores/useEditorStore";
 import { getAssetPath } from "@/lib/assetPath";
 import { getAPI, isTauri } from "@/lib/tauriBridge";
 import {

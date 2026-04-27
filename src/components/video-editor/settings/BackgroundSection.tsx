@@ -13,6 +13,7 @@ import { useScopedT } from "@/contexts/I18nContext";
 import { getAssetPath } from "@/lib/assetPath";
 import { handleImageFileUpload } from "@/lib/imageHandling";
 import { cn } from "@/lib/utils";
+import { useEditorStore } from "@/stores/useEditorStore";
 
 const WALLPAPER_COUNT = 18;
 const WALLPAPER_RELATIVE = Array.from(
@@ -56,12 +57,9 @@ const COLOR_PALETTE = [
 
 const CUSTOM_IMAGES_KEY = "openscreen-custom-wallpapers";
 
-interface BackgroundSectionProps {
-	selected: string;
-	onWallpaperChange: (path: string) => void;
-}
-
-export function BackgroundSection({ selected, onWallpaperChange }: BackgroundSectionProps) {
+export function BackgroundSection() {
+	const selected = useEditorStore((s) => s.wallpaper);
+	const onWallpaperChange = useEditorStore((s) => s.setWallpaper);
 	const t = useScopedT("settings");
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const [wallpaperPaths, setWallpaperPaths] = useState<string[]>([]);

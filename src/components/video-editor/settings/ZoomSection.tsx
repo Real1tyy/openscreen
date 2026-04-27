@@ -4,22 +4,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
+import { useEditorStore } from "@/stores/useEditorStore";
+import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { KeyboardShortcutsHelp } from "../KeyboardShortcutsHelp";
-import type { ZoomDepth, ZoomFocusMode, ZoomRegion } from "../types";
+import type { ZoomDepth } from "../types";
 import { getZoomScale, MAX_ZOOM_SCALE, ZOOM_DEPTH_SCALES } from "../types";
 import { RegionSection } from "./RegionSection";
 
 interface ZoomSectionProps {
-	selectedZoomDepth: ZoomDepth | null;
-	onZoomDepthChange?: (depth: ZoomDepth) => void;
-	selectedZoomFocusMode: ZoomFocusMode | null;
-	onZoomFocusModeChange?: (mode: ZoomFocusMode) => void;
 	hasCursorTelemetry?: boolean;
-	selectedZoomId: string | null;
-	onZoomDelete?: (id: string) => void;
-	selectedZoomRegion?: ZoomRegion | null;
-	onZoomSpanChange?: (id: string, span: { start: number; end: number }) => void;
-	onZoomCustomScaleChange?: (customScale: number | undefined) => void;
 	videoDuration?: number;
 }
 
@@ -96,19 +89,25 @@ function CustomZoomInput({
 }
 
 export function ZoomSection({
-	selectedZoomDepth,
-	onZoomDepthChange,
-	selectedZoomFocusMode,
-	onZoomFocusModeChange,
 	hasCursorTelemetry = false,
-	selectedZoomId,
-	onZoomDelete,
-	selectedZoomRegion,
-	onZoomSpanChange,
-	onZoomCustomScaleChange,
 	videoDuration = 0,
 }: ZoomSectionProps) {
 	const t = useScopedT("settings");
+
+	const selectedZoomId = useEditorSelectionStore((s) => s.selectedZoomId);
+	const zoomRegions = useEditorStore((s) => s.zoomRegions);
+	const setZoomDepth = useEditorStore((s) => s.setZoomDepth);
+	const setZoomFocusMode = useEditorStore((s) => s.setZoomFocusMode);
+	const setZoomCustomScale = useEditorStore((s) => s.setZoomCustomScale);
+	const setZoomSpan = useEditorStore((s) => s.setZoomSpan);
+	const deleteZoom = useEditorStore((s) => s.deleteZoom);
+
+	const selectedZoomRegion = selectedZoomId
+		? (zoomRegions.find((r) => r.id === selectedZoomId) ?? null)
+		: null;
+	const selectedZoomDepth = selectedZoomRegion?.depth ?? null;
+	const selectedZoomFocusMode = selectedZoomRegion?.focusMode ?? (selectedZoomId ? "manual" : null);
+
 	const zoomEnabled = Boolean(selectedZoomDepth) || Boolean(selectedZoomRegion?.customScale);
 	const durationMs = videoDuration * 1000;
 	const currentScale = selectedZoomRegion ? getZoomScale(selectedZoomRegion) : null;
@@ -138,7 +137,7 @@ export function ZoomSection({
 							key={option.depth}
 							type="button"
 							disabled={!zoomEnabled}
-							onClick={() => onZoomDepthChange?.(option.depth)}
+							onClick={() => selectedZoomId && setZoomDepth(selectedZoomId, option.depth)}
 							className={cn(
 								"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all",
 								"duration-200 ease-out",
@@ -159,7 +158,7 @@ export function ZoomSection({
 						<span className="text-[11px] text-slate-500">{t("zoom.customZoom")}</span>
 						<CustomZoomInput
 							value={currentScale ?? 1}
-							onChange={(val) => onZoomCustomScaleChange?.(val)}
+							onChange={(val) => selectedZoomId && setZoomCustomScale(selectedZoomId, val)}
 							onError={() => toast.error(t("zoom.maxZoomError"))}
 						/>
 					</div>
@@ -180,7 +179,7 @@ export function ZoomSection({
 								<Button
 									key={mode}
 									type="button"
-									onClick={() => onZoomFocusModeChange?.(mode)}
+									onClick={() => selectedZoomId && setZoomFocusMode(selectedZoomId, mode)}
 									className={cn(
 										"h-auto w-full rounded-lg border px-2 py-2 text-center shadow-sm transition-all",
 										"duration-200 ease-out cursor-pointer",
@@ -203,18 +202,18 @@ export function ZoomSection({
 					)}
 				</div>
 			)}
-			{zoomEnabled && selectedZoomRegion && onZoomSpanChange && (
+			{zoomEnabled && selectedZoomRegion && (
 				<div className="mt-3">
 					<RegionSection
 						region={selectedZoomRegion}
 						videoDurationMs={durationMs}
-						onSpanChange={onZoomSpanChange}
+						onSpanChange={setZoomSpan}
 					/>
 				</div>
 			)}
 			{zoomEnabled && selectedZoomId && (
 				<Button
-					onClick={() => onZoomDelete?.(selectedZoomId)}
+					onClick={() => deleteZoom(selectedZoomId)}
 					variant="destructive"
 					size="sm"
 					className="mt-2 w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"

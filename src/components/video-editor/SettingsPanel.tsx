@@ -8,7 +8,8 @@ import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@
 import { GIF_FRAME_RATES, GIF_SIZE_PRESETS } from "@/lib/exporter";
 import { getAPI } from "@/lib/tauriBridge";
 import { cn } from "@/lib/utils";
-import type { AspectRatio } from "@/utils/aspectRatioUtils";
+import { useEditorStore } from "@/stores/useEditorStore";
+import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { getTestId } from "@/utils/getTestId";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { CropControl } from "./CropControl";
@@ -18,55 +19,12 @@ import { RegionSection } from "./settings/RegionSection";
 import { SpeedSection } from "./settings/SpeedSection";
 import { WebcamSection } from "./settings/WebcamSection";
 import { ZoomSection } from "./settings/ZoomSection";
-import type {
-	AnnotationRegion,
-	AnnotationType,
-	CropRegion,
-	FigureData,
-	PlaybackSpeed,
-	SpeedRegion,
-	TrimRegion,
-	WebcamLayoutPreset,
-	WebcamSizePreset,
-	ZoomDepth,
-	ZoomFocusMode,
-	ZoomRegion,
-} from "./types";
-import { DEFAULT_WEBCAM_SIZE_PRESET } from "./types";
+import type { CropRegion } from "./types";
 
 interface SettingsPanelProps {
-	selected: string;
-	onWallpaperChange: (path: string) => void;
-	selectedZoomDepth?: ZoomDepth | null;
-	onZoomDepthChange?: (depth: ZoomDepth) => void;
-	selectedZoomFocusMode?: ZoomFocusMode | null;
-	onZoomFocusModeChange?: (mode: ZoomFocusMode) => void;
-	hasCursorTelemetry?: boolean;
-	selectedZoomId?: string | null;
-	onZoomDelete?: (id: string) => void;
-	selectedTrimId?: string | null;
-	onTrimDelete?: (id: string) => void;
-	shadowIntensity?: number;
-	onShadowChange?: (intensity: number) => void;
-	onShadowCommit?: () => void;
-	showBlur?: boolean;
-	onBlurChange?: (showBlur: boolean) => void;
-	motionBlurAmount?: number;
-	onMotionBlurChange?: (amount: number) => void;
-	onMotionBlurCommit?: () => void;
-	borderRadius?: number;
-	onBorderRadiusChange?: (radius: number) => void;
-	onBorderRadiusCommit?: () => void;
-	padding?: number;
-	onPaddingChange?: (padding: number) => void;
-	onPaddingCommit?: () => void;
-	cropRegion?: CropRegion;
-	onCropChange?: (region: CropRegion) => void;
-	aspectRatio: AspectRatio;
 	videoElement?: HTMLVideoElement | null;
 	exportQuality?: ExportQuality;
 	onExportQualityChange?: (quality: ExportQuality) => void;
-	// Export format settings
 	exportFormat?: ExportFormat;
 	onExportFormatChange?: (format: ExportFormat) => void;
 	gifFrameRate?: GifFrameRate;
@@ -83,65 +41,12 @@ interface SettingsPanelProps {
 		format: string;
 	} | null;
 	onSaveUnsavedExport?: () => void;
-	selectedAnnotationId?: string | null;
-	annotationRegions?: AnnotationRegion[];
-	onAnnotationContentChange?: (id: string, content: string) => void;
-	onAnnotationTypeChange?: (id: string, type: AnnotationType) => void;
-	onAnnotationStyleChange?: (id: string, style: Partial<AnnotationRegion["style"]>) => void;
-	onAnnotationFigureDataChange?: (id: string, figureData: FigureData) => void;
-	onAnnotationDelete?: (id: string) => void;
-	selectedSpeedId?: string | null;
-	selectedSpeedValue?: PlaybackSpeed | null;
-	onSpeedChange?: (speed: PlaybackSpeed) => void;
-	onSpeedDelete?: (id: string) => void;
-	// Region data & span change handlers for precise editing
-	zoomRegions?: ZoomRegion[];
-	trimRegions?: TrimRegion[];
-	speedRegions?: SpeedRegion[];
-	onZoomCustomScaleChange?: (customScale: number | undefined) => void;
-	onZoomSpanChange?: (id: string, span: { start: number; end: number }) => void;
-	onTrimSpanChange?: (id: string, span: { start: number; end: number }) => void;
-	onSpeedSpanChange?: (id: string, span: { start: number; end: number }) => void;
+	hasCursorTelemetry?: boolean;
 	videoDuration?: number;
 	hasWebcam?: boolean;
-	webcamLayoutPreset?: WebcamLayoutPreset;
-	onWebcamLayoutPresetChange?: (preset: WebcamLayoutPreset) => void;
-	webcamMaskShape?: import("./types").WebcamMaskShape;
-	onWebcamMaskShapeChange?: (shape: import("./types").WebcamMaskShape) => void;
-	webcamSizePreset?: WebcamSizePreset;
-	onWebcamSizePresetChange?: (size: WebcamSizePreset) => void;
-	onWebcamSizePresetCommit?: () => void;
 }
 
 export function SettingsPanel({
-	selected,
-	onWallpaperChange,
-	selectedZoomDepth,
-	onZoomDepthChange,
-	selectedZoomFocusMode,
-	onZoomFocusModeChange,
-	hasCursorTelemetry = false,
-	selectedZoomId,
-	onZoomDelete,
-	selectedTrimId,
-	onTrimDelete,
-	shadowIntensity = 0,
-	onShadowChange,
-	onShadowCommit,
-	showBlur,
-	onBlurChange,
-	motionBlurAmount = 0,
-	onMotionBlurChange,
-	onMotionBlurCommit,
-	borderRadius = 0,
-	onBorderRadiusChange,
-	onBorderRadiusCommit,
-	padding = 50,
-	onPaddingChange,
-	onPaddingCommit,
-	cropRegion,
-	onCropChange,
-	aspectRatio,
 	videoElement,
 	exportQuality = "good",
 	onExportQualityChange,
@@ -157,48 +62,30 @@ export function SettingsPanel({
 	onExport,
 	unsavedExport,
 	onSaveUnsavedExport,
-	selectedAnnotationId,
-	annotationRegions = [],
-	onAnnotationContentChange,
-	onAnnotationTypeChange,
-	onAnnotationStyleChange,
-	onAnnotationFigureDataChange,
-	onAnnotationDelete,
-	selectedSpeedId,
-	selectedSpeedValue,
-	onSpeedChange,
-	onSpeedDelete,
-	zoomRegions = [],
-	trimRegions = [],
-	speedRegions = [],
-	onZoomCustomScaleChange,
-	onZoomSpanChange,
-	onTrimSpanChange,
-	onSpeedSpanChange,
+	hasCursorTelemetry = false,
 	videoDuration = 0,
 	hasWebcam = false,
-	webcamLayoutPreset = "picture-in-picture",
-	onWebcamLayoutPresetChange,
-	webcamMaskShape = "rectangle",
-	onWebcamMaskShapeChange,
-	webcamSizePreset = DEFAULT_WEBCAM_SIZE_PRESET,
-	onWebcamSizePresetChange,
-	onWebcamSizePresetCommit,
 }: SettingsPanelProps) {
 	const t = useScopedT("settings");
+
+	// Read from stores
+	const cropRegion = useEditorStore((s) => s.cropRegion);
+	const setCropRegion = useEditorStore((s) => s.setCropRegion);
+	const aspectRatio = useEditorStore((s) => s.aspectRatio);
+	const trimRegions = useEditorStore((s) => s.trimRegions);
+	const deleteTrim = useEditorStore((s) => s.deleteTrim);
+	const setTrimSpan = useEditorStore((s) => s.setTrimSpan);
+
+	const selectedTrimId = useEditorSelectionStore((s) => s.selectedTrimId);
+	const selectedAnnotationId = useEditorSelectionStore((s) => s.selectedAnnotationId);
+
 	const [showCropModal, setShowCropModal] = useState(false);
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
 	const [cropAspectLocked, setCropAspectLocked] = useState(false);
 	const [cropAspectRatio, setCropAspectRatio] = useState("");
 
-	const selectedZoomRegion = selectedZoomId
-		? (zoomRegions.find((r) => r.id === selectedZoomId) ?? null)
-		: null;
 	const selectedTrimRegion = selectedTrimId
 		? (trimRegions.find((r) => r.id === selectedTrimId) ?? null)
-		: null;
-	const selectedSpeedRegion = selectedSpeedId
-		? (speedRegions.find((r) => r.id === selectedSpeedId) ?? null)
 		: null;
 	const durationMs = videoDuration * 1000;
 
@@ -207,7 +94,7 @@ export function SettingsPanel({
 
 	const handleCropNumericChange = useCallback(
 		(field: "x" | "y" | "width" | "height", pixelValue: number) => {
-			if (!cropRegion || !onCropChange) return;
+			if (!cropRegion) return;
 
 			const next = { ...cropRegion };
 			switch (field) {
@@ -247,14 +134,14 @@ export function SettingsPanel({
 				}
 			}
 
-			onCropChange(next);
+			setCropRegion(next);
 		},
-		[cropRegion, onCropChange, videoWidth, videoHeight, cropAspectLocked],
+		[cropRegion, setCropRegion, videoWidth, videoHeight, cropAspectLocked],
 	);
 
 	const applyCropAspectPreset = useCallback(
 		(preset: string) => {
-			if (!cropRegion || !onCropChange) return;
+			if (!cropRegion) return;
 
 			setCropAspectRatio(preset);
 			if (preset === "") {
@@ -276,10 +163,10 @@ export function SettingsPanel({
 				}
 			}
 
-			onCropChange(next);
+			setCropRegion(next);
 			setCropAspectLocked(true);
 		},
-		[cropRegion, onCropChange, videoWidth, videoHeight],
+		[cropRegion, setCropRegion, videoWidth, videoHeight],
 	);
 
 	const getCropPixelValue = useCallback(
@@ -309,55 +196,22 @@ export function SettingsPanel({
 	};
 
 	const handleCropCancel = () => {
-		if (cropSnapshotRef.current && onCropChange) {
-			onCropChange(cropSnapshotRef.current);
+		if (cropSnapshotRef.current) {
+			setCropRegion(cropSnapshotRef.current);
 		}
 		setShowCropModal(false);
 	};
 
-	// Find selected annotation
-	const selectedAnnotation = selectedAnnotationId
-		? annotationRegions.find((a) => a.id === selectedAnnotationId)
-		: null;
-
 	// If an annotation is selected, show annotation settings instead
-	if (
-		selectedAnnotation &&
-		onAnnotationContentChange &&
-		onAnnotationTypeChange &&
-		onAnnotationStyleChange &&
-		onAnnotationDelete
-	) {
-		return (
-			<AnnotationSettingsPanel
-				annotation={selectedAnnotation}
-				onContentChange={(content) => onAnnotationContentChange(selectedAnnotation.id, content)}
-				onTypeChange={(type) => onAnnotationTypeChange(selectedAnnotation.id, type)}
-				onStyleChange={(style) => onAnnotationStyleChange(selectedAnnotation.id, style)}
-				onFigureDataChange={
-					onAnnotationFigureDataChange
-						? (figureData) => onAnnotationFigureDataChange(selectedAnnotation.id, figureData)
-						: undefined
-				}
-				onDelete={() => onAnnotationDelete(selectedAnnotation.id)}
-			/>
-		);
+	if (selectedAnnotationId) {
+		return <AnnotationSettingsPanel />;
 	}
 
 	return (
 		<div className="flex-[2] min-w-0 bg-[#09090b] border border-white/5 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-0">
 				<ZoomSection
-					selectedZoomDepth={selectedZoomDepth ?? null}
-					onZoomDepthChange={onZoomDepthChange}
-					selectedZoomFocusMode={selectedZoomFocusMode ?? null}
-					onZoomFocusModeChange={onZoomFocusModeChange}
 					hasCursorTelemetry={hasCursorTelemetry}
-					selectedZoomId={selectedZoomId ?? null}
-					onZoomDelete={onZoomDelete}
-					selectedZoomRegion={selectedZoomRegion}
-					onZoomSpanChange={onZoomSpanChange}
-					onZoomCustomScaleChange={onZoomCustomScaleChange}
 					videoDuration={videoDuration}
 				/>
 
@@ -371,17 +225,17 @@ export function SettingsPanel({
 								</span>
 							)}
 						</div>
-						{selectedTrimRegion && onTrimSpanChange && (
+						{selectedTrimRegion && (
 							<div className="mb-2">
 								<RegionSection
 									region={selectedTrimRegion}
 									videoDurationMs={durationMs}
-									onSpanChange={onTrimSpanChange}
+									onSpanChange={setTrimSpan}
 								/>
 							</div>
 						)}
 						<Button
-							onClick={() => selectedTrimId && onTrimDelete?.(selectedTrimId)}
+							onClick={() => selectedTrimId && deleteTrim(selectedTrimId)}
 							variant="destructive"
 							size="sm"
 							className="w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
@@ -393,12 +247,6 @@ export function SettingsPanel({
 				)}
 
 				<SpeedSection
-					selectedSpeedId={selectedSpeedId ?? null}
-					selectedSpeedValue={selectedSpeedValue ?? null}
-					onSpeedChange={onSpeedChange}
-					onSpeedDelete={onSpeedDelete}
-					selectedSpeedRegion={selectedSpeedRegion}
-					onSpeedSpanChange={onSpeedSpanChange}
 					videoDuration={videoDuration}
 				/>
 
@@ -408,42 +256,18 @@ export function SettingsPanel({
 					className="space-y-1"
 				>
 					{hasWebcam && (
-						<WebcamSection
-							aspectRatio={aspectRatio}
-							webcamLayoutPreset={webcamLayoutPreset}
-							onWebcamLayoutPresetChange={onWebcamLayoutPresetChange}
-							webcamMaskShape={webcamMaskShape}
-							onWebcamMaskShapeChange={onWebcamMaskShapeChange}
-							webcamSizePreset={webcamSizePreset}
-							onWebcamSizePresetChange={onWebcamSizePresetChange}
-							onWebcamSizePresetCommit={onWebcamSizePresetCommit}
-						/>
+						<WebcamSection />
 					)}
 
 					<EffectsSection
-						showBlur={showBlur}
-						onBlurChange={onBlurChange}
-						motionBlurAmount={motionBlurAmount}
-						onMotionBlurChange={onMotionBlurChange}
-						onMotionBlurCommit={onMotionBlurCommit}
-						shadowIntensity={shadowIntensity}
-						onShadowChange={onShadowChange}
-						onShadowCommit={onShadowCommit}
-						borderRadius={borderRadius}
-						onBorderRadiusChange={onBorderRadiusChange}
-						onBorderRadiusCommit={onBorderRadiusCommit}
-						padding={padding}
-						onPaddingChange={onPaddingChange}
-						onPaddingCommit={onPaddingCommit}
-						webcamLayoutPreset={webcamLayoutPreset}
 						onCropToggle={handleCropToggle}
 					/>
 
-					<BackgroundSection selected={selected} onWallpaperChange={onWallpaperChange} />
+					<BackgroundSection />
 				</Accordion>
 			</div>
 
-			{showCropModal && cropRegion && onCropChange && (
+			{showCropModal && cropRegion && (
 				<>
 					<div
 						className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 animate-in fade-in duration-200"
@@ -467,7 +291,7 @@ export function SettingsPanel({
 						<CropControl
 							videoElement={videoElement || null}
 							cropRegion={cropRegion}
-							onCropChange={onCropChange}
+							onCropChange={setCropRegion}
 							aspectRatio={aspectRatio}
 						/>
 						<div className="mt-6 space-y-4">

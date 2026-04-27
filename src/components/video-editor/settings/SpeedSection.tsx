@@ -4,17 +4,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
-import type { PlaybackSpeed, SpeedRegion } from "../types";
+import { useEditorStore } from "@/stores/useEditorStore";
+import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { MAX_PLAYBACK_SPEED, SPEED_OPTIONS } from "../types";
 import { RegionSection } from "./RegionSection";
 
 interface SpeedSectionProps {
-	selectedSpeedId: string | null;
-	selectedSpeedValue: PlaybackSpeed | null;
-	onSpeedChange?: (speed: PlaybackSpeed) => void;
-	onSpeedDelete?: (id: string) => void;
-	selectedSpeedRegion?: SpeedRegion | null;
-	onSpeedSpanChange?: (id: string, span: { start: number; end: number }) => void;
 	videoDuration?: number;
 }
 
@@ -80,15 +75,21 @@ function CustomSpeedInput({
 }
 
 export function SpeedSection({
-	selectedSpeedId,
-	selectedSpeedValue,
-	onSpeedChange,
-	onSpeedDelete,
-	selectedSpeedRegion,
-	onSpeedSpanChange,
 	videoDuration = 0,
 }: SpeedSectionProps) {
 	const t = useScopedT("settings");
+
+	const selectedSpeedId = useEditorSelectionStore((s) => s.selectedSpeedId);
+	const speedRegions = useEditorStore((s) => s.speedRegions);
+	const setSpeed = useEditorStore((s) => s.setSpeed);
+	const deleteSpeed = useEditorStore((s) => s.deleteSpeed);
+	const setSpeedSpan = useEditorStore((s) => s.setSpeedSpan);
+
+	const selectedSpeedRegion = selectedSpeedId
+		? (speedRegions.find((r) => r.id === selectedSpeedId) ?? null)
+		: null;
+	const selectedSpeedValue = selectedSpeedRegion?.speed ?? null;
+
 	const durationMs = videoDuration * 1000;
 
 	return (
@@ -110,7 +111,7 @@ export function SpeedSection({
 							key={option.speed}
 							type="button"
 							disabled={!selectedSpeedId}
-							onClick={() => onSpeedChange?.(option.speed)}
+							onClick={() => selectedSpeedId && setSpeed(selectedSpeedId, option.speed)}
 							className={cn(
 								"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all",
 								"duration-200 ease-out",
@@ -135,7 +136,7 @@ export function SpeedSection({
 					{selectedSpeedId ? (
 						<CustomSpeedInput
 							value={selectedSpeedValue ?? 1}
-							onChange={(val) => onSpeedChange?.(val)}
+							onChange={(val) => setSpeed(selectedSpeedId, val)}
 							onError={() => toast.error(t("speed.maxSpeedError"))}
 						/>
 					) : (
@@ -151,18 +152,18 @@ export function SpeedSection({
 			{!selectedSpeedId && (
 				<p className="text-[10px] text-slate-500 mt-2 text-center">{t("speed.selectRegion")}</p>
 			)}
-			{selectedSpeedRegion && onSpeedSpanChange && (
+			{selectedSpeedRegion && (
 				<div className="mt-3">
 					<RegionSection
 						region={selectedSpeedRegion}
 						videoDurationMs={durationMs}
-						onSpanChange={onSpeedSpanChange}
+						onSpanChange={setSpeedSpan}
 					/>
 				</div>
 			)}
 			{selectedSpeedId && (
 				<Button
-					onClick={() => onSpeedDelete?.(selectedSpeedId)}
+					onClick={() => deleteSpeed(selectedSpeedId)}
 					variant="destructive"
 					size="sm"
 					className="mt-2 w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"

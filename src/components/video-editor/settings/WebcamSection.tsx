@@ -15,19 +15,13 @@ import { Slider } from "@/components/ui/slider";
 import { useScopedT } from "@/contexts/I18nContext";
 import { WEBCAM_LAYOUT_PRESETS } from "@/lib/compositeLayout";
 import { cn } from "@/lib/utils";
-import { isPortraitAspectRatio, type AspectRatio } from "@/utils/aspectRatioUtils";
-import type { WebcamLayoutPreset, WebcamMaskShape, WebcamSizePreset } from "../types";
-
-interface WebcamSectionProps {
-	aspectRatio: AspectRatio;
-	webcamLayoutPreset: WebcamLayoutPreset;
-	onWebcamLayoutPresetChange?: (preset: WebcamLayoutPreset) => void;
-	webcamMaskShape: WebcamMaskShape;
-	onWebcamMaskShapeChange?: (shape: WebcamMaskShape) => void;
-	webcamSizePreset: WebcamSizePreset;
-	onWebcamSizePresetChange?: (v: number) => void;
-	onWebcamSizePresetCommit?: () => void;
-}
+import {
+	pauseEditorHistory,
+	resumeEditorHistory,
+	useEditorStore,
+} from "@/stores/useEditorStore";
+import { isPortraitAspectRatio } from "@/utils/aspectRatioUtils";
+import type { WebcamLayoutPreset, WebcamMaskShape } from "../types";
 
 const MASK_SHAPES: Array<{ value: WebcamMaskShape; label: string }> = [
 	{ value: "rectangle", label: "Rect" },
@@ -43,17 +37,29 @@ const SHAPE_PATHS: Record<WebcamMaskShape, React.ReactNode> = {
 	rounded: <rect x="1" y="3" width="14" height="10" rx="5" stroke="currentColor" strokeWidth="1.5" />,
 };
 
-export function WebcamSection({
-	aspectRatio,
-	webcamLayoutPreset,
-	onWebcamLayoutPresetChange,
-	webcamMaskShape,
-	onWebcamMaskShapeChange,
-	webcamSizePreset,
-	onWebcamSizePresetChange,
-	onWebcamSizePresetCommit,
-}: WebcamSectionProps) {
+export function WebcamSection() {
 	const t = useScopedT("settings");
+
+	const aspectRatio = useEditorStore((s) => s.aspectRatio);
+	const webcamLayoutPreset = useEditorStore((s) => s.webcamLayoutPreset);
+	const setWebcamLayoutPreset = useEditorStore((s) => s.setWebcamLayoutPreset);
+	const setWebcamPosition = useEditorStore((s) => s.setWebcamPosition);
+	const webcamMaskShape = useEditorStore((s) => s.webcamMaskShape);
+	const setWebcamMaskShape = useEditorStore((s) => s.setWebcamMaskShape);
+	const webcamSizePreset = useEditorStore((s) => s.webcamSizePreset);
+	const setWebcamSizePreset = useEditorStore((s) => s.setWebcamSizePreset);
+
+	const handleWebcamLayoutPresetChange = (preset: WebcamLayoutPreset) => {
+		setWebcamLayoutPreset(preset);
+		if (preset === "vertical-stack") setWebcamPosition(null);
+	};
+
+	const handleWebcamSizePresetChange = (v: number) => {
+		pauseEditorHistory();
+		setWebcamSizePreset(v);
+	};
+
+	const handleWebcamSizePresetCommit = () => resumeEditorHistory();
 
 	return (
 		<AccordionItem value="layout" className="border-white/5 rounded-xl bg-white/[0.02] px-3">
@@ -71,7 +77,7 @@ export function WebcamSection({
 					<Select
 						value={webcamLayoutPreset}
 						onValueChange={(value: WebcamLayoutPreset) =>
-							onWebcamLayoutPresetChange?.(value)
+							handleWebcamLayoutPresetChange(value)
 						}
 					>
 						<SelectTrigger className="h-8 bg-black/20 border-white/10 text-xs">
@@ -102,7 +108,7 @@ export function WebcamSection({
 								<button
 									key={shape.value}
 									type="button"
-									onClick={() => onWebcamMaskShapeChange?.(shape.value)}
+									onClick={() => setWebcamMaskShape(shape.value)}
 									className={cn(
 										"h-10 rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-all",
 										webcamMaskShape === shape.value
@@ -131,8 +137,8 @@ export function WebcamSection({
 						</div>
 						<Slider
 							value={[webcamSizePreset]}
-							onValueChange={(values) => onWebcamSizePresetChange?.(values[0])}
-							onValueCommit={() => onWebcamSizePresetCommit?.()}
+							onValueChange={(values) => handleWebcamSizePresetChange(values[0])}
+							onValueCommit={() => handleWebcamSizePresetCommit()}
 							min={10}
 							max={50}
 							step={1}

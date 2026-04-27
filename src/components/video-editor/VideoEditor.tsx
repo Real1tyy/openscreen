@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
-import { INITIAL_EDITOR_STATE, useEditorHistory } from "@/hooks/useEditorHistory";
 import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
 import { getLocaleName } from "@/i18n/loader";
 import {
@@ -27,20 +26,25 @@ import type { ProjectMedia } from "@/lib/recordingSession";
 import { getAPI, isTauri, readFileAsBlobUrl } from "@/lib/tauriBridge";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 import {
+	type EditorState,
+	INITIAL_EDITOR_STATE,
+	pauseEditorHistory,
+	redoEditor,
+	resumeEditorHistory,
+	undoEditor,
+	useEditorStore,
+} from "@/stores/useEditorStore";
+import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
+import {
 	getAspectRatioValue,
 	getNativeAspectRatioValue,
 	isPortraitAspectRatio,
 } from "@/utils/aspectRatioUtils";
 import { formatMsCompact } from "@/utils/timeUtils";
 import { ExportDialog } from "./ExportDialog";
-import { useAnnotationHandlers } from "./hooks/useAnnotationHandlers";
-import { useChapterHandlers } from "./hooks/useChapterHandlers";
 import { useEditorKeyboard } from "./hooks/useEditorKeyboard";
 import { useExport } from "./hooks/useExport";
-import { useSelection } from "./hooks/useSelection";
-import { useSpeedHandlers } from "./hooks/useSpeedHandlers";
-import { useTrimHandlers } from "./hooks/useTrimHandlers";
-import { useZoomHandlers } from "./hooks/useZoomHandlers";
+import { useTrimPlayback } from "./hooks/useTrimPlayback";
 import PlaybackControls from "./PlaybackControls";
 import {
 	createProjectData,
@@ -54,7 +58,7 @@ import {
 } from "./projectPersistence";
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
-import { type ChapterMarker, type CursorTelemetryPoint } from "./types";
+import type { CursorTelemetryPoint } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 
 async function toPlayableUrl(filePath: string): Promise<string> {
@@ -65,15 +69,8 @@ async function toPlayableUrl(filePath: string): Promise<string> {
 }
 
 export default function VideoEditor() {
-	const {
-		state: editorState,
-		pushState,
-		updateState,
-		commitState,
-		undo,
-		redo,
-	} = useEditorHistory(INITIAL_EDITOR_STATE);
-
+	// ── Zustand stores ────────────────────────────────────────────
+	const store = useEditorStore();
 	const {
 		zoomRegions,
 		trimRegions,
@@ -92,7 +89,22 @@ export default function VideoEditor() {
 		webcamMaskShape,
 		webcamSizePreset,
 		webcamPosition,
-	} = editorState;
+	} = store;
+
+	const editorState: EditorState = useMemo(
+		() => ({
+			zoomRegions, trimRegions, speedRegions, annotationRegions, chapters,
+			cropRegion, wallpaper, shadowIntensity, showBlur, motionBlurAmount,
+			borderRadius, padding, aspectRatio, webcamLayoutPreset, webcamMaskShape,
+			webcamSizePreset, webcamPosition,
+		}),
+		[zoomRegions, trimRegions, speedRegions, annotationRegions, chapters,
+			cropRegion, wallpaper, shadowIntensity, showBlur, motionBlurAmount,
+			borderRadius, padding, aspectRatio, webcamLayoutPreset, webcamMaskShape,
+			webcamSizePreset, webcamPosition],
+	);
+
+	const sel = useEditorSelectionStore();
 
 	// ── Non-undoable state
 	const [videoPath, setVideoPath] = useState<string | null>(null);
@@ -111,32 +123,26 @@ export default function VideoEditor() {
 	durationRef.current = duration;
 	const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
 
-	const regionIds = useMemo(
-		() => ({
+	const {
+		selectedZoomId,
+		selectedAnnotationId,
+		selectZoom: handleSelectZoom,
+		selectAnnotation: handleSelectAnnotation,
+		selectChapter,
+		setEditingChapterId,
+		clearAll: clearSelection,
+		clearStale,
+	} = sel;
+
+	useEffect(() => {
+		clearStale({
 			zoomIds: zoomRegions.map((r) => r.id),
 			trimIds: trimRegions.map((r) => r.id),
 			speedIds: speedRegions.map((r) => r.id),
 			annotationIds: annotationRegions.map((r) => r.id),
 			chapterIds: chapters.map((r) => r.id),
-		}),
-		[zoomRegions, trimRegions, speedRegions, annotationRegions, chapters],
-	);
-
-	const {
-		selectedZoomId,
-		selectedTrimId,
-		selectedSpeedId,
-		selectedAnnotationId,
-		selectedChapterId,
-		editingChapterId,
-		selectZoom: handleSelectZoom,
-		selectTrim: handleSelectTrim,
-		selectSpeed: handleSelectSpeed,
-		selectAnnotation: handleSelectAnnotation,
-		selectChapter,
-		setEditingChapterId,
-		clearAll: clearSelection,
-	} = useSelection(regionIds);
+		});
+	}, [zoomRegions, trimRegions, speedRegions, annotationRegions, chapters, clearStale]);
 
 	const [showNewRecordingDialog, setShowNewRecordingDialog] = useState(false);
 	const [exportQuality, setExportQuality] = useState<ExportQuality>("good");
@@ -158,95 +164,53 @@ export default function VideoEditor() {
 	const ts = useScopedT("settings");
 	const { locale, setLocale } = useI18n();
 
-	// ── Domain hooks ──────────────────────────────────────────
+	// ── Trim playback (needs DOM refs, can't live in store) ──
 	const {
-		handleZoomAdded,
-		handleZoomSuggested,
-		handleZoomSpanChange,
-		handleZoomFocusChange,
-		handleZoomDepthChange,
-		handleZoomFocusModeChange,
-		handleZoomCustomScaleChange,
-		handleZoomDuplicate,
-		handleZoomDelete,
-		resetIdCounter: resetZoomIds,
-	} = useZoomHandlers({ pushState, updateState, selectZoom: handleSelectZoom, selectedZoomId });
+		loopRegion, loopingTrimId, clearLoop, trimMarkStartMs,
+		handleTrimPlayFromStart, handleTrimPlayFromEnd, handleTrimToggleLoop,
+		handleQuickTrimStart, handleQuickTrimEnd,
+	} = useTrimPlayback(videoPlaybackRef, currentTimeRef, durationRef);
 
-	const {
-		handleTrimAdded,
-		handleTrimSpanChange,
-		handleTrimDuplicate,
-		handleTrimDelete,
-		handleTrimSetStartToNow,
-		handleTrimSetEndToNow,
-		handleTrimSetStartFromAdjacent,
-		handleTrimSetEndFromAdjacent,
-		handleTrimPlayFromStart,
-		handleTrimPlayFromEnd,
-		handleTrimToggleLoop,
-		loopRegion,
-		loopingTrimId,
-		clearLoop,
-		trimMarkStartMs,
-		handleQuickTrimStart,
-		handleQuickTrimEnd,
-		resetIdCounter: resetTrimIds,
-	} = useTrimHandlers({
-		pushState,
-		trimRegions,
-		selectTrim: handleSelectTrim,
-		selectedTrimId,
-		currentTimeRef,
-		durationRef,
-		videoPlaybackRef,
-	});
+	// ── Chapter helpers that need DOM refs ─────────────────
+	const handleAddChapter = useCallback(() => {
+		const totalMs = Math.round(durationRef.current * 1000);
+		if (totalMs <= 0) return;
+		const startMs = Math.max(0, Math.min(Math.round(currentTimeRef.current * 1000), totalMs - 100));
+		const sorted = [...chapters].sort((a, b) => a.startMs - b.startMs);
+		const nextCh = sorted.find((ch) => ch.startMs > startMs);
+		const endMs = Math.max(startMs + 100, nextCh ? nextCh.startMs : totalMs);
+		const id = store.addChapter(startMs, endMs);
+		setEditingChapterId(id);
+		selectChapter(id);
+	}, [store, chapters, setEditingChapterId, selectChapter, currentTimeRef, durationRef]);
 
-	const {
-		handleSpeedAdded,
-		handleSpeedSpanChange,
-		handleSpeedDuplicate,
-		handleSpeedDelete,
-		handleSpeedChange,
-		resetIdCounter: resetSpeedIds,
-	} = useSpeedHandlers({ pushState, selectSpeed: handleSelectSpeed, selectedSpeedId });
+	const handleSelectChapter = useCallback(
+		(id: string | null) => {
+			selectChapter(id);
+			if (id) {
+				const ch = chapters.find((c) => c.id === id);
+				if (ch && videoPlaybackRef.current?.video) {
+					videoPlaybackRef.current.video.currentTime = ch.startMs / 1000;
+				}
+			}
+		},
+		[selectChapter, chapters, videoPlaybackRef],
+	);
 
-	const {
-		handleAnnotationAdded,
-		handleAnnotationSpanChange,
-		handleAnnotationDuplicate,
-		handleAnnotationDelete,
-		handleAnnotationContentChange,
-		handleAnnotationTypeChange,
-		handleAnnotationStyleChange,
-		handleAnnotationFigureDataChange,
-		handleAnnotationPositionChange,
-		handleAnnotationSizeChange,
-		resetIdCounters: resetAnnotationIds,
-	} = useAnnotationHandlers({
-		pushState,
-		selectAnnotation: handleSelectAnnotation,
-		selectedAnnotationId,
-	});
+	const chaptersRef = useRef(chapters);
+	chaptersRef.current = chapters;
+	const handleChapterNavigatePrev = useCallback(() => {
+		const nowMs = Math.round(currentTimeRef.current * 1000);
+		const prev = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs).reverse().find((ch) => ch.startMs < nowMs - 100);
+		if (prev && videoPlaybackRef.current?.video) videoPlaybackRef.current.video.currentTime = prev.startMs / 1000;
+	}, [currentTimeRef, videoPlaybackRef]);
+	const handleChapterNavigateNext = useCallback(() => {
+		const nowMs = Math.round(currentTimeRef.current * 1000);
+		const next = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs).find((ch) => ch.startMs > nowMs + 100);
+		if (next && videoPlaybackRef.current?.video) videoPlaybackRef.current.video.currentTime = next.startMs / 1000;
+	}, [currentTimeRef, videoPlaybackRef]);
 
-	const {
-		handleAddChapter,
-		handleRenameChapter,
-		handleChapterSpanChange,
-		handleSelectChapter,
-		handleDeleteChapter,
-		handleChapterNavigatePrev,
-		handleChapterNavigateNext,
-		resetIdCounter: resetChapterIds,
-	} = useChapterHandlers({
-		pushState,
-		chapters,
-		selectChapter,
-		selectedChapterId,
-		setEditingChapterId,
-		currentTimeRef,
-		durationRef,
-		videoPlaybackRef,
-	});
+	const commitState = resumeEditorHistory;
 
 	const {
 		isExporting,
@@ -320,24 +284,9 @@ export default function VideoEditor() {
 			setWebcamVideoPath(webcamSourcePath ? await toPlayableUrl(webcamSourcePath) : null);
 			setCurrentProjectPath(path ?? null);
 
-			pushState({
-				wallpaper: normalizedEditor.wallpaper,
-				shadowIntensity: normalizedEditor.shadowIntensity,
-				showBlur: normalizedEditor.showBlur,
-				motionBlurAmount: normalizedEditor.motionBlurAmount,
-				borderRadius: normalizedEditor.borderRadius,
-				padding: normalizedEditor.padding,
-				cropRegion: normalizedEditor.cropRegion,
-				zoomRegions: normalizedEditor.zoomRegions,
-				trimRegions: normalizedEditor.trimRegions,
-				speedRegions: normalizedEditor.speedRegions,
-				annotationRegions: normalizedEditor.annotationRegions,
-				aspectRatio: normalizedEditor.aspectRatio,
-				webcamLayoutPreset: normalizedEditor.webcamLayoutPreset,
-				webcamMaskShape: normalizedEditor.webcamMaskShape,
-				webcamSizePreset: normalizedEditor.webcamSizePreset,
-				webcamPosition: normalizedEditor.webcamPosition,
-			});
+			store.loadState(normalizedEditor);
+			const fullState = { ...INITIAL_EDITOR_STATE, ...normalizedEditor };
+			store.resetIdCounters(fullState);
 			setExportQuality(normalizedEditor.exportQuality);
 			setExportFormat(normalizedEditor.exportFormat);
 			setGifFrameRate(normalizedEditor.gifFrameRate);
@@ -345,14 +294,6 @@ export default function VideoEditor() {
 			setGifSizePreset(normalizedEditor.gifSizePreset);
 
 			clearSelection();
-
-			resetZoomIds(normalizedEditor.zoomRegions.map((r) => r.id));
-			resetTrimIds(normalizedEditor.trimRegions.map((r) => r.id));
-			resetSpeedIds(normalizedEditor.speedRegions.map((r) => r.id));
-			resetAnnotationIds(normalizedEditor.annotationRegions);
-			resetChapterIds(
-				(normalizedEditor as { chapters?: ChapterMarker[] }).chapters?.map((c) => c.id) ?? [],
-			);
 
 			setLastSavedSnapshot(
 				createProjectSnapshot(
@@ -364,15 +305,7 @@ export default function VideoEditor() {
 			);
 			return true;
 		},
-		[
-			pushState,
-			resetTrimIds,
-			resetAnnotationIds,
-			resetZoomIds,
-			resetSpeedIds,
-			resetChapterIds,
-			clearSelection,
-		],
+		[store, clearSelection],
 	);
 
 	const currentProjectSnapshot = useMemo(() => {
@@ -445,7 +378,7 @@ export default function VideoEditor() {
 
 					const cliConfig = await getAPI().getCliEditorConfig();
 					if (cliConfig) {
-						updateState({
+						store.loadState({
 							shadowIntensity: cliConfig.shadowIntensity,
 							showBlur: cliConfig.showBlur,
 							motionBlurAmount: cliConfig.motionBlurAmount,
@@ -517,31 +450,23 @@ export default function VideoEditor() {
 		}
 
 		loadInitialData();
-	}, [applyLoadedProject, updateState]);
+	}, [applyLoadedProject, store]);
 
-	const hydratePrefs = useEditorPreferencesStore((s) => s.hydrate);
-	const prefsHydrated = useEditorPreferencesStore((s) => s.hydrated);
 	const updatePrefs = useEditorPreferencesStore((s) => s.update);
 
+	// Apply persisted preferences to the editor store on mount
 	useEffect(() => {
-		hydratePrefs();
-	}, [hydratePrefs]);
-
-	useEffect(() => {
-		if (!prefsHydrated) return;
 		const prefs = useEditorPreferencesStore.getState();
-		updateState({
-			padding: prefs.padding,
-			aspectRatio: prefs.aspectRatio,
-		});
+		store.setPadding(prefs.padding);
+		store.setAspectRatio(prefs.aspectRatio);
 		setExportQuality(prefs.exportQuality);
 		setExportFormat(prefs.exportFormat);
-	}, [prefsHydrated, updateState]);
+	}, [store]);
 
+	// Persist preference changes back to localStorage
 	useEffect(() => {
-		if (!prefsHydrated) return;
 		updatePrefs({ padding, aspectRatio, exportQuality, exportFormat });
-	}, [prefsHydrated, padding, aspectRatio, exportQuality, exportFormat, updatePrefs]);
+	}, [padding, aspectRatio, exportQuality, exportFormat, updatePrefs]);
 
 	const saveProject = useCallback(
 		async (forceSaveAs: boolean) => {
@@ -767,8 +692,8 @@ export default function VideoEditor() {
 	}
 
 	useEditorKeyboard({
-		undo,
-		redo,
+		undo: undoEditor,
+		redo: redoEditor,
 		shortcuts,
 		isMac,
 		videoPlaybackRef,
@@ -932,7 +857,7 @@ export default function VideoEditor() {
 											webcamMaskShape={webcamMaskShape}
 											webcamSizePreset={webcamSizePreset}
 											webcamPosition={webcamPosition}
-											onWebcamPositionChange={(pos) => updateState({ webcamPosition: pos })}
+											onWebcamPositionChange={(pos) => { pauseEditorHistory(); store.setWebcamPosition(pos); }}
 											onWebcamPositionDragEnd={commitState}
 											onDurationChange={setDuration}
 											onTimeUpdate={setCurrentTime}
@@ -943,7 +868,7 @@ export default function VideoEditor() {
 											zoomRegions={zoomRegions}
 											selectedZoomId={selectedZoomId}
 											onSelectZoom={handleSelectZoom}
-											onZoomFocusChange={handleZoomFocusChange}
+											onZoomFocusChange={store.setZoomFocus}
 											onZoomFocusDragEnd={commitState}
 											isPlaying={isPlaying}
 											showShadow={shadowIntensity > 0}
@@ -958,8 +883,8 @@ export default function VideoEditor() {
 											annotationRegions={annotationRegions}
 											selectedAnnotationId={selectedAnnotationId}
 											onSelectAnnotation={handleSelectAnnotation}
-											onAnnotationPositionChange={handleAnnotationPositionChange}
-											onAnnotationSizeChange={handleAnnotationSizeChange}
+											onAnnotationPositionChange={store.setAnnotationPosition}
+											onAnnotationSizeChange={store.setAnnotationSize}
 											cursorTelemetry={cursorTelemetry}
 											loopRegion={loopRegion}
 											previewSpeed={previewSpeed}
@@ -999,63 +924,20 @@ export default function VideoEditor() {
 									currentTime={currentTime}
 									onSeek={handleSeek}
 									cursorTelemetry={cursorTelemetry}
-									zoomRegions={zoomRegions}
-									onZoomAdded={handleZoomAdded}
-									onZoomSuggested={handleZoomSuggested}
-									onZoomSpanChange={handleZoomSpanChange}
-									onZoomDuplicate={handleZoomDuplicate}
-									onZoomDelete={handleZoomDelete}
-									selectedZoomId={selectedZoomId}
-									onSelectZoom={handleSelectZoom}
-									trimRegions={trimRegions}
-									onTrimAdded={handleTrimAdded}
-									onTrimSpanChange={handleTrimSpanChange}
-									onTrimDuplicate={handleTrimDuplicate}
-									onTrimDelete={handleTrimDelete}
-									selectedTrimId={selectedTrimId}
-									onSelectTrim={handleSelectTrim}
-									speedRegions={speedRegions}
-									onSpeedAdded={handleSpeedAdded}
-									onSpeedSpanChange={handleSpeedSpanChange}
-									onSpeedDuplicate={handleSpeedDuplicate}
-									onSpeedDelete={handleSpeedDelete}
-									selectedSpeedId={selectedSpeedId}
-									onSelectSpeed={handleSelectSpeed}
-									annotationRegions={annotationRegions}
-									onAnnotationAdded={handleAnnotationAdded}
-									onAnnotationSpanChange={handleAnnotationSpanChange}
-									onAnnotationDuplicate={handleAnnotationDuplicate}
-									onAnnotationDelete={handleAnnotationDelete}
-									selectedAnnotationId={selectedAnnotationId}
-									onSelectAnnotation={handleSelectAnnotation}
-									chapters={chapters}
 									onAddChapter={handleAddChapter}
-									onChapterSpanChange={handleChapterSpanChange}
-									onRenameChapter={handleRenameChapter}
-									onDeleteChapter={handleDeleteChapter}
-									selectedChapterId={selectedChapterId}
 									onSelectChapter={handleSelectChapter}
-									editingChapterId={editingChapterId}
-									onEditChapter={setEditingChapterId}
-									onTrimSetStartToNow={handleTrimSetStartToNow}
-									onTrimSetEndToNow={handleTrimSetEndToNow}
-									onTrimSetStartFromAdjacent={handleTrimSetStartFromAdjacent}
-									onTrimSetEndFromAdjacent={handleTrimSetEndFromAdjacent}
 									onTrimPlayFromStart={handleTrimPlayFromStart}
 									onTrimPlayFromEnd={handleTrimPlayFromEnd}
 									onTrimToggleLoop={handleTrimToggleLoop}
 									loopingTrimId={loopingTrimId}
 									trimMarkStartMs={trimMarkStartMs}
 									aspectRatio={aspectRatio}
-									onAspectRatioChange={(ar) =>
-										pushState({
-											aspectRatio: ar,
-											webcamLayoutPreset:
-												!isPortraitAspectRatio(ar) && webcamLayoutPreset === "vertical-stack"
-													? "picture-in-picture"
-													: webcamLayoutPreset,
-										})
-									}
+									onAspectRatioChange={(ar) => {
+										store.setAspectRatio(ar);
+										if (!isPortraitAspectRatio(ar) && webcamLayoutPreset === "vertical-stack") {
+											store.setWebcamLayoutPreset("picture-in-picture");
+										}
+									}}
 								/>
 							</div>
 						</Panel>
@@ -1065,53 +947,6 @@ export default function VideoEditor() {
 				{/* Right section: settings panel */}
 				<div className="flex-[3] min-w-[280px] max-w-[420px] h-full">
 					<SettingsPanel
-						selected={wallpaper}
-						onWallpaperChange={(w) => pushState({ wallpaper: w })}
-						selectedZoomDepth={
-							selectedZoomId ? zoomRegions.find((z) => z.id === selectedZoomId)?.depth : null
-						}
-						onZoomDepthChange={(depth) => selectedZoomId && handleZoomDepthChange(depth)}
-						selectedZoomFocusMode={
-							selectedZoomId
-								? (zoomRegions.find((z) => z.id === selectedZoomId)?.focusMode ?? "manual")
-								: null
-						}
-						onZoomFocusModeChange={(mode) => selectedZoomId && handleZoomFocusModeChange(mode)}
-						hasCursorTelemetry={cursorTelemetry.length > 0}
-						selectedZoomId={selectedZoomId}
-						onZoomDelete={handleZoomDelete}
-						selectedTrimId={selectedTrimId}
-						onTrimDelete={handleTrimDelete}
-						shadowIntensity={shadowIntensity}
-						onShadowChange={(v) => updateState({ shadowIntensity: v })}
-						onShadowCommit={commitState}
-						showBlur={showBlur}
-						onBlurChange={(v) => pushState({ showBlur: v })}
-						motionBlurAmount={motionBlurAmount}
-						onMotionBlurChange={(v) => updateState({ motionBlurAmount: v })}
-						onMotionBlurCommit={commitState}
-						borderRadius={borderRadius}
-						onBorderRadiusChange={(v) => updateState({ borderRadius: v })}
-						onBorderRadiusCommit={commitState}
-						padding={padding}
-						onPaddingChange={(v) => updateState({ padding: v })}
-						onPaddingCommit={commitState}
-						cropRegion={cropRegion}
-						onCropChange={(r) => pushState({ cropRegion: r })}
-						aspectRatio={aspectRatio}
-						hasWebcam={Boolean(webcamVideoPath)}
-						webcamLayoutPreset={webcamLayoutPreset}
-						onWebcamLayoutPresetChange={(preset) =>
-							pushState({
-								webcamLayoutPreset: preset,
-								webcamPosition: preset === "vertical-stack" ? null : webcamPosition,
-							})
-						}
-						webcamMaskShape={webcamMaskShape}
-						onWebcamMaskShapeChange={(shape) => pushState({ webcamMaskShape: shape })}
-						webcamSizePreset={webcamSizePreset}
-						onWebcamSizePresetChange={(v) => updateState({ webcamSizePreset: v })}
-						onWebcamSizePresetCommit={commitState}
 						videoElement={videoPlaybackRef.current?.video || null}
 						exportQuality={exportQuality}
 						onExportQualityChange={setExportQuality}
@@ -1137,31 +972,11 @@ export default function VideoEditor() {
 								: getAspectRatioValue(aspectRatio),
 						)}
 						onExport={handleOpenExportDialog}
-						selectedAnnotationId={selectedAnnotationId}
-						annotationRegions={annotationRegions}
-						onAnnotationContentChange={handleAnnotationContentChange}
-						onAnnotationTypeChange={handleAnnotationTypeChange}
-						onAnnotationStyleChange={handleAnnotationStyleChange}
-						onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
-						onAnnotationDelete={handleAnnotationDelete}
-						selectedSpeedId={selectedSpeedId}
-						selectedSpeedValue={
-							selectedSpeedId
-								? (speedRegions.find((r) => r.id === selectedSpeedId)?.speed ?? null)
-								: null
-						}
-						onSpeedChange={handleSpeedChange}
-						onSpeedDelete={handleSpeedDelete}
-						zoomRegions={zoomRegions}
-						trimRegions={trimRegions}
-						speedRegions={speedRegions}
-						onZoomCustomScaleChange={handleZoomCustomScaleChange}
-						onZoomSpanChange={handleZoomSpanChange}
-						onTrimSpanChange={handleTrimSpanChange}
-						onSpeedSpanChange={handleSpeedSpanChange}
-						videoDuration={duration}
 						unsavedExport={unsavedExport}
 						onSaveUnsavedExport={handleSaveUnsavedExport}
+						hasCursorTelemetry={cursorTelemetry.length > 0}
+						videoDuration={duration}
+						hasWebcam={Boolean(webcamVideoPath)}
 					/>
 				</div>
 			</div>

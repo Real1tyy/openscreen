@@ -32,17 +32,16 @@ import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { type RegionType, useContextMenuStore } from "@/stores/useContextMenuStore";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
+import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
+import { useEditorStore } from "@/stores/useEditorStore";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { formatMsCompact } from "@/utils/timeUtils";
 import { TutorialHelp } from "../TutorialHelp";
 import type {
-	AnnotationRegion,
-	ChapterMarker,
 	CursorTelemetryPoint,
 	SpeedRegion,
 	TrimRegion,
-	ZoomFocus,
 	ZoomRegion,
 } from "../types";
 import Item from "./Item";
@@ -72,51 +71,13 @@ interface TimelineEditorProps {
 	currentTime: number;
 	onSeek?: (time: number) => void;
 	cursorTelemetry?: CursorTelemetryPoint[];
-	zoomRegions: ZoomRegion[];
-	onZoomAdded: (span: Span) => void;
-	onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
-	onZoomSpanChange: (id: string, span: Span) => void;
-	onZoomDuplicate?: (id: string) => void;
-	onZoomDelete: (id: string) => void;
-	selectedZoomId: string | null;
-	onSelectZoom: (id: string | null) => void;
-	trimRegions?: TrimRegion[];
-	onTrimAdded?: (span: Span) => void;
-	onTrimSpanChange?: (id: string, span: Span) => void;
-	onTrimDuplicate?: (id: string) => void;
-	onTrimDelete?: (id: string) => void;
-	selectedTrimId?: string | null;
-	onSelectTrim?: (id: string | null) => void;
-	annotationRegions?: AnnotationRegion[];
-	onAnnotationAdded?: (span: Span) => void;
-	onAnnotationSpanChange?: (id: string, span: Span) => void;
-	onAnnotationDuplicate?: (id: string) => void;
-	onAnnotationDelete?: (id: string) => void;
-	selectedAnnotationId?: string | null;
-	onSelectAnnotation?: (id: string | null) => void;
-	speedRegions?: SpeedRegion[];
-	onSpeedAdded?: (span: Span) => void;
-	onSpeedSpanChange?: (id: string, span: Span) => void;
-	onSpeedDuplicate?: (id: string) => void;
-	onSpeedDelete?: (id: string) => void;
-	selectedSpeedId?: string | null;
-	onSelectSpeed?: (id: string | null) => void;
-	chapters?: ChapterMarker[];
-	onAddChapter?: () => void;
-	onChapterSpanChange?: (id: string, span: Span) => void;
-	onRenameChapter?: (id: string, name: string) => void;
-	onDeleteChapter?: (id: string) => void;
-	selectedChapterId?: string | null;
-	onSelectChapter?: (id: string | null) => void;
-	editingChapterId?: string | null;
-	onEditChapter?: (id: string | null) => void;
 	aspectRatio: AspectRatio;
 	onAspectRatioChange: (aspectRatio: AspectRatio) => void;
-	// Trim context menu actions
-	onTrimSetStartToNow?: (id: string) => void;
-	onTrimSetEndToNow?: (id: string) => void;
-	onTrimSetStartFromAdjacent?: (id: string) => void;
-	onTrimSetEndFromAdjacent?: (id: string) => void;
+	// Chapter add needs DOM refs (durationRef / currentTimeRef)
+	onAddChapter?: () => void;
+	// Chapter select needs DOM refs (seeks via videoPlaybackRef)
+	onSelectChapter?: (id: string | null) => void;
+	// Trim playback actions that need DOM refs
 	onTrimPlayFromStart?: (id: string) => void;
 	onTrimPlayFromEnd?: (id: string) => void;
 	onTrimToggleLoop?: (id: string) => void;
@@ -678,21 +639,8 @@ function Timeline({
 	currentTimeMs,
 	onSeek,
 	onRangeChange,
-	onSelectZoom,
-	onSelectTrim,
-	onSelectAnnotation,
-	onSelectSpeed,
-	selectedZoomId,
-	selectedTrimId,
-	selectedAnnotationId,
-	selectedSpeedId,
-	selectedChapterId,
 	onSelectChapter,
 	keyframes = [],
-	onDeleteChapter,
-	onRenameChapter,
-	editingChapterId,
-	onEditChapter,
 	onTrimContextMenu,
 	onRegionContextMenu,
 	trimMarkStartMs,
@@ -703,21 +651,8 @@ function Timeline({
 	currentTimeMs: number;
 	onSeek?: (time: number) => void;
 	onRangeChange?: (updater: (previous: Range) => Range) => void;
-	onSelectZoom?: (id: string | null) => void;
-	onSelectTrim?: (id: string | null) => void;
-	onSelectAnnotation?: (id: string | null) => void;
-	onSelectSpeed?: (id: string | null) => void;
-	selectedZoomId: string | null;
-	selectedTrimId?: string | null;
-	selectedAnnotationId?: string | null;
-	selectedSpeedId?: string | null;
-	selectedChapterId?: string | null;
 	onSelectChapter?: (id: string | null) => void;
 	keyframes?: { id: string; time: number }[];
-	onDeleteChapter?: (id: string) => void;
-	onRenameChapter?: (id: string, name: string) => void;
-	editingChapterId?: string | null;
-	onEditChapter?: (id: string | null) => void;
 	onTrimContextMenu?: (id: string, event: React.MouseEvent) => void;
 	onRegionContextMenu?: (type: RegionType, id: string, event: React.MouseEvent) => void;
 	trimMarkStartMs?: number | null;
@@ -726,6 +661,21 @@ function Timeline({
 	const t = useScopedT("timeline");
 	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
+
+	const editorStore = useEditorStore();
+	const {
+		selectedZoomId,
+		selectedTrimId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		selectedChapterId,
+		editingChapterId,
+		selectZoom: onSelectZoom,
+		selectTrim: onSelectTrim,
+		selectSpeed: onSelectSpeed,
+		selectAnnotation: onSelectAnnotation,
+		setEditingChapterId: onEditChapter,
+	} = useEditorSelectionStore();
 
 	const setRefs = useCallback(
 		(node: HTMLDivElement | null) => {
@@ -741,10 +691,10 @@ function Timeline({
 
 			// Only clear selection if clicking on empty space (not on items)
 			// This is handled by event propagation - items stop propagation
-			onSelectZoom?.(null);
-			onSelectTrim?.(null);
-			onSelectAnnotation?.(null);
-			onSelectSpeed?.(null);
+			onSelectZoom(null);
+			onSelectTrim(null);
+			onSelectAnnotation(null);
+			onSelectSpeed(null);
 			onSelectChapter?.(null);
 
 			const rect = e.currentTarget.getBoundingClientRect();
@@ -898,15 +848,18 @@ function Timeline({
 						onSelectChapter?.(item.id);
 						if (onSeek) onSeek(item.span.start / 1000);
 					}}
-					onDoubleClick={() => onEditChapter?.(item.id)}
+					onDoubleClick={() => onEditChapter(item.id)}
 					onContextMenu={(e) => {
 						e.preventDefault();
-						onDeleteChapter?.(item.id);
+						editorStore.deleteChapter(item.id);
 					}}
 					variant="chapter"
 					isEditing={editingChapterId === item.id}
-					onRenameCommit={(name) => onRenameChapter?.(item.id, name)}
-					onRenameCancel={() => onEditChapter?.(null)}
+					onRenameCommit={(name) => {
+						editorStore.renameChapter(item.id, name);
+						onEditChapter(null);
+					}}
+					onRenameCancel={() => onEditChapter(null)}
 				>
 					{item.chapterName}
 				</Item>
@@ -969,50 +922,10 @@ export default function TimelineEditor({
 	currentTime,
 	onSeek,
 	cursorTelemetry = [],
-	zoomRegions,
-	onZoomAdded,
-	onZoomSuggested,
-	onZoomSpanChange,
-	onZoomDuplicate,
-	onZoomDelete,
-	selectedZoomId,
-	onSelectZoom,
-	trimRegions = [],
-	onTrimAdded,
-	onTrimSpanChange,
-	onTrimDuplicate,
-	onTrimDelete,
-	selectedTrimId,
-	onSelectTrim,
-	annotationRegions = [],
-	onAnnotationAdded,
-	onAnnotationSpanChange,
-	onAnnotationDuplicate,
-	onAnnotationDelete,
-	selectedAnnotationId,
-	onSelectAnnotation,
-	speedRegions = [],
-	onSpeedAdded,
-	onSpeedSpanChange,
-	onSpeedDuplicate,
-	onSpeedDelete,
-	selectedSpeedId,
-	onSelectSpeed,
-	chapters = [],
-	onAddChapter,
-	onChapterSpanChange,
-	onRenameChapter,
-	onDeleteChapter,
-	selectedChapterId,
-	onSelectChapter,
-	editingChapterId,
-	onEditChapter,
 	aspectRatio,
 	onAspectRatioChange,
-	onTrimSetStartToNow,
-	onTrimSetEndToNow,
-	onTrimSetStartFromAdjacent,
-	onTrimSetEndFromAdjacent,
+	onAddChapter,
+	onSelectChapter,
 	onTrimPlayFromStart,
 	onTrimPlayFromEnd,
 	onTrimToggleLoop,
@@ -1040,6 +953,28 @@ export default function TimelineEditor({
 	});
 	const timelineContainerRef = useRef<HTMLDivElement>(null);
 	const { shortcuts: keyShortcuts, isMac } = useShortcuts();
+
+	// ── Read state & actions from stores ───────────────────────
+	const store = useEditorStore();
+	const {
+		zoomRegions,
+		trimRegions,
+		speedRegions,
+		annotationRegions,
+		chapters,
+	} = store;
+
+	const {
+		selectedZoomId,
+		selectedTrimId,
+		selectedSpeedId,
+		selectedAnnotationId,
+		selectedChapterId,
+		selectZoom: onSelectZoom,
+		selectTrim: onSelectTrim,
+		selectSpeed: onSelectSpeed,
+		selectAnnotation: onSelectAnnotation,
+	} = useEditorSelectionStore();
 
 	const ctxMenu = useContextMenuStore();
 	const defaultZoomDurationMs = useEditorPreferencesStore((s) => s.defaultZoomDurationMs);
@@ -1078,11 +1013,11 @@ export default function TimelineEditor({
 
 	const spanChangeForType = useCallback(
 		(type: RegionType, id: string, span: { start: number; end: number }) => {
-			if (type === "zoom") onZoomSpanChange(id, span);
-			else if (type === "speed") onSpeedSpanChange?.(id, span);
-			else if (type === "annotation") onAnnotationSpanChange?.(id, span);
+			if (type === "zoom") store.setZoomSpan(id, span);
+			else if (type === "speed") store.setSpeedSpan(id, span);
+			else if (type === "annotation") store.setAnnotationSpan(id, span);
 		},
-		[onZoomSpanChange, onSpeedSpanChange, onAnnotationSpanChange],
+		[store],
 	);
 
 	const handleCtxSetStartToNow = useCallback(
@@ -1090,7 +1025,8 @@ export default function TimelineEditor({
 			if (!ctxMenu.regionType) return;
 			const nowMs = Math.round(currentTime * 1000);
 			const r = findRegion(ctxMenu.regionType, id);
-			if (r && nowMs < r.endMs) spanChangeForType(ctxMenu.regionType, id, { start: nowMs, end: r.endMs });
+			if (r && nowMs < r.endMs)
+				spanChangeForType(ctxMenu.regionType, id, { start: nowMs, end: r.endMs });
 		},
 		[ctxMenu.regionType, currentTime, findRegion, spanChangeForType],
 	);
@@ -1100,27 +1036,28 @@ export default function TimelineEditor({
 			if (!ctxMenu.regionType) return;
 			const nowMs = Math.round(currentTime * 1000);
 			const r = findRegion(ctxMenu.regionType, id);
-			if (r && nowMs > r.startMs) spanChangeForType(ctxMenu.regionType, id, { start: r.startMs, end: nowMs });
+			if (r && nowMs > r.startMs)
+				spanChangeForType(ctxMenu.regionType, id, { start: r.startMs, end: nowMs });
 		},
 		[ctxMenu.regionType, currentTime, findRegion, spanChangeForType],
 	);
 
 	const handleCtxDuplicate = useCallback(
 		(id: string) => {
-			if (ctxMenu.regionType === "zoom") onZoomDuplicate?.(id);
-			else if (ctxMenu.regionType === "speed") onSpeedDuplicate?.(id);
-			else if (ctxMenu.regionType === "annotation") onAnnotationDuplicate?.(id);
+			if (ctxMenu.regionType === "zoom") store.duplicateZoom(id);
+			else if (ctxMenu.regionType === "speed") store.duplicateSpeed(id);
+			else if (ctxMenu.regionType === "annotation") store.duplicateAnnotation(id);
 		},
-		[ctxMenu.regionType, onZoomDuplicate, onSpeedDuplicate, onAnnotationDuplicate],
+		[ctxMenu.regionType, store],
 	);
 
 	const handleCtxDelete = useCallback(
 		(id: string) => {
-			if (ctxMenu.regionType === "zoom") onZoomDelete(id);
-			else if (ctxMenu.regionType === "speed") onSpeedDelete?.(id);
-			else if (ctxMenu.regionType === "annotation") onAnnotationDelete?.(id);
+			if (ctxMenu.regionType === "zoom") store.deleteZoom(id);
+			else if (ctxMenu.regionType === "speed") store.deleteSpeed(id);
+			else if (ctxMenu.regionType === "annotation") store.deleteAnnotation(id);
 		},
-		[ctxMenu.regionType, onZoomDelete, onSpeedDelete, onAnnotationDelete],
+		[ctxMenu.regionType, store],
 	);
 
 	// Add keyframe at current playhead position
@@ -1153,34 +1090,34 @@ export default function TimelineEditor({
 	// Delete selected zoom item
 	const deleteSelectedZoom = useCallback(() => {
 		if (!selectedZoomId) return;
-		onZoomDelete(selectedZoomId);
+		store.deleteZoom(selectedZoomId);
 		onSelectZoom(null);
-	}, [selectedZoomId, onZoomDelete, onSelectZoom]);
+	}, [selectedZoomId, store, onSelectZoom]);
 
 	// Delete selected trim item
 	const deleteSelectedTrim = useCallback(() => {
-		if (!selectedTrimId || !onTrimDelete || !onSelectTrim) return;
-		onTrimDelete(selectedTrimId);
+		if (!selectedTrimId) return;
+		store.deleteTrim(selectedTrimId);
 		onSelectTrim(null);
-	}, [selectedTrimId, onTrimDelete, onSelectTrim]);
+	}, [selectedTrimId, store, onSelectTrim]);
 
 	const deleteSelectedAnnotation = useCallback(() => {
-		if (!selectedAnnotationId || !onAnnotationDelete || !onSelectAnnotation) return;
-		onAnnotationDelete(selectedAnnotationId);
+		if (!selectedAnnotationId) return;
+		store.deleteAnnotation(selectedAnnotationId);
 		onSelectAnnotation(null);
-	}, [selectedAnnotationId, onAnnotationDelete, onSelectAnnotation]);
+	}, [selectedAnnotationId, store, onSelectAnnotation]);
 
 	const deleteSelectedSpeed = useCallback(() => {
-		if (!selectedSpeedId || !onSpeedDelete || !onSelectSpeed) return;
-		onSpeedDelete(selectedSpeedId);
+		if (!selectedSpeedId) return;
+		store.deleteSpeed(selectedSpeedId);
 		onSelectSpeed(null);
-	}, [selectedSpeedId, onSpeedDelete, onSelectSpeed]);
+	}, [selectedSpeedId, store, onSelectSpeed]);
 
 	const deleteSelectedChapter = useCallback(() => {
-		if (!selectedChapterId || !onDeleteChapter || !onSelectChapter) return;
-		onDeleteChapter(selectedChapterId);
-		onSelectChapter(null);
-	}, [selectedChapterId, onDeleteChapter, onSelectChapter]);
+		if (!selectedChapterId) return;
+		store.deleteChapter(selectedChapterId);
+		onSelectChapter?.(null);
+	}, [selectedChapterId, store, onSelectChapter]);
 
 	useEffect(() => {
 		setRange(createInitialRange(totalMs));
@@ -1206,37 +1143,34 @@ export default function TimelineEditor({
 		zoomRegionsRef.current.forEach((region) => {
 			const normalized = normalizeRegionSpan(region, totalMs, safeMinDurationMs);
 			if (normalized) {
-				onZoomSpanChange(region.id, { start: normalized.startMs, end: normalized.endMs });
+				store.setZoomSpan(region.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 
 		trimRegionsRef.current.forEach((region) => {
 			const normalized = normalizeRegionSpan(region, totalMs, safeMinDurationMs);
 			if (normalized) {
-				onTrimSpanChange?.(region.id, { start: normalized.startMs, end: normalized.endMs });
+				store.setTrimSpan(region.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 
 		speedRegionsRef.current.forEach((region) => {
 			const normalized = normalizeRegionSpan(region, totalMs, safeMinDurationMs);
 			if (normalized) {
-				onSpeedSpanChange?.(region.id, { start: normalized.startMs, end: normalized.endMs });
+				store.setSpeedSpan(region.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 
 		chaptersRef.current.forEach((ch) => {
 			const normalized = normalizeRegionSpan(ch, totalMs, safeMinDurationMs);
 			if (normalized) {
-				onChapterSpanChange?.(ch.id, { start: normalized.startMs, end: normalized.endMs });
+				store.setChapterSpan(ch.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
 	}, [
 		totalMs,
 		safeMinDurationMs,
-		onZoomSpanChange,
-		onTrimSpanChange,
-		onSpeedSpanChange,
-		onChapterSpanChange,
+		store,
 	]);
 
 	const hasOverlap = useCallback(
@@ -1322,13 +1256,13 @@ export default function TimelineEditor({
 			return;
 		}
 
-		onZoomAdded({ start: startMs, end: endMs });
+		store.addAndSelectZoom({ start: startMs, end: endMs });
 	}, [
 		videoDuration,
 		totalMs,
 		currentTimeMs,
 		zoomRegions,
-		onZoomAdded,
+		store,
 		defaultZoomDurationMs,
 		clampDuration,
 		isInsideTrimRegion,
@@ -1340,7 +1274,7 @@ export default function TimelineEditor({
 			return;
 		}
 
-		if (!onZoomSuggested) {
+		if (!store.addAndSelectZoomSuggested) {
 			toast.error(t("errors.zoomSuggestionUnavailable"));
 			return;
 		}
@@ -1404,7 +1338,7 @@ export default function TimelineEditor({
 
 			reservedSpans.push({ start: candidateStart, end: candidateEnd });
 			acceptedCenters.push(candidate.centerTimeMs);
-			onZoomSuggested({ start: candidateStart, end: candidateEnd }, candidate.focus);
+			store.addAndSelectZoomSuggested({ start: candidateStart, end: candidateEnd }, candidate.focus);
 			addedCount += 1;
 		});
 
@@ -1426,13 +1360,13 @@ export default function TimelineEditor({
 		defaultZoomDurationMs,
 		clampDuration,
 		zoomRegions,
-		onZoomSuggested,
+		store,
 		cursorTelemetry,
 		t,
 	]);
 
 	const handleAddTrim = useCallback(() => {
-		if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onTrimAdded) {
+		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
 			return;
 		}
 
@@ -1454,20 +1388,20 @@ export default function TimelineEditor({
 			return;
 		}
 
-		onTrimAdded({ start: startMs, end: endMs });
+		store.addAndSelectTrim({ start: startMs, end: endMs });
 	}, [
 		videoDuration,
 		totalMs,
 		currentTimeMs,
 		trimRegions,
-		onTrimAdded,
+		store,
 		defaultTrimDurationMs,
 		clampDuration,
 		t,
 	]);
 
 	const handleAddSpeed = useCallback(() => {
-		if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onSpeedAdded) {
+		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
 			return;
 		}
 
@@ -1498,13 +1432,13 @@ export default function TimelineEditor({
 		}
 
 		const actualDuration = Math.min(dur, gapToNext);
-		onSpeedAdded({ start: startPos, end: startPos + actualDuration });
+		store.addAndSelectSpeed({ start: startPos, end: startPos + actualDuration });
 	}, [
 		videoDuration,
 		totalMs,
 		currentTimeMs,
 		speedRegions,
-		onSpeedAdded,
+		store,
 		defaultSpeedDurationMs,
 		clampDuration,
 		isInsideTrimRegion,
@@ -1512,7 +1446,7 @@ export default function TimelineEditor({
 	]);
 
 	const handleAddAnnotation = useCallback(() => {
-		if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAnnotationAdded) {
+		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
 			return;
 		}
 
@@ -1522,12 +1456,12 @@ export default function TimelineEditor({
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 		const endPos = Math.min(startPos + dur, totalMs);
 
-		onAnnotationAdded({ start: startPos, end: endPos });
+		store.addAndSelectAnnotation({ start: startPos, end: endPos });
 	}, [
 		videoDuration,
 		totalMs,
 		currentTimeMs,
-		onAnnotationAdded,
+		store,
 		defaultZoomDurationMs,
 		clampDuration,
 	]);
@@ -1565,14 +1499,14 @@ export default function TimelineEditor({
 					e.preventDefault();
 
 					if (!selectedAnnotationId || !overlapping.some((a) => a.id === selectedAnnotationId)) {
-						onSelectAnnotation?.(overlapping[0].id);
+						onSelectAnnotation(overlapping[0].id);
 					} else {
 						// Cycle to next annotation
 						const currentIndex = overlapping.findIndex((a) => a.id === selectedAnnotationId);
 						const nextIndex = e.shiftKey
 							? (currentIndex - 1 + overlapping.length) % overlapping.length // Shift+Tab = backward
 							: (currentIndex + 1) % overlapping.length; // Tab = forward
-						onSelectAnnotation?.(overlapping[nextIndex].id);
+						onSelectAnnotation(overlapping[nextIndex].id);
 					}
 				}
 			}
@@ -1709,15 +1643,15 @@ export default function TimelineEditor({
 	const handleItemSpanChange = useCallback(
 		(id: string, span: Span) => {
 			if (zoomRegions.some((r) => r.id === id)) {
-				onZoomSpanChange(id, span);
+				store.setZoomSpan(id, span);
 			} else if (trimRegions.some((r) => r.id === id)) {
-				onTrimSpanChange?.(id, span);
+				store.setTrimSpan(id, span);
 			} else if (speedRegions.some((r) => r.id === id)) {
-				onSpeedSpanChange?.(id, span);
+				store.setSpeedSpan(id, span);
 			} else if (annotationRegions.some((r) => r.id === id)) {
-				onAnnotationSpanChange?.(id, span);
+				store.setAnnotationSpan(id, span);
 			} else if (chapters.some((r) => r.id === id)) {
-				onChapterSpanChange?.(id, span);
+				store.setChapterSpan(id, span);
 			}
 		},
 		[
@@ -1726,11 +1660,7 @@ export default function TimelineEditor({
 			speedRegions,
 			annotationRegions,
 			chapters,
-			onZoomSpanChange,
-			onTrimSpanChange,
-			onSpeedSpanChange,
-			onAnnotationSpanChange,
-			onChapterSpanChange,
+			store,
 		],
 	);
 
@@ -1880,21 +1810,8 @@ export default function TimelineEditor({
 						currentTimeMs={currentTimeMs}
 						onSeek={onSeek}
 						onRangeChange={setRange}
-						onSelectZoom={onSelectZoom}
-						onSelectTrim={onSelectTrim}
-						onSelectAnnotation={onSelectAnnotation}
-						onSelectSpeed={onSelectSpeed}
-						selectedZoomId={selectedZoomId}
-						selectedTrimId={selectedTrimId}
-						selectedAnnotationId={selectedAnnotationId}
-						selectedSpeedId={selectedSpeedId}
-						selectedChapterId={selectedChapterId}
 						onSelectChapter={onSelectChapter}
 						keyframes={keyframes}
-						onDeleteChapter={onDeleteChapter}
-						onRenameChapter={onRenameChapter}
-						editingChapterId={editingChapterId}
-						onEditChapter={onEditChapter}
 						onTrimContextMenu={handleTrimContextMenu}
 						onRegionContextMenu={handleRegionContextMenu}
 						trimMarkStartMs={trimMarkStartMs}
@@ -1909,15 +1826,15 @@ export default function TimelineEditor({
 					<TrimContextMenuItems
 						trimId={ctxMenu.regionId}
 						onClose={ctxMenu.close}
-						onSetStartToNow={onTrimSetStartToNow}
-						onSetEndToNow={onTrimSetEndToNow}
-						onSetStartFromAdjacent={onTrimSetStartFromAdjacent}
-						onSetEndFromAdjacent={onTrimSetEndFromAdjacent}
+						onSetStartToNow={(id) => store.setTrimStartToNow(id, Math.round(currentTime * 1000))}
+						onSetEndToNow={(id) => store.setTrimEndToNow(id, Math.round(currentTime * 1000))}
+						onSetStartFromAdjacent={store.setTrimStartFromAdjacent}
+						onSetEndFromAdjacent={store.setTrimEndFromAdjacent}
 						onPlayFromStart={onTrimPlayFromStart}
 						onPlayFromEnd={onTrimPlayFromEnd}
 						onToggleLoop={onTrimToggleLoop}
-						onDuplicate={onTrimDuplicate}
-						onDelete={onTrimDelete}
+						onDuplicate={store.duplicateTrim}
+						onDelete={store.deleteTrim}
 						isLooping={loopingTrimId === ctxMenu.regionId}
 						hasAdjacentBefore={trimRegions.some(
 							(r) =>

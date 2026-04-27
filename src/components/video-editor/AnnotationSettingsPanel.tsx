@@ -32,18 +32,11 @@ import { BRAND_GREEN } from "@/lib/constants/colors";
 import { type CustomFont, getCustomFonts } from "@/lib/customFonts";
 import { handleImageFileUpload } from "@/lib/imageHandling";
 import { cn } from "@/lib/utils";
+import { useEditorStore } from "@/stores/useEditorStore";
+import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { AddCustomFontDialog } from "./AddCustomFontDialog";
 import { getArrowComponent } from "./ArrowSvgs";
-import type { AnnotationRegion, AnnotationType, ArrowDirection, FigureData } from "./types";
-
-interface AnnotationSettingsPanelProps {
-	annotation: AnnotationRegion;
-	onContentChange: (content: string) => void;
-	onTypeChange: (type: AnnotationType) => void;
-	onStyleChange: (style: Partial<AnnotationRegion["style"]>) => void;
-	onFigureDataChange?: (figureData: FigureData) => void;
-	onDelete: () => void;
-}
+import type { AnnotationType, ArrowDirection, FigureData } from "./types";
 
 const FONT_FAMILIES = [
 	{ value: "system-ui, -apple-system, sans-serif", labelKey: "classic" },
@@ -58,17 +51,38 @@ const FONT_FAMILIES = [
 
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 128];
 
-export function AnnotationSettingsPanel({
-	annotation,
-	onContentChange,
-	onTypeChange,
-	onStyleChange,
-	onFigureDataChange,
-	onDelete,
-}: AnnotationSettingsPanelProps) {
+export function AnnotationSettingsPanel() {
 	const t = useScopedT("settings");
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const [customFonts, setCustomFonts] = useState<CustomFont[]>([]);
+
+	const selectedAnnotationId = useEditorSelectionStore((s) => s.selectedAnnotationId);
+	const annotationRegions = useEditorStore((s) => s.annotationRegions);
+	const setAnnotationContent = useEditorStore((s) => s.setAnnotationContent);
+	const setAnnotationType = useEditorStore((s) => s.setAnnotationType);
+	const setAnnotationStyle = useEditorStore((s) => s.setAnnotationStyle);
+	const setAnnotationFigureData = useEditorStore((s) => s.setAnnotationFigureData);
+	const deleteAnnotation = useEditorStore((s) => s.deleteAnnotation);
+
+	const annotation = selectedAnnotationId
+		? annotationRegions.find((a) => a.id === selectedAnnotationId)
+		: undefined;
+
+	const onContentChange = (content: string) => {
+		if (selectedAnnotationId) setAnnotationContent(selectedAnnotationId, content);
+	};
+	const onTypeChange = (type: AnnotationType) => {
+		if (selectedAnnotationId) setAnnotationType(selectedAnnotationId, type);
+	};
+	const onStyleChange = (style: Parameters<typeof setAnnotationStyle>[1]) => {
+		if (selectedAnnotationId) setAnnotationStyle(selectedAnnotationId, style);
+	};
+	const onFigureDataChange = (figureData: FigureData) => {
+		if (selectedAnnotationId) setAnnotationFigureData(selectedAnnotationId, figureData);
+	};
+	const onDelete = () => {
+		if (selectedAnnotationId) deleteAnnotation(selectedAnnotationId);
+	};
 
 	const fontStyleLabels: Record<string, string> = {
 		classic: t("fontStyles.classic"),
@@ -104,6 +118,8 @@ export function AnnotationSettingsPanel({
 		"#607D8B", // Blue Grey
 		"#795548", // Brown
 	];
+
+	if (!annotation) return null;
 
 	const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
 		const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];

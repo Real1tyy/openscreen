@@ -37,8 +37,7 @@
 		"test:browser": "vitest --config vitest.browser.config.ts --run",
 		"test:browser:install": "playwright install --with-deps chromium-headless-shell",
 		"test:e2e": "playwright test",
-		"tauri": "tauri",
-		"prepare": "husky"
+		"tauri": "tauri"
 	},
 	"dependencies": {
 		"@fix-webm-duration/fix": "^1.0.1",
@@ -70,6 +69,7 @@
 		"fix-webm-duration": "^1.0.6",
 		"gif.js": "^0.2.0",
 		"gsap": "^3.13.0",
+		"immer": "^11.1.4",
 		"lucide-react": "^0.545.0",
 		"mediabunny": "^1.25.1",
 		"motion": "^12.23.24",
@@ -86,6 +86,8 @@
 		"tailwindcss-animate": "^1.0.7",
 		"uuid": "^13.0.0",
 		"web-demuxer": "^4.0.0",
+		"zod": "^4.3.6",
+		"zundo": "^2.3.0",
 		"zustand": "^5.0.12"
 	},
 	"devDependencies": {
@@ -110,7 +112,6 @@
 		"electron-rebuild": "^3.2.9",
 		"fast-check": "^4.5.2",
 		"happy-dom": "^20.9.0",
-		"husky": "^9.1.7",
 		"jsdom": "^29.0.1",
 		"lint-staged": "^16.3.2",
 		"postcss": "^8.5.6",
@@ -124,6 +125,6 @@
 	},
 	"main": "dist-electron/main.js",
 	"lint-staged": {
-		"*.{ts,tsx,js,jsx,mts,cts,json}": "biome check --no-errors-on-unmatched"
+		"*.{ts,tsx,js,jsx,mts,cts,json}": "biome check --write --unsafe --no-errors-on-unmatched"
 	}
 }

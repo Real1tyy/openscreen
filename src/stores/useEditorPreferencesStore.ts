@@ -1,30 +1,31 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import {
 	DEFAULT_PREFS,
-	loadUserPreferences,
-	saveUserPreferences,
+	UserPreferencesSchema,
 	type UserPreferences,
 } from "@/lib/userPreferences";
 
 interface EditorPreferencesState extends UserPreferences {
-	hydrated: boolean;
-	hydrate: () => void;
 	update: (partial: Partial<UserPreferences>) => void;
 }
 
-export const useEditorPreferencesStore = create<EditorPreferencesState>()((set) => ({
-	...DEFAULT_PREFS,
-	hydrated: false,
+export const useEditorPreferencesStore = create<EditorPreferencesState>()(
+	persist(
+		(set) => ({
+			...DEFAULT_PREFS,
 
-	hydrate: () => {
-		const prefs = loadUserPreferences();
-		set({ ...prefs, hydrated: true });
-	},
-
-	update: (partial) =>
-		set((state) => {
-			const next = { ...state, ...partial };
-			saveUserPreferences(next);
-			return next;
+			update: (partial) => set((state) => ({ ...state, ...partial })),
 		}),
-}));
+		{
+			name: "openscreen_user_preferences",
+			merge: (persisted, current) => {
+				const parsed = UserPreferencesSchema.safeParse(persisted);
+				return {
+					...current,
+					...(parsed.success ? parsed.data : DEFAULT_PREFS),
+				};
+			},
+		},
+	),
+);
