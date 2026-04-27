@@ -1066,6 +1066,63 @@ export default function TimelineEditor({
 		[ctxMenu],
 	);
 
+	const findRegion = useCallback(
+		(type: RegionType, id: string) => {
+			if (type === "zoom") return zoomRegions.find((r) => r.id === id);
+			if (type === "speed") return speedRegions.find((r) => r.id === id);
+			if (type === "annotation") return annotationRegions.find((r) => r.id === id);
+			return undefined;
+		},
+		[zoomRegions, speedRegions, annotationRegions],
+	);
+
+	const spanChangeForType = useCallback(
+		(type: RegionType, id: string, span: { start: number; end: number }) => {
+			if (type === "zoom") onZoomSpanChange(id, span);
+			else if (type === "speed") onSpeedSpanChange?.(id, span);
+			else if (type === "annotation") onAnnotationSpanChange?.(id, span);
+		},
+		[onZoomSpanChange, onSpeedSpanChange, onAnnotationSpanChange],
+	);
+
+	const handleCtxSetStartToNow = useCallback(
+		(id: string) => {
+			if (!ctxMenu.regionType) return;
+			const nowMs = Math.round(currentTime * 1000);
+			const r = findRegion(ctxMenu.regionType, id);
+			if (r && nowMs < r.endMs) spanChangeForType(ctxMenu.regionType, id, { start: nowMs, end: r.endMs });
+		},
+		[ctxMenu.regionType, currentTime, findRegion, spanChangeForType],
+	);
+
+	const handleCtxSetEndToNow = useCallback(
+		(id: string) => {
+			if (!ctxMenu.regionType) return;
+			const nowMs = Math.round(currentTime * 1000);
+			const r = findRegion(ctxMenu.regionType, id);
+			if (r && nowMs > r.startMs) spanChangeForType(ctxMenu.regionType, id, { start: r.startMs, end: nowMs });
+		},
+		[ctxMenu.regionType, currentTime, findRegion, spanChangeForType],
+	);
+
+	const handleCtxDuplicate = useCallback(
+		(id: string) => {
+			if (ctxMenu.regionType === "zoom") onZoomDuplicate?.(id);
+			else if (ctxMenu.regionType === "speed") onSpeedDuplicate?.(id);
+			else if (ctxMenu.regionType === "annotation") onAnnotationDuplicate?.(id);
+		},
+		[ctxMenu.regionType, onZoomDuplicate, onSpeedDuplicate, onAnnotationDuplicate],
+	);
+
+	const handleCtxDelete = useCallback(
+		(id: string) => {
+			if (ctxMenu.regionType === "zoom") onZoomDelete(id);
+			else if (ctxMenu.regionType === "speed") onSpeedDelete?.(id);
+			else if (ctxMenu.regionType === "annotation") onAnnotationDelete?.(id);
+		},
+		[ctxMenu.regionType, onZoomDelete, onSpeedDelete, onAnnotationDelete],
+	);
+
 	// Add keyframe at current playhead position
 	const addKeyframe = useCallback(() => {
 		if (totalMs === 0) return;
@@ -1884,45 +1941,10 @@ export default function TimelineEditor({
 						regionType={ctxMenu.regionType}
 						regionId={ctxMenu.regionId}
 						onClose={ctxMenu.close}
-						onSetStartToNow={(id) => {
-							const nowMs = Math.round(currentTime * 1000);
-							if (ctxMenu.regionType === "zoom") {
-								const r = zoomRegions.find((z) => z.id === id);
-								if (r && nowMs < r.endMs) onZoomSpanChange(id, { start: nowMs, end: r.endMs });
-							} else if (ctxMenu.regionType === "speed") {
-								const r = speedRegions.find((s) => s.id === id);
-								if (r && nowMs < r.endMs) onSpeedSpanChange?.(id, { start: nowMs, end: r.endMs });
-							} else if (ctxMenu.regionType === "annotation") {
-								const r = annotationRegions.find((a) => a.id === id);
-								if (r && nowMs < r.endMs)
-									onAnnotationSpanChange?.(id, { start: nowMs, end: r.endMs });
-							}
-						}}
-						onSetEndToNow={(id) => {
-							const nowMs = Math.round(currentTime * 1000);
-							if (ctxMenu.regionType === "zoom") {
-								const r = zoomRegions.find((z) => z.id === id);
-								if (r && nowMs > r.startMs) onZoomSpanChange(id, { start: r.startMs, end: nowMs });
-							} else if (ctxMenu.regionType === "speed") {
-								const r = speedRegions.find((s) => s.id === id);
-								if (r && nowMs > r.startMs)
-									onSpeedSpanChange?.(id, { start: r.startMs, end: nowMs });
-							} else if (ctxMenu.regionType === "annotation") {
-								const r = annotationRegions.find((a) => a.id === id);
-								if (r && nowMs > r.startMs)
-									onAnnotationSpanChange?.(id, { start: r.startMs, end: nowMs });
-							}
-						}}
-						onDuplicate={(id) => {
-							if (ctxMenu.regionType === "zoom") onZoomDuplicate?.(id);
-							else if (ctxMenu.regionType === "speed") onSpeedDuplicate?.(id);
-							else if (ctxMenu.regionType === "annotation") onAnnotationDuplicate?.(id);
-						}}
-						onDelete={(id) => {
-							if (ctxMenu.regionType === "zoom") onZoomDelete(id);
-							else if (ctxMenu.regionType === "speed") onSpeedDelete?.(id);
-							else if (ctxMenu.regionType === "annotation") onAnnotationDelete?.(id);
-						}}
+						onSetStartToNow={handleCtxSetStartToNow}
+						onSetEndToNow={handleCtxSetEndToNow}
+						onDuplicate={handleCtxDuplicate}
+						onDelete={handleCtxDelete}
 					/>
 				</ContextMenuPopover>
 			)}
