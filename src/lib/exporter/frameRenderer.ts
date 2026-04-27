@@ -15,8 +15,8 @@ import type {
 	WebcamLayoutPreset,
 	WebcamSizePreset,
 	ZoomRegion,
-	getZoomScale,
 } from "@/components/video-editor/types";
+import { getZoomScale } from "@/components/video-editor/types";
 import {
 	AUTO_FOLLOW_RAMP_DISTANCE,
 	AUTO_FOLLOW_SMOOTHING_FACTOR,
