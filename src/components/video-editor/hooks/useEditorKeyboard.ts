@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { computeSeekTime } from "@/lib/frameStep";
-import { matchesShortcut } from "@/lib/shortcuts";
 import type { ShortcutsConfig } from "@/lib/shortcuts";
+import { matchesShortcut } from "@/lib/shortcuts";
+import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 
 interface UseEditorKeyboardParams {
@@ -16,8 +17,6 @@ interface UseEditorKeyboardParams {
 	handleAddChapter: () => void;
 	handleChapterNavigatePrev: () => void;
 	handleChapterNavigateNext: () => void;
-	seekSmallSeconds: number;
-	seekLargeSeconds: number;
 }
 
 export function useEditorKeyboard(params: UseEditorKeyboardParams) {
@@ -33,9 +32,10 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 		handleAddChapter,
 		handleChapterNavigatePrev,
 		handleChapterNavigateNext,
-		seekSmallSeconds,
-		seekLargeSeconds,
 	} = params;
+
+	const seekSmallSeconds = useEditorPreferencesStore((s) => s.seekSmallSeconds);
+	const seekLargeSeconds = useEditorPreferencesStore((s) => s.seekLargeSeconds);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {

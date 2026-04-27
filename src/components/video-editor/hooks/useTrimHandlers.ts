@@ -74,6 +74,24 @@ export function useTrimHandlers({
 		[pushState],
 	);
 
+	const handleTrimDuplicate = useCallback(
+		(id: string) => {
+			pushState((prev) => {
+				const source = prev.trimRegions.find((r) => r.id === id);
+				if (!source) return {};
+				const newId = `trim-${nextIdRef.current++}`;
+				const duration = source.endMs - source.startMs;
+				const clone: TrimRegion = {
+					id: newId,
+					startMs: source.endMs,
+					endMs: source.endMs + duration,
+				};
+				return { trimRegions: [...prev.trimRegions, clone] };
+			});
+		},
+		[pushState],
+	);
+
 	const handleTrimDelete = useCallback(
 		(id: string) => {
 			pushState((prev) => ({
@@ -89,9 +107,7 @@ export function useTrimHandlers({
 	const updateTrimField = useCallback(
 		(id: string, updater: (r: TrimRegion) => Partial<TrimRegion>) => {
 			pushState((prev) => ({
-				trimRegions: prev.trimRegions.map((r) =>
-					r.id === id ? { ...r, ...updater(r) } : r,
-				),
+				trimRegions: prev.trimRegions.map((r) => (r.id === id ? { ...r, ...updater(r) } : r)),
 			}));
 		},
 		[pushState],
@@ -131,14 +147,17 @@ export function useTrimHandlers({
 
 	// ── Playback helpers ──
 
-	const seekAndPlay = useCallback((seekToSec: number) => {
-		const video = videoPlaybackRef.current?.video;
-		if (!video) return;
-		video.currentTime = seekToSec;
-		setTimeout(() => {
-			videoPlaybackRef.current?.play().catch(console.error);
-		}, 50);
-	}, [videoPlaybackRef]);
+	const seekAndPlay = useCallback(
+		(seekToSec: number) => {
+			const video = videoPlaybackRef.current?.video;
+			if (!video) return;
+			video.currentTime = seekToSec;
+			setTimeout(() => {
+				videoPlaybackRef.current?.play().catch(console.error);
+			}, 50);
+		},
+		[videoPlaybackRef],
+	);
 
 	const withTrim = useCallback(
 		(id: string, fn: (trim: TrimRegion) => void) => {
@@ -149,24 +168,29 @@ export function useTrimHandlers({
 	);
 
 	const handleTrimPlayFromStart = useCallback(
-		(id: string) => withTrim(id, (trim) => {
-			clearLoop();
-			seekAndPlay(Math.max(0, trim.startMs - 5000) / 1000);
-		}),
+		(id: string) =>
+			withTrim(id, (trim) => {
+				clearLoop();
+				seekAndPlay(Math.max(0, trim.startMs - 5000) / 1000);
+			}),
 		[withTrim, clearLoop, seekAndPlay],
 	);
 
 	const handleTrimPlayFromEnd = useCallback(
-		(id: string) => withTrim(id, (trim) => {
-			clearLoop();
-			seekAndPlay(trim.endMs / 1000);
-		}),
+		(id: string) =>
+			withTrim(id, (trim) => {
+				clearLoop();
+				seekAndPlay(trim.endMs / 1000);
+			}),
 		[withTrim, clearLoop, seekAndPlay],
 	);
 
 	const handleTrimToggleLoop = useCallback(
 		(id: string) => {
-			if (loopingTrimId === id) { clearLoop(); return; }
+			if (loopingTrimId === id) {
+				clearLoop();
+				return;
+			}
 			withTrim(id, (trim) => {
 				const region = computeLoopRegion(trim, Math.round(durationRef.current * 1000));
 				setLoopRegion(region);
@@ -196,24 +220,6 @@ export function useTrimHandlers({
 		setTrimMarkStartMs(null);
 	}, [pushState, selectTrim, currentTimeRef]);
 
-	const handleTrimDuplicate = useCallback(
-		(id: string) => {
-			pushState((prev) => {
-				const original = prev.trimRegions.find((r) => r.id === id);
-				if (!original) return {};
-				const duration = original.endMs - original.startMs;
-				const newId = `trim-${nextIdRef.current++}`;
-				return {
-					trimRegions: [
-						...prev.trimRegions,
-						{ id: newId, startMs: original.endMs, endMs: original.endMs + duration },
-					],
-				};
-			});
-		},
-		[pushState],
-	);
-
 	const resetIdCounter = useCallback((existingIds: string[]) => {
 		resetIdRef(nextIdRef, "trim", existingIds);
 	}, []);
@@ -222,8 +228,8 @@ export function useTrimHandlers({
 		// Core
 		handleTrimAdded,
 		handleTrimSpanChange,
-		handleTrimDelete,
 		handleTrimDuplicate,
+		handleTrimDelete,
 		// Context menu
 		handleTrimSetStartToNow,
 		handleTrimSetEndToNow,

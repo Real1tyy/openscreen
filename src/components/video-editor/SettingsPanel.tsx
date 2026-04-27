@@ -1,34 +1,23 @@
-import { BackgroundSection } from "./settings/BackgroundSection";
-import { EffectsSection } from "./settings/EffectsSection";
-import { SpeedSection } from "./settings/SpeedSection";
-import { WebcamSection } from "./settings/WebcamSection";
-import { ZoomSection } from "./settings/ZoomSection";
-import {
-	Bug,
-	Download,
-	Film,
-	Image,
-	Lock,
-	Star,
-	Trash2,
-	Unlock,
-	X,
-} from "lucide-react";
+import { Bug, Download, Film, Image, Lock, Star, Trash2, Unlock, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import {
-	Accordion,
-} from "@/components/ui/accordion";
+import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import { GIF_FRAME_RATES, GIF_SIZE_PRESETS } from "@/lib/exporter";
+import { getAPI } from "@/lib/tauriBridge";
 import { cn } from "@/lib/utils";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
-import { getAPI } from "@/lib/tauriBridge";
 import { getTestId } from "@/utils/getTestId";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { CropControl } from "./CropControl";
+import { BackgroundSection } from "./settings/BackgroundSection";
+import { EffectsSection } from "./settings/EffectsSection";
+import { RegionSection } from "./settings/RegionSection";
+import { SpeedSection } from "./settings/SpeedSection";
+import { WebcamSection } from "./settings/WebcamSection";
+import { ZoomSection } from "./settings/ZoomSection";
 import type {
 	AnnotationRegion,
 	AnnotationType,
@@ -44,16 +33,12 @@ import type {
 	ZoomRegion,
 } from "./types";
 import { DEFAULT_WEBCAM_SIZE_PRESET } from "./types";
-import { TimestampInput } from "./settings/TimestampInput";
-
 
 interface SettingsPanelProps {
 	selected: string;
 	onWallpaperChange: (path: string) => void;
 	selectedZoomDepth?: ZoomDepth | null;
 	onZoomDepthChange?: (depth: ZoomDepth) => void;
-	onZoomCustomScaleChange?: (scale: number) => void;
-	selectedZoomCustomScale?: number | null;
 	selectedZoomFocusMode?: ZoomFocusMode | null;
 	onZoomFocusModeChange?: (mode: ZoomFocusMode) => void;
 	hasCursorTelemetry?: boolean;
@@ -113,6 +98,7 @@ interface SettingsPanelProps {
 	zoomRegions?: ZoomRegion[];
 	trimRegions?: TrimRegion[];
 	speedRegions?: SpeedRegion[];
+	onZoomCustomScaleChange?: (customScale: number | undefined) => void;
 	onZoomSpanChange?: (id: string, span: { start: number; end: number }) => void;
 	onTrimSpanChange?: (id: string, span: { start: number; end: number }) => void;
 	onSpeedSpanChange?: (id: string, span: { start: number; end: number }) => void;
@@ -132,8 +118,6 @@ export function SettingsPanel({
 	onWallpaperChange,
 	selectedZoomDepth,
 	onZoomDepthChange,
-	onZoomCustomScaleChange,
-	selectedZoomCustomScale,
 	selectedZoomFocusMode,
 	onZoomFocusModeChange,
 	hasCursorTelemetry = false,
@@ -187,6 +171,7 @@ export function SettingsPanel({
 	zoomRegions = [],
 	trimRegions = [],
 	speedRegions = [],
+	onZoomCustomScaleChange,
 	onZoomSpanChange,
 	onTrimSpanChange,
 	onSpeedSpanChange,
@@ -206,38 +191,16 @@ export function SettingsPanel({
 	const [cropAspectLocked, setCropAspectLocked] = useState(false);
 	const [cropAspectRatio, setCropAspectRatio] = useState("");
 
-	const selectedZoomRegion = selectedZoomId ? zoomRegions.find((r) => r.id === selectedZoomId) ?? null : null;
-	const selectedTrimRegion = selectedTrimId ? trimRegions.find((r) => r.id === selectedTrimId) ?? null : null;
-	const selectedSpeedRegion = selectedSpeedId ? speedRegions.find((r) => r.id === selectedSpeedId) ?? null : null;
+	const selectedZoomRegion = selectedZoomId
+		? (zoomRegions.find((r) => r.id === selectedZoomId) ?? null)
+		: null;
+	const selectedTrimRegion = selectedTrimId
+		? (trimRegions.find((r) => r.id === selectedTrimId) ?? null)
+		: null;
+	const selectedSpeedRegion = selectedSpeedId
+		? (speedRegions.find((r) => r.id === selectedSpeedId) ?? null)
+		: null;
 	const durationMs = videoDuration * 1000;
-
-	const handleTrimStartChange = useCallback(
-		(ms: number) => {
-			if (!selectedTrimRegion || !onTrimSpanChange) return;
-			if (ms >= selectedTrimRegion.endMs) return;
-			onTrimSpanChange(selectedTrimRegion.id, { start: ms, end: selectedTrimRegion.endMs });
-		},
-		[selectedTrimRegion, onTrimSpanChange],
-	);
-
-	const handleTrimEndChange = useCallback(
-		(ms: number) => {
-			if (!selectedTrimRegion || !onTrimSpanChange) return;
-			if (ms <= selectedTrimRegion.startMs) return;
-			onTrimSpanChange(selectedTrimRegion.id, { start: selectedTrimRegion.startMs, end: ms });
-		},
-		[selectedTrimRegion, onTrimSpanChange],
-	);
-
-	const handleTrimDurationChange = useCallback(
-		(ms: number) => {
-			if (!selectedTrimRegion || !onTrimSpanChange) return;
-			const newEnd = selectedTrimRegion.startMs + ms;
-			if (newEnd <= selectedTrimRegion.startMs || newEnd > durationMs) return;
-			onTrimSpanChange(selectedTrimRegion.id, { start: selectedTrimRegion.startMs, end: newEnd });
-		},
-		[selectedTrimRegion, onTrimSpanChange, durationMs],
-	);
 
 	const videoWidth = videoElement?.videoWidth || 1920;
 	const videoHeight = videoElement?.videoHeight || 1080;
@@ -387,8 +350,6 @@ export function SettingsPanel({
 				<ZoomSection
 					selectedZoomDepth={selectedZoomDepth ?? null}
 					onZoomDepthChange={onZoomDepthChange}
-					onZoomCustomScaleChange={onZoomCustomScaleChange}
-					selectedZoomCustomScale={selectedZoomCustomScale}
 					selectedZoomFocusMode={selectedZoomFocusMode ?? null}
 					onZoomFocusModeChange={onZoomFocusModeChange}
 					hasCursorTelemetry={hasCursorTelemetry}
@@ -396,6 +357,7 @@ export function SettingsPanel({
 					onZoomDelete={onZoomDelete}
 					selectedZoomRegion={selectedZoomRegion}
 					onZoomSpanChange={onZoomSpanChange}
+					onZoomCustomScaleChange={onZoomCustomScaleChange}
 					videoDuration={videoDuration}
 				/>
 
@@ -409,28 +371,12 @@ export function SettingsPanel({
 								</span>
 							)}
 						</div>
-						{selectedTrimRegion && (
-							<div className="space-y-1.5 bg-white/[0.02] rounded-lg p-2 border border-white/5 mb-2">
-								<TimestampInput
-									label={t("region.start")}
-									valueMs={selectedTrimRegion.startMs}
-									minMs={0}
-									maxMs={selectedTrimRegion.endMs - 100}
-									onChange={handleTrimStartChange}
-								/>
-								<TimestampInput
-									label={t("region.end")}
-									valueMs={selectedTrimRegion.endMs}
-									minMs={selectedTrimRegion.startMs + 100}
-									maxMs={durationMs}
-									onChange={handleTrimEndChange}
-								/>
-								<TimestampInput
-									label={t("region.duration")}
-									valueMs={selectedTrimRegion.endMs - selectedTrimRegion.startMs}
-									minMs={100}
-									maxMs={durationMs - selectedTrimRegion.startMs}
-									onChange={handleTrimDurationChange}
+						{selectedTrimRegion && onTrimSpanChange && (
+							<div className="mb-2">
+								<RegionSection
+									region={selectedTrimRegion}
+									videoDurationMs={durationMs}
+									onSpanChange={onTrimSpanChange}
 								/>
 							</div>
 						)}

@@ -3,6 +3,8 @@
 		"level": "Niveau de zoom",
 		"selectRegion": "Sélectionnez une région de zoom à ajuster",
 		"deleteZoom": "Supprimer le zoom",
+		"customZoom": "Zoom personnalisé",
+		"maxZoomError": "Le zoom ne peut pas dépasser 10×",
 		"focusMode": {
 			"title": "Mode focus",
 			"manual": "Manuel",

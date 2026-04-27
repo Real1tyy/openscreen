@@ -1,10 +1,10 @@
 {
 	"zoom": {
 		"level": "Zoom Level",
-		"customZoom": "Custom Zoom Level",
-		"maxZoomError": "Zoom can't go higher than 10×",
 		"selectRegion": "Select a zoom region to adjust",
 		"deleteZoom": "Delete Zoom",
+		"customZoom": "Custom Zoom",
+		"maxZoomError": "Zoom can't go higher than 10×",
 		"focusMode": {
 			"title": "Focus Mode",
 			"manual": "Manual",

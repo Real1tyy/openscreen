@@ -13,7 +13,9 @@ import { createSpanChangeHandler, resetIdRef } from "./regionReducers";
 
 interface UseZoomHandlersParams {
 	pushState: (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
-	updateState: (update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>)) => void;
+	updateState: (
+		update: Partial<EditorState> | ((prev: EditorState) => Partial<EditorState>),
+	) => void;
 	selectZoom: (id: string | null) => void;
 	selectedZoomId: string | null;
 }
@@ -80,21 +82,12 @@ export function useZoomHandlers({
 			pushState((prev) => ({
 				zoomRegions: prev.zoomRegions.map((region) =>
 					region.id === selectedZoomId
-						? { ...region, depth, customScale: undefined, focus: clampFocusToDepth(region.focus, depth) }
-						: region,
-				),
-			}));
-		},
-		[selectedZoomId, pushState],
-	);
-
-	const handleZoomCustomScaleChange = useCallback(
-		(scale: number) => {
-			if (!selectedZoomId) return;
-			pushState((prev) => ({
-				zoomRegions: prev.zoomRegions.map((region) =>
-					region.id === selectedZoomId
-						? { ...region, customScale: scale }
+						? {
+								...region,
+								depth,
+								customScale: undefined,
+								focus: clampFocusToDepth(region.focus, depth),
+							}
 						: region,
 				),
 			}));
@@ -114,6 +107,37 @@ export function useZoomHandlers({
 		[selectedZoomId, pushState],
 	);
 
+	const handleZoomCustomScaleChange = useCallback(
+		(customScale: number | undefined) => {
+			if (!selectedZoomId) return;
+			pushState((prev) => ({
+				zoomRegions: prev.zoomRegions.map((region) =>
+					region.id === selectedZoomId ? { ...region, customScale } : region,
+				),
+			}));
+		},
+		[selectedZoomId, pushState],
+	);
+
+	const handleZoomDuplicate = useCallback(
+		(id: string) => {
+			pushState((prev) => {
+				const source = prev.zoomRegions.find((r) => r.id === id);
+				if (!source) return {};
+				const newId = `zoom-${nextIdRef.current++}`;
+				const duration = source.endMs - source.startMs;
+				const clone: ZoomRegion = {
+					...source,
+					id: newId,
+					startMs: source.endMs,
+					endMs: source.endMs + duration,
+				};
+				return { zoomRegions: [...prev.zoomRegions, clone] };
+			});
+		},
+		[pushState],
+	);
+
 	const handleZoomDelete = useCallback(
 		(id: string) => {
 			pushState((prev) => ({
@@ -122,25 +146,6 @@ export function useZoomHandlers({
 			if (selectedZoomId === id) selectZoom(null);
 		},
 		[selectedZoomId, pushState, selectZoom],
-	);
-
-	const handleZoomDuplicate = useCallback(
-		(id: string) => {
-			pushState((prev) => {
-				const original = prev.zoomRegions.find((r) => r.id === id);
-				if (!original) return {};
-				const duration = original.endMs - original.startMs;
-				const newId = `zoom-${nextIdRef.current++}`;
-				const clone: ZoomRegion = {
-					...original,
-					id: newId,
-					startMs: original.endMs,
-					endMs: original.endMs + duration,
-				};
-				return { zoomRegions: [...prev.zoomRegions, clone] };
-			});
-		},
-		[pushState],
 	);
 
 	const resetIdCounter = useCallback((existingIds: string[]) => {
@@ -153,10 +158,10 @@ export function useZoomHandlers({
 		handleZoomSpanChange,
 		handleZoomFocusChange,
 		handleZoomDepthChange,
-		handleZoomCustomScaleChange,
 		handleZoomFocusModeChange,
-		handleZoomDelete,
+		handleZoomCustomScaleChange,
 		handleZoomDuplicate,
+		handleZoomDelete,
 		resetIdCounter,
 	};
 }

@@ -209,5 +209,3 @@ export function clampFocusToDepth(focus: ZoomFocus, _depth: ZoomDepth): ZoomFocu
 		cy: clamp(focus.cy, 0, 1),
 	};
 }
-
-

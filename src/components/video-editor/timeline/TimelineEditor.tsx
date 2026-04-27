@@ -30,9 +30,11 @@ import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
+import { type RegionType, useContextMenuStore } from "@/stores/useContextMenuStore";
+import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/aspectRatioUtils";
-import { formatMsCompact } from "@/utils/timeUtils";
 import { formatShortcut } from "@/utils/platformUtils";
+import { formatMsCompact } from "@/utils/timeUtils";
 import { TutorialHelp } from "../TutorialHelp";
 import type {
 	AnnotationRegion,
@@ -47,6 +49,7 @@ import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import Row from "./Row";
 import { computeNewRegionSpan, normalizeRegionSpan } from "./regionUtils";
+import TimelineWrapper from "./TimelineWrapper";
 import {
 	calculateAxisScale,
 	calculateTimelineScale,
@@ -55,7 +58,6 @@ import {
 	formatTimeLabel,
 	normalizeWheelDelta,
 } from "./timelineScaleUtils";
-import TimelineWrapper from "./TimelineWrapper";
 import { detectZoomDwellCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
@@ -74,24 +76,28 @@ interface TimelineEditorProps {
 	onZoomAdded: (span: Span) => void;
 	onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
 	onZoomSpanChange: (id: string, span: Span) => void;
+	onZoomDuplicate?: (id: string) => void;
 	onZoomDelete: (id: string) => void;
 	selectedZoomId: string | null;
 	onSelectZoom: (id: string | null) => void;
 	trimRegions?: TrimRegion[];
 	onTrimAdded?: (span: Span) => void;
 	onTrimSpanChange?: (id: string, span: Span) => void;
+	onTrimDuplicate?: (id: string) => void;
 	onTrimDelete?: (id: string) => void;
 	selectedTrimId?: string | null;
 	onSelectTrim?: (id: string | null) => void;
 	annotationRegions?: AnnotationRegion[];
 	onAnnotationAdded?: (span: Span) => void;
 	onAnnotationSpanChange?: (id: string, span: Span) => void;
+	onAnnotationDuplicate?: (id: string) => void;
 	onAnnotationDelete?: (id: string) => void;
 	selectedAnnotationId?: string | null;
 	onSelectAnnotation?: (id: string | null) => void;
 	speedRegions?: SpeedRegion[];
 	onSpeedAdded?: (span: Span) => void;
 	onSpeedSpanChange?: (id: string, span: Span) => void;
+	onSpeedDuplicate?: (id: string) => void;
 	onSpeedDelete?: (id: string) => void;
 	selectedSpeedId?: string | null;
 	onSelectSpeed?: (id: string | null) => void;
@@ -116,13 +122,6 @@ interface TimelineEditorProps {
 	onTrimToggleLoop?: (id: string) => void;
 	loopingTrimId?: string | null;
 	trimMarkStartMs?: number | null;
-	defaultZoomDurationMs?: number;
-	defaultTrimDurationMs?: number;
-	defaultSpeedDurationMs?: number;
-	onDuplicateZoom?: (id: string) => void;
-	onDuplicateTrim?: (id: string) => void;
-	onDuplicateSpeed?: (id: string) => void;
-	onDuplicateAnnotation?: (id: string) => void;
 }
 
 interface TimelineRenderItem {
@@ -424,115 +423,6 @@ function TimelineAxis({
 	);
 }
 
-function ContextMenuPopover({
-	x,
-	y,
-	children,
-	onClick,
-}: {
-	x: number;
-	y: number;
-	children: React.ReactNode;
-	onClick?: (e: React.MouseEvent) => void;
-}) {
-	const ref = useRef<HTMLDivElement>(null);
-	const [pos, setPos] = useState({ left: x, top: y });
-
-	useLayoutEffect(() => {
-		const el = ref.current;
-		if (!el) return;
-		const rect = el.getBoundingClientRect();
-		const vh = window.innerHeight;
-		const vw = window.innerWidth;
-		let top = y;
-		let left = x;
-		if (top + rect.height > vh - 8) {
-			top = Math.max(8, y - rect.height);
-		}
-		if (left + rect.width > vw - 8) {
-			left = Math.max(8, vw - rect.width - 8);
-		}
-		setPos({ left, top });
-	}, [x, y]);
-
-	return (
-		<div
-			ref={ref}
-			className="fixed z-[200] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl py-1 min-w-[200px] text-[12px] max-h-[calc(100vh-16px)] overflow-y-auto"
-			style={{ left: pos.left, top: pos.top }}
-			onClick={onClick}
-		>
-			{children}
-		</div>
-	);
-}
-
-type RegionContextMenuState = {
-	type: "zoom" | "trim" | "speed" | "annotation";
-	id: string;
-	x: number;
-	y: number;
-};
-
-function RegionContextMenuItems({
-	regionType,
-	onClose,
-	onSetStartToNow,
-	onSetEndToNow,
-	onDuplicate,
-	onDelete,
-}: {
-	regionType: string;
-	onClose: () => void;
-	onSetStartToNow: () => void;
-	onSetEndToNow: () => void;
-	onDuplicate?: () => void;
-	onDelete?: () => void;
-}) {
-	const item = (
-		label: string,
-		icon: React.ReactNode,
-		onClick: () => void,
-		accent?: string,
-	) => (
-		<button
-			type="button"
-			onClick={() => {
-				onClick();
-				onClose();
-			}}
-			className={cn(
-				"w-full px-3 py-1.5 flex items-center gap-2 text-left transition-colors",
-				accent
-					? `${accent} hover:bg-white/10`
-					: "text-slate-300 hover:bg-white/10 hover:text-white",
-			)}
-		>
-			{icon}
-			{label}
-		</button>
-	);
-
-	return (
-		<>
-			{item("Set start to now", <Clock className="w-3.5 h-3.5" />, onSetStartToNow)}
-			{item("Set end to now", <Clock className="w-3.5 h-3.5" />, onSetEndToNow)}
-			{onDuplicate && (
-				<>
-					<div className="h-[1px] bg-white/5 my-1" />
-					{item("Duplicate", <Copy className="w-3.5 h-3.5" />, onDuplicate)}
-				</>
-			)}
-			{onDelete && (
-				<>
-					<div className="h-[1px] bg-white/5 my-1" />
-					{item(`Delete ${regionType}`, <Trash2 className="w-3.5 h-3.5" />, onDelete, "text-red-400")}
-				</>
-			)}
-		</>
-	);
-}
-
 function TrimContextMenuItems({
 	trimId,
 	onClose,
@@ -543,8 +433,8 @@ function TrimContextMenuItems({
 	onPlayFromStart,
 	onPlayFromEnd,
 	onToggleLoop,
-	onDelete,
 	onDuplicate,
+	onDelete,
 	isLooping,
 	hasAdjacentBefore,
 	hasAdjacentAfter,
@@ -558,8 +448,8 @@ function TrimContextMenuItems({
 	onPlayFromStart?: (id: string) => void;
 	onPlayFromEnd?: (id: string) => void;
 	onToggleLoop?: (id: string) => void;
-	onDelete?: (id: string) => void;
 	onDuplicate?: (id: string) => void;
+	onDelete?: (id: string) => void;
 	isLooping: boolean;
 	hasAdjacentBefore: boolean;
 	hasAdjacentAfter: boolean;
@@ -610,7 +500,9 @@ function TrimContextMenuItems({
 				!hasAdjacentAfter,
 			)}
 			<div className="h-[1px] bg-white/5 my-1" />
-			{item("Play from start (−5s)", <Play className="w-3.5 h-3.5" />, () => onPlayFromStart?.(trimId))}
+			{item("Play from start (−5s)", <Play className="w-3.5 h-3.5" />, () =>
+				onPlayFromStart?.(trimId),
+			)}
 			{item("Play from end", <Play className="w-3.5 h-3.5" />, () => onPlayFromEnd?.(trimId))}
 			{item(
 				isLooping ? "Stop loop" : "Loop around trim",
@@ -622,7 +514,119 @@ function TrimContextMenuItems({
 			<div className="h-[1px] bg-white/5 my-1" />
 			{item("Duplicate", <Copy className="w-3.5 h-3.5" />, () => onDuplicate?.(trimId))}
 			<div className="h-[1px] bg-white/5 my-1" />
-			{item("Delete trim", <Scissors className="w-3.5 h-3.5" />, () => onDelete?.(trimId), false, "text-red-400")}
+			{item(
+				"Delete trim",
+				<Trash2 className="w-3.5 h-3.5" />,
+				() => onDelete?.(trimId),
+				false,
+				"text-red-400",
+			)}
+		</>
+	);
+}
+
+function ContextMenuPopover({
+	x,
+	y,
+	onClose,
+	children,
+}: {
+	x: number;
+	y: number;
+	onClose: () => void;
+	children: React.ReactNode;
+}) {
+	const menuRef = useRef<HTMLDivElement>(null);
+
+	useLayoutEffect(() => {
+		const el = menuRef.current;
+		if (!el) return;
+		const rect = el.getBoundingClientRect();
+		if (rect.bottom > window.innerHeight) {
+			el.style.top = `${y - rect.height}px`;
+		}
+		if (rect.right > window.innerWidth) {
+			el.style.left = `${x - rect.width}px`;
+		}
+	}, [x, y]);
+
+	useEffect(() => {
+		const handle = (e: MouseEvent) => {
+			if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+				onClose();
+			}
+		};
+		window.addEventListener("mousedown", handle);
+		window.addEventListener("contextmenu", handle);
+		return () => {
+			window.removeEventListener("mousedown", handle);
+			window.removeEventListener("contextmenu", handle);
+		};
+	}, [onClose]);
+
+	return (
+		<div
+			ref={menuRef}
+			className="fixed z-[200] bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl py-1 min-w-[200px] text-[12px]"
+			style={{ left: x, top: y }}
+			onClick={(e) => e.stopPropagation()}
+		>
+			{children}
+		</div>
+	);
+}
+
+function RegionContextMenuItems({
+	regionType,
+	regionId,
+	onClose,
+	onSetStartToNow,
+	onSetEndToNow,
+	onDuplicate,
+	onDelete,
+}: {
+	regionType: RegionType;
+	regionId: string;
+	onClose: () => void;
+	onSetStartToNow?: (id: string) => void;
+	onSetEndToNow?: (id: string) => void;
+	onDuplicate?: (id: string) => void;
+	onDelete?: (id: string) => void;
+}) {
+	const item = (label: string, icon: React.ReactNode, onClick: () => void, accent?: string) => (
+		<button
+			type="button"
+			onClick={() => {
+				onClick();
+				onClose();
+			}}
+			className={cn(
+				"w-full px-3 py-1.5 flex items-center gap-2 text-left transition-colors",
+				accent
+					? `${accent} hover:bg-white/10`
+					: "text-slate-300 hover:bg-white/10 hover:text-white",
+			)}
+		>
+			{icon}
+			{label}
+		</button>
+	);
+
+	return (
+		<>
+			{item("Set start to now", <Clock className="w-3.5 h-3.5" />, () =>
+				onSetStartToNow?.(regionId),
+			)}
+			{item("Set end to now", <Clock className="w-3.5 h-3.5" />, () => onSetEndToNow?.(regionId))}
+			<div className="h-[1px] bg-white/5 my-1" />
+			{item("Duplicate", <Copy className="w-3.5 h-3.5" />, () => onDuplicate?.(regionId))}
+			<div className="h-[1px] bg-white/5 my-1" />
+			{item(
+				`Delete ${regionType}`,
+				<Trash2 className="w-3.5 h-3.5" />,
+				() => onDelete?.(regionId),
+				"text-red-400",
+			)}
 		</>
 	);
 }
@@ -715,7 +719,7 @@ function Timeline({
 	editingChapterId?: string | null;
 	onEditChapter?: (id: string | null) => void;
 	onTrimContextMenu?: (id: string, event: React.MouseEvent) => void;
-	onRegionContextMenu?: (type: "zoom" | "speed" | "annotation", id: string, event: React.MouseEvent) => void;
+	onRegionContextMenu?: (type: RegionType, id: string, event: React.MouseEvent) => void;
 	trimMarkStartMs?: number | null;
 	loopingTrimId?: string | null;
 }) {
@@ -820,7 +824,7 @@ function Timeline({
 		selectedId: string | null | undefined,
 		onSelect: ((id: string | null) => void) | undefined,
 		hint: string,
-		contextMenuType?: "zoom" | "speed" | "annotation",
+		contextMenuType?: RegionType,
 	) => (
 		<Row id={rowId} isEmpty={rowItems.length === 0} hint={hint}>
 			{rowItems.map((item) => (
@@ -834,10 +838,14 @@ function Timeline({
 					variant={item.variant}
 					zoomDepth={item.zoomDepth}
 					speedValue={item.speedValue}
-					onContextMenu={contextMenuType ? (e) => {
-						e.preventDefault();
-						onRegionContextMenu?.(contextMenuType, item.id, e);
-					} : undefined}
+					onContextMenu={
+						contextMenuType
+							? (e) => {
+									e.preventDefault();
+									onRegionContextMenu?.(contextMenuType, item.id, e);
+								}
+							: undefined
+					}
 				>
 					{item.label}
 				</Item>
@@ -863,7 +871,11 @@ function Timeline({
 				>
 					{item.id === loopingTrimId ? (
 						<span className="flex items-center gap-1">
-							{item.label} <Repeat className="w-2.5 h-2.5 text-red-300 animate-spin" style={{ animationDuration: "2s" }} />
+							{item.label}{" "}
+							<Repeat
+								className="w-2.5 h-2.5 text-red-300 animate-spin"
+								style={{ animationDuration: "2s" }}
+							/>
 						</span>
 					) : (
 						item.label
@@ -922,11 +934,32 @@ function Timeline({
 			/>
 			<TrimMarkIndicator timeMs={trimMarkStartMs ?? null} videoDurationMs={videoDurationMs} />
 
-			{renderRow(ZOOM_ROW_ID, zoomItems, selectedZoomId, onSelectZoom, t("hints.pressZoom"), "zoom")}
+			{renderRow(
+				ZOOM_ROW_ID,
+				zoomItems,
+				selectedZoomId,
+				onSelectZoom,
+				t("hints.pressZoom"),
+				"zoom",
+			)}
 			{renderTrimRow()}
 			{renderChapterRow()}
-			{renderRow(ANNOTATION_ROW_ID, annotationItems, selectedAnnotationId, onSelectAnnotation, t("hints.pressAnnotation"), "annotation")}
-			{renderRow(SPEED_ROW_ID, speedItems, selectedSpeedId, onSelectSpeed, t("hints.pressSpeed"), "speed")}
+			{renderRow(
+				ANNOTATION_ROW_ID,
+				annotationItems,
+				selectedAnnotationId,
+				onSelectAnnotation,
+				t("hints.pressAnnotation"),
+				"annotation",
+			)}
+			{renderRow(
+				SPEED_ROW_ID,
+				speedItems,
+				selectedSpeedId,
+				onSelectSpeed,
+				t("hints.pressSpeed"),
+				"speed",
+			)}
 		</div>
 	);
 }
@@ -940,24 +973,28 @@ export default function TimelineEditor({
 	onZoomAdded,
 	onZoomSuggested,
 	onZoomSpanChange,
+	onZoomDuplicate,
 	onZoomDelete,
 	selectedZoomId,
 	onSelectZoom,
 	trimRegions = [],
 	onTrimAdded,
 	onTrimSpanChange,
+	onTrimDuplicate,
 	onTrimDelete,
 	selectedTrimId,
 	onSelectTrim,
 	annotationRegions = [],
 	onAnnotationAdded,
 	onAnnotationSpanChange,
+	onAnnotationDuplicate,
 	onAnnotationDelete,
 	selectedAnnotationId,
 	onSelectAnnotation,
 	speedRegions = [],
 	onSpeedAdded,
 	onSpeedSpanChange,
+	onSpeedDuplicate,
 	onSpeedDelete,
 	selectedSpeedId,
 	onSelectSpeed,
@@ -981,13 +1018,6 @@ export default function TimelineEditor({
 	onTrimToggleLoop,
 	loopingTrimId,
 	trimMarkStartMs,
-	defaultZoomDurationMs: defaultZoomDurationMsProp = 5000,
-	defaultTrimDurationMs: defaultTrimDurationMsProp = 5000,
-	defaultSpeedDurationMs: defaultSpeedDurationMsProp = 5000,
-	onDuplicateZoom,
-	onDuplicateTrim,
-	onDuplicateSpeed,
-	onDuplicateAnnotation,
 }: TimelineEditorProps) {
 	const t = useScopedT("timeline");
 	const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
@@ -1008,13 +1038,13 @@ export default function TimelineEditor({
 		pan: "Scroll",
 		zoom: "Ctrl + Scroll",
 	});
-	const [trimContextMenu, setTrimContextMenu] = useState<{
-		trimId: string;
-		x: number;
-		y: number;
-	} | null>(null);
 	const timelineContainerRef = useRef<HTMLDivElement>(null);
 	const { shortcuts: keyShortcuts, isMac } = useShortcuts();
+
+	const ctxMenu = useContextMenuStore();
+	const defaultZoomDurationMs = useEditorPreferencesStore((s) => s.defaultZoomDurationMs);
+	const defaultTrimDurationMs = useEditorPreferencesStore((s) => s.defaultTrimDurationMs);
+	const defaultSpeedDurationMs = useEditorPreferencesStore((s) => s.defaultSpeedDurationMs);
 
 	useEffect(() => {
 		formatShortcut(["mod", "Scroll"]).then((zoom) => {
@@ -1022,99 +1052,19 @@ export default function TimelineEditor({
 		});
 	}, []);
 
-	const handleTrimContextMenu = useCallback((id: string, event: React.MouseEvent) => {
-		setTrimContextMenu({ trimId: id, x: event.clientX, y: event.clientY });
-	}, []);
-
-	const closeTrimContextMenu = useCallback(() => setTrimContextMenu(null), []);
-
-	const [regionContextMenu, setRegionContextMenu] = useState<RegionContextMenuState | null>(null);
-
-	const handleRegionContextMenu = useCallback(
-		(type: "zoom" | "speed" | "annotation", id: string, event: React.MouseEvent) => {
-			setRegionContextMenu({ type, id, x: event.clientX, y: event.clientY });
+	const handleTrimContextMenu = useCallback(
+		(id: string, event: React.MouseEvent) => {
+			ctxMenu.open("trim", id, event.clientX, event.clientY);
 		},
-		[],
+		[ctxMenu],
 	);
 
-	const closeRegionContextMenu = useCallback(() => setRegionContextMenu(null), []);
-
-	useEffect(() => {
-		const menu = trimContextMenu || regionContextMenu;
-		if (!menu) return;
-		const handleClick = () => {
-			setTrimContextMenu(null);
-			setRegionContextMenu(null);
-		};
-		window.addEventListener("click", handleClick);
-		window.addEventListener("contextmenu", handleClick);
-		return () => {
-			window.removeEventListener("click", handleClick);
-			window.removeEventListener("contextmenu", handleClick);
-		};
-	}, [trimContextMenu, regionContextMenu]);
-
-	type SpanChangeHandler = ((id: string, span: Span) => void) | undefined;
-
-	const handleRegionSetStartToNow = useCallback(() => {
-		if (!regionContextMenu) return;
-		const { type, id } = regionContextMenu;
-		const handlers: Record<string, SpanChangeHandler> = {
-			zoom: onZoomSpanChange,
-			speed: onSpeedSpanChange,
-			annotation: onAnnotationSpanChange,
-		};
-		const regions: Record<string, Array<{ id: string; startMs: number; endMs: number }>> = {
-			zoom: zoomRegions,
-			speed: speedRegions,
-			annotation: annotationRegions,
-		};
-		const handler = handlers[type];
-		const region = regions[type]?.find((r) => r.id === id);
-		if (!handler || !region || currentTimeMs >= region.endMs) return;
-		handler(id, { start: currentTimeMs, end: region.endMs });
-	}, [regionContextMenu, currentTimeMs, zoomRegions, speedRegions, annotationRegions, onZoomSpanChange, onSpeedSpanChange, onAnnotationSpanChange]);
-
-	const handleRegionSetEndToNow = useCallback(() => {
-		if (!regionContextMenu) return;
-		const { type, id } = regionContextMenu;
-		const handlers: Record<string, SpanChangeHandler> = {
-			zoom: onZoomSpanChange,
-			speed: onSpeedSpanChange,
-			annotation: onAnnotationSpanChange,
-		};
-		const regions: Record<string, Array<{ id: string; startMs: number; endMs: number }>> = {
-			zoom: zoomRegions,
-			speed: speedRegions,
-			annotation: annotationRegions,
-		};
-		const handler = handlers[type];
-		const region = regions[type]?.find((r) => r.id === id);
-		if (!handler || !region || currentTimeMs <= region.startMs) return;
-		handler(id, { start: region.startMs, end: currentTimeMs });
-	}, [regionContextMenu, currentTimeMs, zoomRegions, speedRegions, annotationRegions, onZoomSpanChange, onSpeedSpanChange, onAnnotationSpanChange]);
-
-	const handleRegionDuplicate = useCallback(() => {
-		if (!regionContextMenu) return;
-		const { type, id } = regionContextMenu;
-		const duplicators: Record<string, ((id: string) => void) | undefined> = {
-			zoom: onDuplicateZoom,
-			speed: onDuplicateSpeed,
-			annotation: onDuplicateAnnotation,
-		};
-		duplicators[type]?.(id);
-	}, [regionContextMenu, onDuplicateZoom, onDuplicateSpeed, onDuplicateAnnotation]);
-
-	const handleRegionDelete = useCallback(() => {
-		if (!regionContextMenu) return;
-		const { type, id } = regionContextMenu;
-		const deleters: Record<string, ((id: string) => void) | undefined> = {
-			zoom: onZoomDelete,
-			speed: onSpeedDelete,
-			annotation: onAnnotationDelete,
-		};
-		deleters[type]?.(id);
-	}, [regionContextMenu, onZoomDelete, onSpeedDelete, onAnnotationDelete]);
+	const handleRegionContextMenu = useCallback(
+		(type: RegionType, id: string, event: React.MouseEvent) => {
+			ctxMenu.open(type, id, event.clientX, event.clientY);
+		},
+		[ctxMenu],
+	);
 
 	// Add keyframe at current playhead position
 	const addKeyframe = useCallback(() => {
@@ -1223,7 +1173,14 @@ export default function TimelineEditor({
 				onChapterSpanChange?.(ch.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
-	}, [totalMs, safeMinDurationMs, onZoomSpanChange, onTrimSpanChange, onSpeedSpanChange, onChapterSpanChange]);
+	}, [
+		totalMs,
+		safeMinDurationMs,
+		onZoomSpanChange,
+		onTrimSpanChange,
+		onSpeedSpanChange,
+		onChapterSpanChange,
+	]);
 
 	const hasOverlap = useCallback(
 		(newSpan: Span, excludeId?: string): boolean => {
@@ -1265,20 +1222,8 @@ export default function TimelineEditor({
 		[zoomRegions, trimRegions, annotationRegions, speedRegions, chapters],
 	);
 
-	const defaultZoomDuration = useMemo(
-		() => Math.max(1000, defaultZoomDurationMsProp),
-		[defaultZoomDurationMsProp],
-	);
-	const defaultTrimDuration = useMemo(
-		() => Math.max(1000, defaultTrimDurationMsProp),
-		[defaultTrimDurationMsProp],
-	);
-	const defaultSpeedDuration = useMemo(
-		() => Math.max(1000, defaultSpeedDurationMsProp),
-		[defaultSpeedDurationMsProp],
-	);
-	const defaultAnnotationDuration = useMemo(
-		() => Math.max(1000, Math.round(totalMs * 0.05)),
+	const clampDuration = useCallback(
+		(preferredMs: number) => Math.max(1000, Math.min(preferredMs, totalMs)),
 		[totalMs],
 	);
 
@@ -1294,12 +1239,9 @@ export default function TimelineEditor({
 			return;
 		}
 
-		const defaultDuration = Math.min(defaultZoomDuration, totalMs);
-		if (defaultDuration <= 0) {
-			return;
-		}
+		const dur = clampDuration(defaultZoomDurationMs);
+		if (dur <= 0) return;
 
-		// Always place zoom at playhead
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 
 		if (isInsideTrimRegion(startPos)) {
@@ -1310,7 +1252,10 @@ export default function TimelineEditor({
 		}
 
 		const { startMs, endMs, isOverlapping } = computeNewRegionSpan(
-			zoomRegions, startPos, defaultZoomDuration, totalMs,
+			zoomRegions,
+			startPos,
+			dur,
+			totalMs,
 		);
 
 		if (isOverlapping || endMs <= startMs) {
@@ -1321,7 +1266,17 @@ export default function TimelineEditor({
 		}
 
 		onZoomAdded({ start: startMs, end: endMs });
-	}, [videoDuration, totalMs, currentTimeMs, zoomRegions, trimRegions, onZoomAdded, defaultZoomDuration, isInsideTrimRegion, t]);
+	}, [
+		videoDuration,
+		totalMs,
+		currentTimeMs,
+		zoomRegions,
+		onZoomAdded,
+		defaultZoomDurationMs,
+		clampDuration,
+		isInsideTrimRegion,
+		t,
+	]);
 
 	const handleSuggestZooms = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
@@ -1340,10 +1295,8 @@ export default function TimelineEditor({
 			return;
 		}
 
-		const defaultDuration = Math.min(defaultZoomDuration, totalMs);
-		if (defaultDuration <= 0) {
-			return;
-		}
+		const dur = clampDuration(defaultZoomDurationMs);
+		if (dur <= 0) return;
 
 		const reservedSpans = [...zoomRegions]
 			.map((region) => ({ start: region.startMs, end: region.endMs }))
@@ -1381,9 +1334,9 @@ export default function TimelineEditor({
 				return;
 			}
 
-			const centeredStart = Math.round(candidate.centerTimeMs - defaultDuration / 2);
-			const candidateStart = Math.max(0, Math.min(centeredStart, totalMs - defaultDuration));
-			const candidateEnd = candidateStart + defaultDuration;
+			const centeredStart = Math.round(candidate.centerTimeMs - dur / 2);
+			const candidateStart = Math.max(0, Math.min(centeredStart, totalMs - dur));
+			const candidateEnd = candidateStart + dur;
 			const hasOverlap = reservedSpans.some(
 				(span) => candidateEnd > span.start && candidateStart < span.end,
 			);
@@ -1413,7 +1366,8 @@ export default function TimelineEditor({
 	}, [
 		videoDuration,
 		totalMs,
-		defaultZoomDuration,
+		defaultZoomDurationMs,
+		clampDuration,
 		zoomRegions,
 		onZoomSuggested,
 		cursorTelemetry,
@@ -1425,15 +1379,15 @@ export default function TimelineEditor({
 			return;
 		}
 
-		const defaultDuration = Math.min(defaultTrimDuration, totalMs);
-		if (defaultDuration <= 0) {
-			return;
-		}
+		const dur = clampDuration(defaultTrimDurationMs);
+		if (dur <= 0) return;
 
-		// Always place trim at playhead
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 		const { startMs, endMs, isOverlapping } = computeNewRegionSpan(
-			trimRegions, startPos, defaultTrimDuration, totalMs,
+			trimRegions,
+			startPos,
+			dur,
+			totalMs,
 		);
 
 		if (isOverlapping || endMs <= startMs) {
@@ -1444,19 +1398,25 @@ export default function TimelineEditor({
 		}
 
 		onTrimAdded({ start: startMs, end: endMs });
-	}, [videoDuration, totalMs, currentTimeMs, trimRegions, onTrimAdded, defaultTrimDuration, t]);
+	}, [
+		videoDuration,
+		totalMs,
+		currentTimeMs,
+		trimRegions,
+		onTrimAdded,
+		defaultTrimDurationMs,
+		clampDuration,
+		t,
+	]);
 
 	const handleAddSpeed = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onSpeedAdded) {
 			return;
 		}
 
-		const defaultDuration = Math.min(defaultSpeedDuration, totalMs);
-		if (defaultDuration <= 0) {
-			return;
-		}
+		const dur = clampDuration(defaultSpeedDurationMs);
+		if (dur <= 0) return;
 
-		// Always place speed region at playhead
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 
 		if (isInsideTrimRegion(startPos)) {
@@ -1466,12 +1426,10 @@ export default function TimelineEditor({
 			return;
 		}
 
-		// Find the next speed region after the playhead
 		const sorted = [...speedRegions].sort((a, b) => a.startMs - b.startMs);
 		const nextRegion = sorted.find((region) => region.startMs > startPos);
 		const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
 
-		// Check if playhead is inside any speed region
 		const isOverlapping = sorted.some(
 			(region) => startPos >= region.startMs && startPos < region.endMs,
 		);
@@ -1482,16 +1440,16 @@ export default function TimelineEditor({
 			return;
 		}
 
-		const actualDuration = Math.min(defaultSpeedDuration, gapToNext);
+		const actualDuration = Math.min(dur, gapToNext);
 		onSpeedAdded({ start: startPos, end: startPos + actualDuration });
 	}, [
 		videoDuration,
 		totalMs,
 		currentTimeMs,
 		speedRegions,
-		trimRegions,
 		onSpeedAdded,
-		defaultSpeedDuration,
+		defaultSpeedDurationMs,
+		clampDuration,
 		isInsideTrimRegion,
 		t,
 	]);
@@ -1501,17 +1459,21 @@ export default function TimelineEditor({
 			return;
 		}
 
-		const defaultDuration = Math.min(defaultAnnotationDuration, totalMs);
-		if (defaultDuration <= 0) {
-			return;
-		}
+		const dur = clampDuration(defaultZoomDurationMs);
+		if (dur <= 0) return;
 
-		// Multiple annotations can exist at the same timestamp
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-		const endPos = Math.min(startPos + defaultDuration, totalMs);
+		const endPos = Math.min(startPos + dur, totalMs);
 
 		onAnnotationAdded({ start: startPos, end: endPos });
-	}, [videoDuration, totalMs, currentTimeMs, onAnnotationAdded, defaultAnnotationDuration]);
+	}, [
+		videoDuration,
+		totalMs,
+		currentTimeMs,
+		onAnnotationAdded,
+		defaultZoomDurationMs,
+		clampDuration,
+	]);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -1884,13 +1846,12 @@ export default function TimelineEditor({
 				</TimelineWrapper>
 			</div>
 
-			{/* Trim context menu */}
-			{trimContextMenu && (
-				<ContextMenuPopover x={trimContextMenu.x} y={trimContextMenu.y} onClick={(e) => e.stopPropagation()}>
-
+			{/* Trim context menu (with trim-specific actions) */}
+			{ctxMenu.regionType === "trim" && ctxMenu.regionId && (
+				<ContextMenuPopover x={ctxMenu.x} y={ctxMenu.y} onClose={ctxMenu.close}>
 					<TrimContextMenuItems
-						trimId={trimContextMenu.trimId}
-						onClose={closeTrimContextMenu}
+						trimId={ctxMenu.regionId}
+						onClose={ctxMenu.close}
 						onSetStartToNow={onTrimSetStartToNow}
 						onSetEndToNow={onTrimSetEndToNow}
 						onSetStartFromAdjacent={onTrimSetStartFromAdjacent}
@@ -1898,29 +1859,70 @@ export default function TimelineEditor({
 						onPlayFromStart={onTrimPlayFromStart}
 						onPlayFromEnd={onTrimPlayFromEnd}
 						onToggleLoop={onTrimToggleLoop}
+						onDuplicate={onTrimDuplicate}
 						onDelete={onTrimDelete}
-						onDuplicate={onDuplicateTrim}
-						isLooping={loopingTrimId === trimContextMenu.trimId}
+						isLooping={loopingTrimId === ctxMenu.regionId}
 						hasAdjacentBefore={trimRegions.some(
-							(r) => r.id !== trimContextMenu.trimId && r.endMs <= (trimRegions.find((t) => t.id === trimContextMenu.trimId)?.startMs ?? 0),
+							(r) =>
+								r.id !== ctxMenu.regionId &&
+								r.endMs <= (trimRegions.find((tr) => tr.id === ctxMenu.regionId)?.startMs ?? 0),
 						)}
 						hasAdjacentAfter={trimRegions.some(
-							(r) => r.id !== trimContextMenu.trimId && r.startMs >= (trimRegions.find((t) => t.id === trimContextMenu.trimId)?.endMs ?? Infinity),
+							(r) =>
+								r.id !== ctxMenu.regionId &&
+								r.startMs >=
+									(trimRegions.find((tr) => tr.id === ctxMenu.regionId)?.endMs ?? Infinity),
 						)}
 					/>
 				</ContextMenuPopover>
 			)}
 
-			{/* Zoom / Speed / Annotation context menu */}
-			{regionContextMenu && (
-				<ContextMenuPopover x={regionContextMenu.x} y={regionContextMenu.y} onClick={(e) => e.stopPropagation()}>
+			{/* Generic context menu for zoom/speed/annotation */}
+			{ctxMenu.regionType && ctxMenu.regionType !== "trim" && ctxMenu.regionId && (
+				<ContextMenuPopover x={ctxMenu.x} y={ctxMenu.y} onClose={ctxMenu.close}>
 					<RegionContextMenuItems
-						regionType={regionContextMenu.type}
-						onClose={closeRegionContextMenu}
-						onSetStartToNow={handleRegionSetStartToNow}
-						onSetEndToNow={handleRegionSetEndToNow}
-						onDuplicate={handleRegionDuplicate}
-						onDelete={handleRegionDelete}
+						regionType={ctxMenu.regionType}
+						regionId={ctxMenu.regionId}
+						onClose={ctxMenu.close}
+						onSetStartToNow={(id) => {
+							const nowMs = Math.round(currentTime * 1000);
+							if (ctxMenu.regionType === "zoom") {
+								const r = zoomRegions.find((z) => z.id === id);
+								if (r && nowMs < r.endMs) onZoomSpanChange(id, { start: nowMs, end: r.endMs });
+							} else if (ctxMenu.regionType === "speed") {
+								const r = speedRegions.find((s) => s.id === id);
+								if (r && nowMs < r.endMs) onSpeedSpanChange?.(id, { start: nowMs, end: r.endMs });
+							} else if (ctxMenu.regionType === "annotation") {
+								const r = annotationRegions.find((a) => a.id === id);
+								if (r && nowMs < r.endMs)
+									onAnnotationSpanChange?.(id, { start: nowMs, end: r.endMs });
+							}
+						}}
+						onSetEndToNow={(id) => {
+							const nowMs = Math.round(currentTime * 1000);
+							if (ctxMenu.regionType === "zoom") {
+								const r = zoomRegions.find((z) => z.id === id);
+								if (r && nowMs > r.startMs) onZoomSpanChange(id, { start: r.startMs, end: nowMs });
+							} else if (ctxMenu.regionType === "speed") {
+								const r = speedRegions.find((s) => s.id === id);
+								if (r && nowMs > r.startMs)
+									onSpeedSpanChange?.(id, { start: r.startMs, end: nowMs });
+							} else if (ctxMenu.regionType === "annotation") {
+								const r = annotationRegions.find((a) => a.id === id);
+								if (r && nowMs > r.startMs)
+									onAnnotationSpanChange?.(id, { start: r.startMs, end: nowMs });
+							}
+						}}
+						onDuplicate={(id) => {
+							if (ctxMenu.regionType === "zoom") onZoomDuplicate?.(id);
+							else if (ctxMenu.regionType === "speed") onSpeedDuplicate?.(id);
+							else if (ctxMenu.regionType === "annotation") onAnnotationDuplicate?.(id);
+						}}
+						onDelete={(id) => {
+							if (ctxMenu.regionType === "zoom") onZoomDelete(id);
+							else if (ctxMenu.regionType === "speed") onSpeedDelete?.(id);
+							else if (ctxMenu.regionType === "annotation") onAnnotationDelete?.(id);
+						}}
 					/>
 				</ContextMenuPopover>
 			)}

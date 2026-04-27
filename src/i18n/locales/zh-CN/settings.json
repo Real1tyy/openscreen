@@ -3,6 +3,8 @@
 		"level": "缩放级别",
 		"selectRegion": "选择要调整的缩放区域",
 		"deleteZoom": "删除缩放",
+		"customZoom": "自定义缩放",
+		"maxZoomError": "缩放不能超过 10×",
 		"focusMode": {
 			"title": "对焦模式",
 			"manual": "手动",

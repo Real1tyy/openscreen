@@ -4,16 +4,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
-import { ZOOM_DEPTH_SCALES, MAX_ZOOM_SCALE } from "../types";
-import type { ZoomDepth, ZoomFocusMode, ZoomRegion } from "../types";
 import { KeyboardShortcutsHelp } from "../KeyboardShortcutsHelp";
-import { TimestampInput } from "./TimestampInput";
+import type { ZoomDepth, ZoomFocusMode, ZoomRegion } from "../types";
+import { getZoomScale, MAX_ZOOM_SCALE, ZOOM_DEPTH_SCALES } from "../types";
+import { RegionSection } from "./RegionSection";
 
 interface ZoomSectionProps {
 	selectedZoomDepth: ZoomDepth | null;
 	onZoomDepthChange?: (depth: ZoomDepth) => void;
-	onZoomCustomScaleChange?: (scale: number) => void;
-	selectedZoomCustomScale?: number | null;
 	selectedZoomFocusMode: ZoomFocusMode | null;
 	onZoomFocusModeChange?: (mode: ZoomFocusMode) => void;
 	hasCursorTelemetry?: boolean;
@@ -21,8 +19,18 @@ interface ZoomSectionProps {
 	onZoomDelete?: (id: string) => void;
 	selectedZoomRegion?: ZoomRegion | null;
 	onZoomSpanChange?: (id: string, span: { start: number; end: number }) => void;
+	onZoomCustomScaleChange?: (customScale: number | undefined) => void;
 	videoDuration?: number;
 }
+
+const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
+	{ depth: 1, label: "1.25×" },
+	{ depth: 2, label: "1.5×" },
+	{ depth: 3, label: "1.8×" },
+	{ depth: 4, label: "2.2×" },
+	{ depth: 5, label: "3.5×" },
+	{ depth: 6, label: "5×" },
+];
 
 function CustomZoomInput({
 	value,
@@ -33,7 +41,7 @@ function CustomZoomInput({
 	onChange: (val: number) => void;
 	onError: () => void;
 }) {
-	const isPreset = Object.values(ZOOM_DEPTH_SCALES).some((s) => Math.abs(s - value) < 0.01);
+	const isPreset = Object.values(ZOOM_DEPTH_SCALES).includes(value);
 	const [draft, setDraft] = useState(isPreset ? "" : String(value));
 	const [isFocused, setIsFocused] = useState(false);
 
@@ -45,7 +53,7 @@ function CustomZoomInput({
 
 	const handleChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const raw = e.target.value.replace(/[^0-9.]/g, "");
+			const raw = e.target.value.replace(/[^\d.]/g, "");
 			if (raw === "" || raw === ".") {
 				setDraft(raw);
 				return;
@@ -64,7 +72,8 @@ function CustomZoomInput({
 
 	const handleBlur = useCallback(() => {
 		setIsFocused(false);
-		if (!draft || Number.parseFloat(draft) < 1) {
+		const num = Number.parseFloat(draft);
+		if (!draft || Number.isNaN(num) || num < 1) {
 			setDraft(isPreset ? "" : String(value));
 		}
 	}, [draft, isPreset, value]);
@@ -74,7 +83,7 @@ function CustomZoomInput({
 			<input
 				type="text"
 				inputMode="decimal"
-				value={isFocused ? draft : (isPreset ? "" : draft)}
+				value={isFocused ? draft : isPreset ? "" : draft}
 				placeholder="--"
 				onFocus={() => setIsFocused(true)}
 				onChange={handleChange}
@@ -86,20 +95,9 @@ function CustomZoomInput({
 	);
 }
 
-const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
-	{ depth: 1, label: "1.25×" },
-	{ depth: 2, label: "1.5×" },
-	{ depth: 3, label: "1.8×" },
-	{ depth: 4, label: "2.2×" },
-	{ depth: 5, label: "3.5×" },
-	{ depth: 6, label: "5×" },
-];
-
 export function ZoomSection({
 	selectedZoomDepth,
 	onZoomDepthChange,
-	onZoomCustomScaleChange,
-	selectedZoomCustomScale,
 	selectedZoomFocusMode,
 	onZoomFocusModeChange,
 	hasCursorTelemetry = false,
@@ -107,49 +105,26 @@ export function ZoomSection({
 	onZoomDelete,
 	selectedZoomRegion,
 	onZoomSpanChange,
+	onZoomCustomScaleChange,
 	videoDuration = 0,
 }: ZoomSectionProps) {
 	const t = useScopedT("settings");
-	const zoomEnabled = Boolean(selectedZoomDepth) || Boolean(selectedZoomCustomScale);
+	const zoomEnabled = Boolean(selectedZoomDepth) || Boolean(selectedZoomRegion?.customScale);
 	const durationMs = videoDuration * 1000;
-	const currentScale = selectedZoomCustomScale ?? (selectedZoomDepth ? ZOOM_DEPTH_SCALES[selectedZoomDepth] : null);
+	const currentScale = selectedZoomRegion ? getZoomScale(selectedZoomRegion) : null;
 
-	const handleStartChange = useCallback(
-		(ms: number) => {
-			if (!selectedZoomRegion || !onZoomSpanChange) return;
-			if (ms >= selectedZoomRegion.endMs) return;
-			onZoomSpanChange(selectedZoomRegion.id, { start: ms, end: selectedZoomRegion.endMs });
-		},
-		[selectedZoomRegion, onZoomSpanChange],
-	);
-
-	const handleEndChange = useCallback(
-		(ms: number) => {
-			if (!selectedZoomRegion || !onZoomSpanChange) return;
-			if (ms <= selectedZoomRegion.startMs) return;
-			onZoomSpanChange(selectedZoomRegion.id, { start: selectedZoomRegion.startMs, end: ms });
-		},
-		[selectedZoomRegion, onZoomSpanChange],
-	);
-
-	const handleDurationChange = useCallback(
-		(ms: number) => {
-			if (!selectedZoomRegion || !onZoomSpanChange) return;
-			const newEnd = selectedZoomRegion.startMs + ms;
-			if (newEnd <= selectedZoomRegion.startMs || newEnd > durationMs) return;
-			onZoomSpanChange(selectedZoomRegion.id, { start: selectedZoomRegion.startMs, end: newEnd });
-		},
-		[selectedZoomRegion, onZoomSpanChange, durationMs],
-	);
+	const badgeLabel = selectedZoomRegion?.customScale
+		? `${selectedZoomRegion.customScale}×`
+		: ZOOM_DEPTH_OPTIONS.find((o) => o.depth === selectedZoomDepth)?.label;
 
 	return (
 		<div className="mb-4">
 			<div className="flex items-center justify-between mb-3">
 				<span className="text-sm font-medium text-slate-200">{t("zoom.level")}</span>
 				<div className="flex items-center gap-2">
-					{zoomEnabled && currentScale && (
+					{zoomEnabled && badgeLabel && (
 						<span className="text-[10px] uppercase tracking-wider font-medium text-[#34B27B] bg-[#34B27B]/10 px-2 py-0.5 rounded-full">
-							{ZOOM_DEPTH_OPTIONS.find((o) => o.depth === selectedZoomDepth)?.label ?? `${currentScale}×`}
+							{badgeLabel}
 						</span>
 					)}
 					<KeyboardShortcutsHelp />
@@ -157,7 +132,7 @@ export function ZoomSection({
 			</div>
 			<div className="grid grid-cols-6 gap-1.5">
 				{ZOOM_DEPTH_OPTIONS.map((option) => {
-					const isActive = selectedZoomDepth === option.depth;
+					const isActive = selectedZoomDepth === option.depth && !selectedZoomRegion?.customScale;
 					return (
 						<Button
 							key={option.depth}
@@ -178,27 +153,18 @@ export function ZoomSection({
 					);
 				})}
 			</div>
-			<div className="mt-3">
-				<div className="flex items-center justify-between">
-					<span className={cn("text-[11px]", zoomEnabled ? "text-slate-500" : "text-slate-600")}>
-						{t("zoom.customZoom")}
-					</span>
-					{zoomEnabled ? (
+			{zoomEnabled && (
+				<div className="mt-3">
+					<div className="flex items-center justify-between">
+						<span className="text-[11px] text-slate-500">{t("zoom.customZoom")}</span>
 						<CustomZoomInput
-							value={currentScale ?? 1.8}
+							value={currentScale ?? 1}
 							onChange={(val) => onZoomCustomScaleChange?.(val)}
 							onError={() => toast.error(t("zoom.maxZoomError"))}
 						/>
-					) : (
-						<div className="flex items-center gap-1 opacity-40">
-							<div className="w-12 bg-white/5 border border-white/10 rounded-md px-1 py-0.5 text-[11px] font-semibold text-slate-600 text-center">
-								--
-							</div>
-							<span className="text-[11px] font-semibold text-slate-600">×</span>
-						</div>
-					)}
+					</div>
 				</div>
-			</div>
+			)}
 			{!zoomEnabled && (
 				<p className="text-[10px] text-slate-500 mt-2 text-center">{t("zoom.selectRegion")}</p>
 			)}
@@ -237,28 +203,12 @@ export function ZoomSection({
 					)}
 				</div>
 			)}
-			{zoomEnabled && selectedZoomRegion && (
-				<div className="mt-3 space-y-1.5 bg-white/[0.02] rounded-lg p-2 border border-white/5">
-					<TimestampInput
-						label={t("region.start")}
-						valueMs={selectedZoomRegion.startMs}
-						minMs={0}
-						maxMs={selectedZoomRegion.endMs - 100}
-						onChange={handleStartChange}
-					/>
-					<TimestampInput
-						label={t("region.end")}
-						valueMs={selectedZoomRegion.endMs}
-						minMs={selectedZoomRegion.startMs + 100}
-						maxMs={durationMs}
-						onChange={handleEndChange}
-					/>
-					<TimestampInput
-						label={t("region.duration")}
-						valueMs={selectedZoomRegion.endMs - selectedZoomRegion.startMs}
-						minMs={100}
-						maxMs={durationMs - selectedZoomRegion.startMs}
-						onChange={handleDurationChange}
+			{zoomEnabled && selectedZoomRegion && onZoomSpanChange && (
+				<div className="mt-3">
+					<RegionSection
+						region={selectedZoomRegion}
+						videoDurationMs={durationMs}
+						onSpanChange={onZoomSpanChange}
 					/>
 				</div>
 			)}

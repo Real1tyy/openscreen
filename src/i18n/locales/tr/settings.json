@@ -3,6 +3,8 @@
 		"level": "Yakınlaştırma Seviyesi",
 		"selectRegion": "Ayarlamak için bir yakınlaştırma bölgesi seçin",
 		"deleteZoom": "Yakınlaştırmayı Sil",
+		"customZoom": "Özel Yakınlaştırma",
+		"maxZoomError": "Yakınlaştırma 10×'den fazla olamaz",
 		"focusMode": {
 			"title": "Odak Modu",
 			"manual": "Manuel",

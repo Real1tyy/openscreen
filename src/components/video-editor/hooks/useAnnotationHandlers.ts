@@ -53,6 +53,27 @@ export function useAnnotationHandlers({
 		[pushState],
 	);
 
+	const handleAnnotationDuplicate = useCallback(
+		(id: string) => {
+			pushState((prev) => {
+				const source = prev.annotationRegions.find((r) => r.id === id);
+				if (!source) return {};
+				const newId = `annotation-${nextIdRef.current++}`;
+				const zIndex = nextZIndexRef.current++;
+				const duration = source.endMs - source.startMs;
+				const clone: AnnotationRegion = {
+					...source,
+					id: newId,
+					zIndex,
+					startMs: source.endMs,
+					endMs: source.endMs + duration,
+				};
+				return { annotationRegions: [...prev.annotationRegions, clone] };
+			});
+		},
+		[pushState],
+	);
+
 	const handleAnnotationDelete = useCallback(
 		(id: string) => {
 			pushState((prev) => ({
@@ -131,36 +152,19 @@ export function useAnnotationHandlers({
 		[updateAnnotation],
 	);
 
-	const handleAnnotationDuplicate = useCallback(
-		(id: string) => {
-			pushState((prev) => {
-				const original = prev.annotationRegions.find((r) => r.id === id);
-				if (!original) return {};
-				const duration = original.endMs - original.startMs;
-				const newId = `annotation-${nextIdRef.current++}`;
-				const clone: AnnotationRegion = {
-					...original,
-					id: newId,
-					startMs: original.endMs,
-					endMs: original.endMs + duration,
-					zIndex: nextZIndexRef.current++,
-				};
-				return { annotationRegions: [...prev.annotationRegions, clone] };
-			});
-		},
-		[pushState],
-	);
-
 	const resetIdCounters = useCallback((existingRegions: AnnotationRegion[]) => {
-		nextIdRef.current = deriveNextIdFromList("annotation", existingRegions.map((r) => r.id));
+		nextIdRef.current = deriveNextIdFromList(
+			"annotation",
+			existingRegions.map((r) => r.id),
+		);
 		nextZIndexRef.current = existingRegions.reduce((max, r) => Math.max(max, r.zIndex), 0) + 1;
 	}, []);
 
 	return {
 		handleAnnotationAdded,
 		handleAnnotationSpanChange,
-		handleAnnotationDelete,
 		handleAnnotationDuplicate,
+		handleAnnotationDelete,
 		handleAnnotationContentChange,
 		handleAnnotationTypeChange,
 		handleAnnotationStyleChange,

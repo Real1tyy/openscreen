@@ -6,7 +6,7 @@ import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
 import type { PlaybackSpeed, SpeedRegion } from "../types";
 import { MAX_PLAYBACK_SPEED, SPEED_OPTIONS } from "../types";
-import { TimestampInput } from "./TimestampInput";
+import { RegionSection } from "./RegionSection";
 
 interface SpeedSectionProps {
 	selectedSpeedId: string | null;
@@ -67,7 +67,7 @@ function CustomSpeedInput({
 			<input
 				type="text"
 				inputMode="numeric"
-				value={isFocused ? draft : (isPreset ? "" : draft)}
+				value={isFocused ? draft : isPreset ? "" : draft}
 				placeholder="--"
 				onFocus={() => setIsFocused(true)}
 				onChange={handleChange}
@@ -90,34 +90,6 @@ export function SpeedSection({
 }: SpeedSectionProps) {
 	const t = useScopedT("settings");
 	const durationMs = videoDuration * 1000;
-
-	const handleStartChange = useCallback(
-		(ms: number) => {
-			if (!selectedSpeedRegion || !onSpeedSpanChange) return;
-			if (ms >= selectedSpeedRegion.endMs) return;
-			onSpeedSpanChange(selectedSpeedRegion.id, { start: ms, end: selectedSpeedRegion.endMs });
-		},
-		[selectedSpeedRegion, onSpeedSpanChange],
-	);
-
-	const handleEndChange = useCallback(
-		(ms: number) => {
-			if (!selectedSpeedRegion || !onSpeedSpanChange) return;
-			if (ms <= selectedSpeedRegion.startMs) return;
-			onSpeedSpanChange(selectedSpeedRegion.id, { start: selectedSpeedRegion.startMs, end: ms });
-		},
-		[selectedSpeedRegion, onSpeedSpanChange],
-	);
-
-	const handleDurationChange = useCallback(
-		(ms: number) => {
-			if (!selectedSpeedRegion || !onSpeedSpanChange) return;
-			const newEnd = selectedSpeedRegion.startMs + ms;
-			if (newEnd <= selectedSpeedRegion.startMs || newEnd > durationMs) return;
-			onSpeedSpanChange(selectedSpeedRegion.id, { start: selectedSpeedRegion.startMs, end: newEnd });
-		},
-		[selectedSpeedRegion, onSpeedSpanChange, durationMs],
-	);
 
 	return (
 		<div className="mb-4">
@@ -142,9 +114,7 @@ export function SpeedSection({
 							className={cn(
 								"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all",
 								"duration-200 ease-out",
-								selectedSpeedId
-									? "opacity-100 cursor-pointer"
-									: "opacity-40 cursor-not-allowed",
+								selectedSpeedId ? "opacity-100 cursor-pointer" : "opacity-40 cursor-not-allowed",
 								isActive
 									? "border-[#d97706] bg-[#d97706] text-white shadow-[#d97706]/20"
 									: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
@@ -181,28 +151,12 @@ export function SpeedSection({
 			{!selectedSpeedId && (
 				<p className="text-[10px] text-slate-500 mt-2 text-center">{t("speed.selectRegion")}</p>
 			)}
-			{selectedSpeedRegion && (
-				<div className="mt-3 space-y-1.5 bg-white/[0.02] rounded-lg p-2 border border-white/5">
-					<TimestampInput
-						label={t("region.start")}
-						valueMs={selectedSpeedRegion.startMs}
-						minMs={0}
-						maxMs={selectedSpeedRegion.endMs - 100}
-						onChange={handleStartChange}
-					/>
-					<TimestampInput
-						label={t("region.end")}
-						valueMs={selectedSpeedRegion.endMs}
-						minMs={selectedSpeedRegion.startMs + 100}
-						maxMs={durationMs}
-						onChange={handleEndChange}
-					/>
-					<TimestampInput
-						label={t("region.duration")}
-						valueMs={selectedSpeedRegion.endMs - selectedSpeedRegion.startMs}
-						minMs={100}
-						maxMs={durationMs - selectedSpeedRegion.startMs}
-						onChange={handleDurationChange}
+			{selectedSpeedRegion && onSpeedSpanChange && (
+				<div className="mt-3">
+					<RegionSection
+						region={selectedSpeedRegion}
+						videoDurationMs={durationMs}
+						onSpanChange={onSpeedSpanChange}
 					/>
 				</div>
 			)}

@@ -300,7 +300,11 @@ export class FrameRenderer {
 					if (!imageUrl.startsWith(window.location.origin)) {
 						img.crossOrigin = "anonymous";
 					}
-				} else if (wallpaper.startsWith("file://") || wallpaper.startsWith("data:") || wallpaper.startsWith("asset://")) {
+				} else if (
+					wallpaper.startsWith("file://") ||
+					wallpaper.startsWith("data:") ||
+					wallpaper.startsWith("asset://")
+				) {
 					imageUrl = wallpaper;
 				} else {
 					imageUrl = window.location.origin + wallpaper;

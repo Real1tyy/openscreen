@@ -1,5 +1,5 @@
 import { clamp } from "@/lib/mathUtils";
-import { clampFocusToDepth, ZOOM_DEPTH_SCALES, type ZoomDepth, type ZoomFocus } from "../types";
+import { clampFocusToDepth, getZoomScale, type ZoomDepth, type ZoomFocus } from "../types";
 
 interface StageSize {
 	width: number;
@@ -32,7 +32,7 @@ function softClampToRange(value: number, min: number, max: number, softness: num
 }
 
 function getFocusBounds(depth: ZoomDepth, customScale?: number) {
-	const zoomScale = customScale ?? ZOOM_DEPTH_SCALES[depth] ?? depth;
+	const zoomScale = getZoomScale({ depth, customScale });
 	return getFocusBoundsForScale(zoomScale);
 }
 
@@ -55,10 +55,7 @@ function getFocusBoundsForScale(zoomScale: number, viewportRatio?: ViewportRatio
 	};
 }
 
-export function clampFocusToStage(
-	focus: ZoomFocus,
-	depth: ZoomDepth,
-): ZoomFocus {
+export function clampFocusToStage(focus: ZoomFocus, depth: ZoomDepth): ZoomFocus {
 	const baseFocus = clampFocusToDepth(focus, depth);
 	const bounds = getFocusBounds(depth);
 

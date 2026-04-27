@@ -32,7 +32,7 @@
 		"zoomTimeline": "缩放时间轴",
 		"seekBack": "后退",
 		"seekForward": "前进",
-		"seekBackLarge": "后退（大幅）",
-		"seekForwardLarge": "前进（大幅）"
+		"seekBackLarge": "后退（大）",
+		"seekForwardLarge": "前进（大）"
 	}
 }

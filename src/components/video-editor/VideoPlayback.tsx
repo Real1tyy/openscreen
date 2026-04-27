@@ -31,12 +31,13 @@ import {
 	formatAspectRatioForCSS,
 	getNativeAspectRatioValue,
 } from "@/utils/aspectRatioUtils";
+import { clamp01 } from "../../lib/mathUtils";
 import { AnnotationOverlay } from "./AnnotationOverlay";
 import {
 	type AnnotationRegion,
+	getZoomScale,
 	type SpeedRegion,
 	type TrimRegion,
-	getZoomScale,
 	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomRegion,
@@ -52,7 +53,6 @@ import {
 import { adaptiveSmoothFactor, smoothCursorFocus } from "./videoPlayback/cursorFollowUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
-import { clamp01 } from "../../lib/mathUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
@@ -1360,7 +1360,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						const video = e.currentTarget;
 						const mediaError = video.error;
 						console.error("[VideoPlayback] Failed to load video:", videoPath);
-						console.error("[VideoPlayback] MediaError code:", mediaError?.code, "message:", mediaError?.message);
+						console.error(
+							"[VideoPlayback] MediaError code:",
+							mediaError?.code,
+							"message:",
+							mediaError?.message,
+						);
 						onError("Failed to load video");
 					}}
 				/>

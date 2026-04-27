@@ -37,6 +37,25 @@ export function useSpeedHandlers({
 		[pushState],
 	);
 
+	const handleSpeedDuplicate = useCallback(
+		(id: string) => {
+			pushState((prev) => {
+				const source = prev.speedRegions.find((r) => r.id === id);
+				if (!source) return {};
+				const newId = `speed-${nextIdRef.current++}`;
+				const duration = source.endMs - source.startMs;
+				const clone: SpeedRegion = {
+					...source,
+					id: newId,
+					startMs: source.endMs,
+					endMs: source.endMs + duration,
+				};
+				return { speedRegions: [...prev.speedRegions, clone] };
+			});
+		},
+		[pushState],
+	);
+
 	const handleSpeedDelete = useCallback(
 		(id: string) => {
 			pushState((prev) => ({
@@ -59,25 +78,6 @@ export function useSpeedHandlers({
 		[selectedSpeedId, pushState],
 	);
 
-	const handleSpeedDuplicate = useCallback(
-		(id: string) => {
-			pushState((prev) => {
-				const original = prev.speedRegions.find((r) => r.id === id);
-				if (!original) return {};
-				const duration = original.endMs - original.startMs;
-				const newId = `speed-${nextIdRef.current++}`;
-				const clone: SpeedRegion = {
-					...original,
-					id: newId,
-					startMs: original.endMs,
-					endMs: original.endMs + duration,
-				};
-				return { speedRegions: [...prev.speedRegions, clone] };
-			});
-		},
-		[pushState],
-	);
-
 	const resetIdCounter = useCallback((existingIds: string[]) => {
 		resetIdRef(nextIdRef, "speed", existingIds);
 	}, []);
@@ -85,9 +85,9 @@ export function useSpeedHandlers({
 	return {
 		handleSpeedAdded,
 		handleSpeedSpanChange,
+		handleSpeedDuplicate,
 		handleSpeedDelete,
 		handleSpeedChange,
-		handleSpeedDuplicate,
 		resetIdCounter,
 	};
 }
