@@ -15,6 +15,11 @@ describe("loadUserPreferences", () => {
 			aspectRatio: "16:9",
 			exportQuality: "good",
 			exportFormat: "mp4",
+			seekSmallSeconds: 10,
+			seekLargeSeconds: 60,
+			defaultZoomDurationMs: 5000,
+			defaultTrimDurationMs: 5000,
+			defaultSpeedDurationMs: 5000,
 		});
 	});
 

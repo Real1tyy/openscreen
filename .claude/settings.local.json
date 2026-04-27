@@ -1,5 +1,8 @@
 {
-	"permissions": {
-		"allow": ["Bash(rtk grep *)"]
-	}
+  "permissions": {
+    "allow": [
+      "Bash(rtk grep *)",
+      "Bash(rtk vitest *)"
+    ]
+  }
 }
