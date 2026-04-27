@@ -1,0 +1,221 @@
+[tools]
+node = "22"
+"npm:pnpm" = "latest"
+
+# ============================================================================
+# SCOPE 1: PRE-COMMIT - Staged files only
+# ============================================================================
+
+[tasks.pre-commit]
+description = "Pre-commit: biome fix staged files + typecheck"
+run = '''
+echo "Running pre-commit checks..."
+echo ""
+
+echo "-> Step 1/2: lint-staged (biome fix)"
+pnpm lint-staged
+echo "  Done"
+echo ""
+
+echo "-> Step 2/2: TypeScript typecheck"
+./node_modules/.bin/tsc --noEmit
+echo "  Done"
+
+echo ""
+echo "All pre-commit checks passed!"
+'''
+
+# ============================================================================
+# SCOPE 2: WORKING TREE - Changed files (iteration workflow)
+# ============================================================================
+
+[tasks.changed]
+description = "Format + lint changed (unstaged) files with biome"
+run = '''
+FILES=$(git diff --name-only --diff-filter=ACMR -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.json')
+
+if [ -z "$FILES" ]; then
+  echo "No modified files to process"
+  exit 0
+fi
+
+echo "Processing $(echo "$FILES" | wc -l) changed file(s)..."
+echo "$FILES" | xargs ./node_modules/.bin/biome check --write --unsafe --no-errors-on-unmatched
+echo "Done!"
+'''
+
+[tasks.format]
+description = "Format changed files with biome"
+run = '''
+FILES=$(git diff --name-only --diff-filter=ACMR -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.json')
+
+if [ -z "$FILES" ]; then
+  echo "No modified files to format"
+else
+  echo "$FILES" | xargs ./node_modules/.bin/biome format --write
+  echo "Formatted $(echo "$FILES" | wc -l) file(s)"
+fi
+'''
+
+[tasks.lint]
+description = "Lint changed files with biome"
+run = '''
+FILES=$(git diff --name-only --diff-filter=ACMR -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.json')
+
+if [ -z "$FILES" ]; then
+  echo "No modified files to lint"
+else
+  echo "$FILES" | xargs ./node_modules/.bin/biome check --write --unsafe --no-errors-on-unmatched
+  echo "Linted $(echo "$FILES" | wc -l) file(s)"
+fi
+'''
+
+# ============================================================================
+# SCOPE 3: ALL FILES - Full project operations
+# ============================================================================
+
+[tasks.format-all]
+description = "Format all code using biome"
+run = [
+  "echo 'Formatting all code with biome...'",
+  "./node_modules/.bin/biome format --write .",
+  "echo 'Done!'",
+]
+
+[tasks.lint-all]
+description = "Lint all code using biome"
+run = [
+  "echo 'Linting all code with biome...'",
+  "./node_modules/.bin/biome check --write --unsafe .",
+  "echo 'Done!'",
+]
+
+[tasks.check-all]
+description = "Format + lint all files"
+run = [
+  "echo 'Running format + lint on all files...'",
+  "./node_modules/.bin/biome check --write --unsafe .",
+  "echo 'Done!'",
+]
+
+# ============================================================================
+# TYPECHECK
+# ============================================================================
+
+[tasks.typecheck]
+description = "TypeScript type checking"
+run = [
+  "echo 'Running TypeScript type checking...'",
+  "./node_modules/.bin/tsc --noEmit",
+  "echo 'Done!'",
+]
+
+# ============================================================================
+# TEST TASKS
+# ============================================================================
+
+[tasks.test]
+description = "Run all unit tests"
+run = ["pnpm test"]
+
+[tasks.test-watch]
+description = "Run tests in watch mode"
+run = ["pnpm test:watch"]
+
+[tasks.test-browser]
+description = "Run browser tests with Playwright"
+run = ["pnpm test:browser"]
+
+[tasks.test-e2e]
+description = "Run Playwright E2E tests"
+run = ["pnpm test:e2e"]
+
+# ============================================================================
+# BUILD TASKS
+# ============================================================================
+
+[tasks.dev]
+description = "Start Vite dev server"
+run = ["pnpm dev"]
+
+[tasks.dev-tauri]
+description = "Start Tauri dev mode"
+run = ["pnpm dev:tauri"]
+
+[tasks.build]
+description = "Build Electron app"
+run = ["pnpm build"]
+
+[tasks.build-tauri]
+description = "Build Tauri app"
+run = ["pnpm build:tauri"]
+
+[tasks.build-frontend]
+description = "Build frontend only (no desktop packaging)"
+run = ["pnpm build:frontend"]
+
+# ============================================================================
+# CI - Full validation without writes
+# ============================================================================
+
+[tasks.ci]
+description = "CI: lint check + typecheck + test (no writes)"
+run = '''
+echo "Running CI checks..."
+echo ""
+
+echo "-> Step 1/3: biome check (no fix)"
+./node_modules/.bin/biome check .
+echo "  Done"
+echo ""
+
+echo "-> Step 2/3: TypeScript typecheck"
+./node_modules/.bin/tsc --noEmit
+echo "  Done"
+echo ""
+
+echo "-> Step 3/3: Tests"
+pnpm test
+echo "  Done"
+
+echo ""
+echo "CI completed!"
+'''
+
+# ============================================================================
+# UTILITY
+# ============================================================================
+
+[tasks.i18n-check]
+description = "Check i18n translation completeness"
+run = ["pnpm i18n:check"]
+
+[tasks.clean]
+description = "Clean build artifacts and caches"
+run = [
+  "echo 'Cleaning build artifacts...'",
+  "rm -rf dist dist-electron dist-ssr node_modules/.cache",
+  "echo 'Done!'",
+]
+
+[tasks.install]
+description = "Install dependencies"
+run = ["pnpm install"]
+
+[tasks.dev-info]
+description = "Show project development info"
+run = [
+  "echo 'OpenScreen - Project Info:'",
+  "echo '  Node:       '$(node --version)",
+  "echo '  pnpm:       '$(pnpm --version)",
+  "echo '  TypeScript: '$(./node_modules/.bin/tsc --version)",
+  "echo '  Biome:      '$(./node_modules/.bin/biome --version)",
+  "echo '  Vite:       '$(./node_modules/.bin/vite --version)",
+]
+
+[tasks.setup-hooks]
+description = "Install git pre-commit hook via mise"
+run = '''
+mise generate git-pre-commit --task=pre-commit --write
+echo "Pre-commit hook installed!"
+'''
