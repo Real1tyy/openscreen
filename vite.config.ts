@@ -7,24 +7,7 @@ const isTauri = !!process.env.TAURI_ENV_PLATFORM;
 
 // https://vitejs.dev/config/
 export default defineConfig({
-	plugins: [
-		react(),
-		// Electron plugin only loaded when NOT running under Tauri or tests
-		...(!isTauri && process.env.NODE_ENV !== "test"
-			? [
-					(await import("vite-plugin-electron/simple")).default({
-						main: {
-							entry: "electron/main.ts",
-							vite: { build: {} },
-						},
-						preload: {
-							input: path.join(__dirname, "electron/preload.ts"),
-						},
-						renderer: {},
-					}),
-				]
-			: []),
-	],
+	plugins: [react()],
 
 	clearScreen: false,
 

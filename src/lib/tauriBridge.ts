@@ -28,7 +28,7 @@ export async function readFileAsBlobUrl(filePath: string): Promise<string> {
 	return URL.createObjectURL(blob);
 }
 
-type ElectronAPI = Window["electronAPI"];
+type AppAPI = Window["electronAPI"];
 
 let tempCounter = 0;
 function nextTempName(ext: string): string {
@@ -61,7 +61,7 @@ async function cleanupTempFile(path: string): Promise<void> {
 	}
 }
 
-function buildTauriAPI(): ElectronAPI {
+function buildTauriAPI(): AppAPI {
 	return {
 		hudOverlayHide: () => {
 			invoke("hud_overlay_hide");
@@ -232,7 +232,7 @@ function buildTauriAPI(): ElectronAPI {
 		getHeadlessExportConfig: () => invoke("get_headless_export_config").catch(() => null),
 		sendHeadlessExportProgress: (_percentage) => {},
 		sendHeadlessExportDone: (_result) => Promise.resolve(),
-	} as ElectronAPI;
+	} as AppAPI;
 }
 
 // NVENC export API — only available in Tauri
@@ -289,9 +289,9 @@ export function getNvencAPI(): NvencExportAPI | null {
 	};
 }
 
-let cachedAPI: ElectronAPI | null = null;
+let cachedAPI: AppAPI | null = null;
 
-export function getAPI(): ElectronAPI {
+export function getAPI(): AppAPI {
 	if (cachedAPI) return cachedAPI;
 
 	if (isTauri()) {

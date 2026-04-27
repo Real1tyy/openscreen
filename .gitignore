@@ -9,7 +9,6 @@ lerna-debug.log*
 
 node_modules
 dist
-dist-electron
 dist-ssr
 *.local
 
@@ -23,9 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-release/**
+release/
 *.kiro/
-# npx electron-builder --mac --win
 
 # Playwright
 test-results

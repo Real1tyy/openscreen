@@ -1,6 +1,6 @@
 # OpenScreen
 
-Desktop video editor built with React 18, TypeScript, Vite, Tauri 2 (primary) and Electron (legacy).
+Desktop video editor built with React 18, TypeScript, Vite, and Tauri 2.
 
 ## Tech Stack
 
@@ -57,7 +57,7 @@ src/
 │   ├── exporter/               # WebCodecs export pipeline (MP4, GIF, NVENC)
 │   ├── shortcuts.ts            # Keyboard shortcut config
 │   ├── userPreferences.ts      # User preference persistence
-│   └── tauriBridge.ts          # Tauri/Electron abstraction layer
+│   └── tauriBridge.ts          # Tauri IPC bridge layer
 ├── contexts/                   # I18n, Shortcuts contexts
 ├── hooks/                      # Global hooks (useEditorHistory, useSelection)
 ├── i18n/locales/               # en, es, fr, tr, zh-CN

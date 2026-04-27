@@ -17,9 +17,9 @@ export async function requestCameraAccess(): Promise<CameraAccessResult> {
 	const api = (await import("@/lib/tauriBridge")).getAPI();
 	if (api?.requestCameraAccess) {
 		try {
-			const electronResult = await api.requestCameraAccess();
-			if (!electronResult.success || !electronResult.granted) {
-				return electronResult;
+			const nativeResult = await api.requestCameraAccess();
+			if (!nativeResult.success || !nativeResult.granted) {
+				return nativeResult;
 			}
 		} catch (error) {
 			return {

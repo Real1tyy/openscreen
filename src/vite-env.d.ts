@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
-/// <reference types="../electron/electron-env" />
 
 interface ProcessedDesktopSource {
 	id: string;
@@ -15,9 +14,28 @@ interface CursorTelemetryPoint {
 	cy: number;
 }
 
+interface HeadlessExportConfig {
+	inputFile: string;
+	outputFile: string;
+	fps: number;
+	bitrate: number | null;
+	resolution: { width: number; height: number } | null;
+	shadow: boolean;
+	shadowIntensity: number;
+	blur: boolean;
+	motionBlur: number;
+	roundness: number;
+	padding: number;
+	background: string;
+}
+
 interface Window {
 	electronAPI: {
-		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
+		getSources: (opts: {
+			types: string[];
+			thumbnailSize?: { width: number; height: number };
+			fetchWindowIcons?: boolean;
+		}) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		switchToHud: () => Promise<void>;
 		startNewRecording: () => Promise<{ success: boolean; error?: string }>;
@@ -123,5 +141,37 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;
 		setLocale: (locale: string) => Promise<void>;
+		hudOverlayHide: () => void;
+		hudOverlayClose: () => void;
+		getPlatform: () => Promise<string>;
+		revealInFolder: (
+			filePath: string,
+		) => Promise<{ success: boolean; message?: string; error?: string }>;
+		getShortcuts: () => Promise<unknown>;
+		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
+		readBinaryFile: (filePath: string) => Promise<{
+			success: boolean;
+			data?: ArrayBuffer;
+			path?: string;
+			message?: string;
+			error?: string;
+		}>;
+		writeTextFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
+		getCliInputFile: () => Promise<string | null>;
+		getCliEditorConfig: () => Promise<{
+			shadowIntensity: number;
+			showBlur: boolean;
+			motionBlurAmount: number;
+			borderRadius: number;
+			padding: number;
+			wallpaper: string;
+		} | null>;
+		getHeadlessExportConfig: () => Promise<HeadlessExportConfig | null>;
+		sendHeadlessExportProgress: (percentage: number) => void;
+		sendHeadlessExportDone: (result: {
+			success: boolean;
+			data?: ArrayBuffer;
+			error?: string;
+		}) => Promise<void>;
 	};
 }

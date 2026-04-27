@@ -73,16 +73,8 @@ You may need to grant screen recording permissions depending on your desktop env
 ./Openscreen-Linux-*.AppImage --no-sandbox
 ```
 
-### Limitations
-
-System audio capture relies on Electron's [desktopCapturer](https://www.electronjs.org/docs/latest/api/desktop-capturer) and has some platform-specific quirks:
-
-- **macOS**: Requires macOS 13+. On macOS 14.2+ you'll be prompted to grant audio capture permission. macOS 12 and below does not support system audio (mic still works).
-- **Windows**: Works out of the box.
-- **Linux**: Needs PipeWire (default on Ubuntu 22.04+, Fedora 34+). Older PulseAudio-only setups may not support system audio (mic should still work).
-
 ## Built with
-- Electron
+- Tauri 2
 - React
 - TypeScript
 - Vite
