@@ -165,8 +165,10 @@ export default function VideoEditor() {
 		handleZoomSpanChange,
 		handleZoomFocusChange,
 		handleZoomDepthChange,
+		handleZoomCustomScaleChange,
 		handleZoomFocusModeChange,
 		handleZoomDelete,
+		handleZoomDuplicate,
 		resetIdCounter: resetZoomIds,
 	} = useZoomHandlers({ pushState, updateState, selectZoom: handleSelectZoom, selectedZoomId });
 
@@ -174,6 +176,7 @@ export default function VideoEditor() {
 		handleTrimAdded,
 		handleTrimSpanChange,
 		handleTrimDelete,
+		handleTrimDuplicate,
 		handleTrimSetStartToNow,
 		handleTrimSetEndToNow,
 		handleTrimSetStartFromAdjacent,
@@ -198,6 +201,7 @@ export default function VideoEditor() {
 		handleSpeedSpanChange,
 		handleSpeedDelete,
 		handleSpeedChange,
+		handleSpeedDuplicate,
 		resetIdCounter: resetSpeedIds,
 	} = useSpeedHandlers({ pushState, selectSpeed: handleSelectSpeed, selectedSpeedId });
 
@@ -205,6 +209,7 @@ export default function VideoEditor() {
 		handleAnnotationAdded,
 		handleAnnotationSpanChange,
 		handleAnnotationDelete,
+		handleAnnotationDuplicate,
 		handleAnnotationContentChange,
 		handleAnnotationTypeChange,
 		handleAnnotationStyleChange,
@@ -478,6 +483,11 @@ export default function VideoEditor() {
 	// Track whether user preferences have been loaded to avoid
 	// overwriting saved prefs with defaults on the first render
 	const [prefsHydrated, setPrefsHydrated] = useState(false);
+	const [seekSmallSeconds, setSeekSmallSeconds] = useState(10);
+	const [seekLargeSeconds, setSeekLargeSeconds] = useState(60);
+	const [defaultZoomDurationMs, setDefaultZoomDurationMs] = useState(5000);
+	const [defaultTrimDurationMs, setDefaultTrimDurationMs] = useState(5000);
+	const [defaultSpeedDurationMs, setDefaultSpeedDurationMs] = useState(5000);
 
 	// Load persisted user preferences on mount (intentionally runs once)
 	useEffect(() => {
@@ -488,14 +498,25 @@ export default function VideoEditor() {
 		});
 		setExportQuality(prefs.exportQuality);
 		setExportFormat(prefs.exportFormat);
+		setSeekSmallSeconds(prefs.seekSmallSeconds);
+		setSeekLargeSeconds(prefs.seekLargeSeconds);
+		setDefaultZoomDurationMs(prefs.defaultZoomDurationMs);
+		setDefaultTrimDurationMs(prefs.defaultTrimDurationMs);
+		setDefaultSpeedDurationMs(prefs.defaultSpeedDurationMs);
 		setPrefsHydrated(true);
 	}, [updateState]);
 
 	// Auto-save user preferences when settings change
 	useEffect(() => {
 		if (!prefsHydrated) return;
-		saveUserPreferences({ padding, aspectRatio, exportQuality, exportFormat });
-	}, [prefsHydrated, padding, aspectRatio, exportQuality, exportFormat]);
+		saveUserPreferences({
+			padding, aspectRatio, exportQuality, exportFormat,
+			seekSmallSeconds, seekLargeSeconds,
+			defaultZoomDurationMs, defaultTrimDurationMs, defaultSpeedDurationMs,
+		});
+	}, [prefsHydrated, padding, aspectRatio, exportQuality, exportFormat,
+		seekSmallSeconds, seekLargeSeconds,
+		defaultZoomDurationMs, defaultTrimDurationMs, defaultSpeedDurationMs]);
 
 	const saveProject = useCallback(
 		async (forceSaveAs: boolean) => {
@@ -732,6 +753,8 @@ export default function VideoEditor() {
 		handleAddChapter,
 		handleChapterNavigatePrev,
 		handleChapterNavigateNext,
+		seekSmallSeconds,
+		seekLargeSeconds,
 	});
 
 
@@ -997,6 +1020,13 @@ export default function VideoEditor() {
 									onTrimToggleLoop={handleTrimToggleLoop}
 									loopingTrimId={loopingTrimId}
 									trimMarkStartMs={trimMarkStartMs}
+									defaultZoomDurationMs={defaultZoomDurationMs}
+									defaultTrimDurationMs={defaultTrimDurationMs}
+									defaultSpeedDurationMs={defaultSpeedDurationMs}
+									onDuplicateZoom={handleZoomDuplicate}
+									onDuplicateTrim={handleTrimDuplicate}
+									onDuplicateSpeed={handleSpeedDuplicate}
+									onDuplicateAnnotation={handleAnnotationDuplicate}
 									aspectRatio={aspectRatio}
 									onAspectRatioChange={(ar) =>
 										pushState({
@@ -1022,6 +1052,10 @@ export default function VideoEditor() {
 							selectedZoomId ? zoomRegions.find((z) => z.id === selectedZoomId)?.depth : null
 						}
 						onZoomDepthChange={(depth) => selectedZoomId && handleZoomDepthChange(depth)}
+						onZoomCustomScaleChange={(scale) => selectedZoomId && handleZoomCustomScaleChange(scale)}
+						selectedZoomCustomScale={
+							selectedZoomId ? zoomRegions.find((z) => z.id === selectedZoomId)?.customScale ?? null : null
+						}
 						selectedZoomFocusMode={
 							selectedZoomId
 								? (zoomRegions.find((z) => z.id === selectedZoomId)?.focusMode ?? "manual")

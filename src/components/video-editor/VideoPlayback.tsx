@@ -36,7 +36,7 @@ import {
 	type AnnotationRegion,
 	type SpeedRegion,
 	type TrimRegion,
-	ZOOM_DEPTH_SCALES,
+	getZoomScale,
 	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomRegion,
@@ -910,7 +910,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				const shouldShowUnzoomedView = hasSelectedZoom && !isPlayingRef.current;
 
 				if (region && strength > 0 && !shouldShowUnzoomedView) {
-					const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
+					const zoomScale = blendedScale ?? getZoomScale(region);
 					const regionFocus = region.focus;
 
 					targetScaleFactor = zoomScale;

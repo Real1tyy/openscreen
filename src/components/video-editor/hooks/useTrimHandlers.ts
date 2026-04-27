@@ -196,6 +196,24 @@ export function useTrimHandlers({
 		setTrimMarkStartMs(null);
 	}, [pushState, selectTrim, currentTimeRef]);
 
+	const handleTrimDuplicate = useCallback(
+		(id: string) => {
+			pushState((prev) => {
+				const original = prev.trimRegions.find((r) => r.id === id);
+				if (!original) return {};
+				const duration = original.endMs - original.startMs;
+				const newId = `trim-${nextIdRef.current++}`;
+				return {
+					trimRegions: [
+						...prev.trimRegions,
+						{ id: newId, startMs: original.endMs, endMs: original.endMs + duration },
+					],
+				};
+			});
+		},
+		[pushState],
+	);
+
 	const resetIdCounter = useCallback((existingIds: string[]) => {
 		resetIdRef(nextIdRef, "trim", existingIds);
 	}, []);
@@ -205,6 +223,7 @@ export function useTrimHandlers({
 		handleTrimAdded,
 		handleTrimSpanChange,
 		handleTrimDelete,
+		handleTrimDuplicate,
 		// Context menu
 		handleTrimSetStartToNow,
 		handleTrimSetEndToNow,

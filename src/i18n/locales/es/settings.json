@@ -24,6 +24,7 @@
 	"region": {
 		"start": "Inicio",
 		"end": "Fin",
+		"duration": "Duración",
 		"active": "Activo"
 	},
 	"layout": {

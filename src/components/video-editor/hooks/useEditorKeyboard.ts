@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { computeFrameStepTime } from "@/lib/frameStep";
+import { computeSeekTime } from "@/lib/frameStep";
 import { matchesShortcut } from "@/lib/shortcuts";
 import type { ShortcutsConfig } from "@/lib/shortcuts";
 import type { VideoPlaybackRef } from "../VideoPlayback";
@@ -16,6 +16,8 @@ interface UseEditorKeyboardParams {
 	handleAddChapter: () => void;
 	handleChapterNavigatePrev: () => void;
 	handleChapterNavigateNext: () => void;
+	seekSmallSeconds: number;
+	seekLargeSeconds: number;
 }
 
 export function useEditorKeyboard(params: UseEditorKeyboardParams) {
@@ -31,6 +33,8 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 		handleAddChapter,
 		handleChapterNavigatePrev,
 		handleChapterNavigateNext,
+		seekSmallSeconds,
+		seekLargeSeconds,
 	} = params;
 
 	useEffect(() => {
@@ -55,7 +59,6 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 				(e.key === "ArrowLeft" || e.key === "ArrowRight") &&
 				!e.ctrlKey &&
 				!e.metaKey &&
-				!e.shiftKey &&
 				!e.altKey
 			) {
 				const target = e.target;
@@ -73,12 +76,9 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 				const video = videoPlaybackRef.current?.video;
 				if (!video) return;
 				const direction = e.key === "ArrowLeft" ? "backward" : "forward";
-				const newTime = computeFrameStepTime(
-					video.currentTime,
-					Number.isFinite(video.duration) ? video.duration : durationRef.current,
-					direction,
-				);
-				video.currentTime = newTime;
+				const seconds = e.shiftKey ? seekLargeSeconds : seekSmallSeconds;
+				const dur = Number.isFinite(video.duration) ? video.duration : durationRef.current;
+				video.currentTime = computeSeekTime(video.currentTime, dur, direction, seconds);
 				return;
 			}
 
@@ -136,5 +136,7 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 		handleAddChapter,
 		handleChapterNavigatePrev,
 		handleChapterNavigateNext,
+		seekSmallSeconds,
+		seekLargeSeconds,
 	]);
 }

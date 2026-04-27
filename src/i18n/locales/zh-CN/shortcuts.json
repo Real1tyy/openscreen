@@ -30,7 +30,9 @@
 		"deleteSelectedAlt": "删除所选（替代）",
 		"panTimeline": "平移时间轴",
 		"zoomTimeline": "缩放时间轴",
-		"frameBack": "上一帧",
-		"frameForward": "下一帧"
+		"seekBack": "后退",
+		"seekForward": "前进",
+		"seekBackLarge": "后退（大幅）",
+		"seekForwardLarge": "前进（大幅）"
 	}
 }

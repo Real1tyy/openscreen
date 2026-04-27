@@ -59,6 +59,25 @@ export function useSpeedHandlers({
 		[selectedSpeedId, pushState],
 	);
 
+	const handleSpeedDuplicate = useCallback(
+		(id: string) => {
+			pushState((prev) => {
+				const original = prev.speedRegions.find((r) => r.id === id);
+				if (!original) return {};
+				const duration = original.endMs - original.startMs;
+				const newId = `speed-${nextIdRef.current++}`;
+				const clone: SpeedRegion = {
+					...original,
+					id: newId,
+					startMs: original.endMs,
+					endMs: original.endMs + duration,
+				};
+				return { speedRegions: [...prev.speedRegions, clone] };
+			});
+		},
+		[pushState],
+	);
+
 	const resetIdCounter = useCallback((existingIds: string[]) => {
 		resetIdRef(nextIdRef, "speed", existingIds);
 	}, []);
@@ -68,6 +87,7 @@ export function useSpeedHandlers({
 		handleSpeedSpanChange,
 		handleSpeedDelete,
 		handleSpeedChange,
+		handleSpeedDuplicate,
 		resetIdCounter,
 	};
 }

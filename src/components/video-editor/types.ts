@@ -33,9 +33,17 @@ export interface ZoomRegion {
 	startMs: number;
 	endMs: number;
 	depth: ZoomDepth;
+	customScale?: number;
 	focus: ZoomFocus;
 	focusMode?: ZoomFocusMode;
 }
+
+export function getZoomScale(region: { depth: ZoomDepth; customScale?: number }): number {
+	if (region.customScale != null && region.customScale > 0) return region.customScale;
+	return ZOOM_DEPTH_SCALES[region.depth] ?? region.depth;
+}
+
+export const MAX_ZOOM_SCALE = 10;
 
 export interface CursorTelemetryPoint {
 	timeMs: number;

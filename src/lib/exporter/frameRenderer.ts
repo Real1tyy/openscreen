@@ -17,7 +17,7 @@ import type {
 	ZoomDepth,
 	ZoomRegion,
 } from "@/components/video-editor/types";
-import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
+import { getZoomScale } from "@/components/video-editor/types";
 import {
 	AUTO_FOLLOW_RAMP_DISTANCE,
 	AUTO_FOLLOW_SMOOTHING_FACTOR,
@@ -603,7 +603,7 @@ export class FrameRenderer {
 		let targetProgress = 0;
 
 		if (region && strength > 0) {
-			const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
+			const zoomScale = blendedScale ?? getZoomScale(region);
 			const regionFocus = this.clampFocusToStage(region.focus, region.depth);
 
 			targetScaleFactor = zoomScale;

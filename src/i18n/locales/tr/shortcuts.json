@@ -30,7 +30,9 @@
 		"deleteSelectedAlt": "Seçileni Sil (alternatif)",
 		"panTimeline": "Zaman Çizelgesini Kaydır",
 		"zoomTimeline": "Zaman Çizelgesini Yakınlaştır",
-		"frameBack": "Önceki Kare",
-		"frameForward": "Sonraki Kare"
+		"seekBack": "Geri Sar",
+		"seekForward": "İleri Sar",
+		"seekBackLarge": "Geri Sar (büyük)",
+		"seekForwardLarge": "İleri Sar (büyük)"
 	}
 }

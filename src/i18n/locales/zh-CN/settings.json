@@ -24,6 +24,7 @@
 	"region": {
 		"start": "开始",
 		"end": "结束",
+		"duration": "时长",
 		"active": "活跃"
 	},
 	"layout": {

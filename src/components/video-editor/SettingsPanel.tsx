@@ -52,6 +52,8 @@ interface SettingsPanelProps {
 	onWallpaperChange: (path: string) => void;
 	selectedZoomDepth?: ZoomDepth | null;
 	onZoomDepthChange?: (depth: ZoomDepth) => void;
+	onZoomCustomScaleChange?: (scale: number) => void;
+	selectedZoomCustomScale?: number | null;
 	selectedZoomFocusMode?: ZoomFocusMode | null;
 	onZoomFocusModeChange?: (mode: ZoomFocusMode) => void;
 	hasCursorTelemetry?: boolean;
@@ -130,6 +132,8 @@ export function SettingsPanel({
 	onWallpaperChange,
 	selectedZoomDepth,
 	onZoomDepthChange,
+	onZoomCustomScaleChange,
+	selectedZoomCustomScale,
 	selectedZoomFocusMode,
 	onZoomFocusModeChange,
 	hasCursorTelemetry = false,
@@ -223,6 +227,16 @@ export function SettingsPanel({
 			onTrimSpanChange(selectedTrimRegion.id, { start: selectedTrimRegion.startMs, end: ms });
 		},
 		[selectedTrimRegion, onTrimSpanChange],
+	);
+
+	const handleTrimDurationChange = useCallback(
+		(ms: number) => {
+			if (!selectedTrimRegion || !onTrimSpanChange) return;
+			const newEnd = selectedTrimRegion.startMs + ms;
+			if (newEnd <= selectedTrimRegion.startMs || newEnd > durationMs) return;
+			onTrimSpanChange(selectedTrimRegion.id, { start: selectedTrimRegion.startMs, end: newEnd });
+		},
+		[selectedTrimRegion, onTrimSpanChange, durationMs],
 	);
 
 	const videoWidth = videoElement?.videoWidth || 1920;
@@ -373,6 +387,8 @@ export function SettingsPanel({
 				<ZoomSection
 					selectedZoomDepth={selectedZoomDepth ?? null}
 					onZoomDepthChange={onZoomDepthChange}
+					onZoomCustomScaleChange={onZoomCustomScaleChange}
+					selectedZoomCustomScale={selectedZoomCustomScale}
 					selectedZoomFocusMode={selectedZoomFocusMode ?? null}
 					onZoomFocusModeChange={onZoomFocusModeChange}
 					hasCursorTelemetry={hasCursorTelemetry}
@@ -408,6 +424,13 @@ export function SettingsPanel({
 									minMs={selectedTrimRegion.startMs + 100}
 									maxMs={durationMs}
 									onChange={handleTrimEndChange}
+								/>
+								<TimestampInput
+									label={t("region.duration")}
+									valueMs={selectedTrimRegion.endMs - selectedTrimRegion.startMs}
+									minMs={100}
+									maxMs={durationMs - selectedTrimRegion.startMs}
+									onChange={handleTrimDurationChange}
 								/>
 							</div>
 						)}

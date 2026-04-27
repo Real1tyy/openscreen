@@ -31,8 +31,8 @@ function softClampToRange(value: number, min: number, max: number, softness: num
 	return clamped;
 }
 
-function getFocusBounds(depth: ZoomDepth) {
-	const zoomScale = ZOOM_DEPTH_SCALES[depth];
+function getFocusBounds(depth: ZoomDepth, customScale?: number) {
+	const zoomScale = customScale ?? ZOOM_DEPTH_SCALES[depth] ?? depth;
 	return getFocusBoundsForScale(zoomScale);
 }
 

@@ -1,6 +1,8 @@
 {
 	"zoom": {
 		"level": "Zoom Level",
+		"customZoom": "Custom Zoom Level",
+		"maxZoomError": "Zoom can't go higher than 10×",
 		"selectRegion": "Select a zoom region to adjust",
 		"deleteZoom": "Delete Zoom",
 		"focusMode": {
@@ -24,6 +26,7 @@
 	"region": {
 		"start": "Start",
 		"end": "End",
+		"duration": "Duration",
 		"active": "Active"
 	},
 	"layout": {

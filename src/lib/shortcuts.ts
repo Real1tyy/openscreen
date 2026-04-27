@@ -63,13 +63,10 @@ export const FIXED_SHORTCUTS: FixedShortcut[] = [
 		bindings: [],
 	},
 	{ i18nKey: "zoomTimeline", label: "Zoom Timeline", display: "Ctrl + Scroll", bindings: [] },
-	{ i18nKey: "frameBack", label: "Frame Back", display: "←", bindings: [{ key: "arrowleft" }] },
-	{
-		i18nKey: "frameForward",
-		label: "Frame Forward",
-		display: "→",
-		bindings: [{ key: "arrowright" }],
-	},
+	{ i18nKey: "seekBack", label: "Seek Back", display: "←", bindings: [{ key: "arrowleft" }] },
+	{ i18nKey: "seekForward", label: "Seek Forward", display: "→", bindings: [{ key: "arrowright" }] },
+	{ i18nKey: "seekBackLarge", label: "Seek Back (large)", display: "Shift + ←", bindings: [{ key: "arrowleft", shift: true }] },
+	{ i18nKey: "seekForwardLarge", label: "Seek Forward (large)", display: "Shift + →", bindings: [{ key: "arrowright", shift: true }] },
 ];
 
 export type ShortcutConflict =

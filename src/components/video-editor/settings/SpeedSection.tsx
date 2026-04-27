@@ -109,6 +109,16 @@ export function SpeedSection({
 		[selectedSpeedRegion, onSpeedSpanChange],
 	);
 
+	const handleDurationChange = useCallback(
+		(ms: number) => {
+			if (!selectedSpeedRegion || !onSpeedSpanChange) return;
+			const newEnd = selectedSpeedRegion.startMs + ms;
+			if (newEnd <= selectedSpeedRegion.startMs || newEnd > durationMs) return;
+			onSpeedSpanChange(selectedSpeedRegion.id, { start: selectedSpeedRegion.startMs, end: newEnd });
+		},
+		[selectedSpeedRegion, onSpeedSpanChange, durationMs],
+	);
+
 	return (
 		<div className="mb-4">
 			<div className="flex items-center justify-between mb-3">
@@ -186,6 +196,13 @@ export function SpeedSection({
 						minMs={selectedSpeedRegion.startMs + 100}
 						maxMs={durationMs}
 						onChange={handleEndChange}
+					/>
+					<TimestampInput
+						label={t("region.duration")}
+						valueMs={selectedSpeedRegion.endMs - selectedSpeedRegion.startMs}
+						minMs={100}
+						maxMs={durationMs - selectedSpeedRegion.startMs}
+						onChange={handleDurationChange}
 					/>
 				</div>
 			)}

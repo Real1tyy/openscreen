@@ -13,3 +13,13 @@ export function computeFrameStepTime(
 	const delta = direction === "forward" ? FRAME_DURATION_SEC : -FRAME_DURATION_SEC;
 	return Math.min(duration, Math.max(0, currentTime + delta));
 }
+
+export function computeSeekTime(
+	currentTime: number,
+	duration: number,
+	direction: "forward" | "backward",
+	seconds: number,
+): number {
+	const delta = direction === "forward" ? seconds : -seconds;
+	return Math.min(duration, Math.max(0, currentTime + delta));
+}

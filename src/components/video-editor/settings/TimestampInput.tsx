@@ -1,6 +1,7 @@
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
-function formatMsForInput(ms: number): string {
+export function formatMsForInput(ms: number): string {
 	const totalSeconds = ms / 1000;
 	const minutes = Math.floor(totalSeconds / 60);
 	const seconds = totalSeconds % 60;
@@ -10,7 +11,7 @@ function formatMsForInput(ms: number): string {
 	return seconds.toFixed(1);
 }
 
-function parseMsFromInput(input: string): number | null {
+export function parseMsFromInput(input: string): number | null {
 	const trimmed = input.trim().replace(/s$/i, "");
 	if (!trimmed) return null;
 
@@ -30,6 +31,8 @@ function parseMsFromInput(input: string): number | null {
 
 	return null;
 }
+
+const STEP_MS = 1000;
 
 interface TimestampInputProps {
 	label: string;
@@ -83,19 +86,49 @@ export function TimestampInput({
 		[commit],
 	);
 
+	const stepUp = useCallback(() => {
+		const next = Math.min(maxMs, valueMs + STEP_MS);
+		if (next !== valueMs) onChange(next);
+	}, [valueMs, maxMs, onChange]);
+
+	const stepDown = useCallback(() => {
+		const next = Math.max(minMs, valueMs - STEP_MS);
+		if (next !== valueMs) onChange(next);
+	}, [valueMs, minMs, onChange]);
+
 	return (
 		<div className="flex items-center justify-between gap-2">
 			<span className="text-[10px] text-slate-500 whitespace-nowrap">{label}</span>
-			<input
-				type="text"
-				value={displayValue}
-				disabled={disabled}
-				onFocus={handleFocus}
-				onChange={(e) => setDraft(e.target.value)}
-				onBlur={commit}
-				onKeyDown={handleKeyDown}
-				className="w-[72px] bg-white/5 border border-white/10 rounded-md px-2 py-0.5 text-[11px] font-mono text-slate-200 text-right focus:outline-none focus:ring-1 focus:ring-[#34B27B]/50 focus:border-[#34B27B]/30 disabled:opacity-40 disabled:cursor-not-allowed"
-			/>
+			<div className="flex items-center gap-0.5">
+				<input
+					type="text"
+					value={displayValue}
+					disabled={disabled}
+					onFocus={handleFocus}
+					onChange={(e) => setDraft(e.target.value)}
+					onBlur={commit}
+					onKeyDown={handleKeyDown}
+					className="w-[72px] bg-white/5 border border-white/10 rounded-md px-2 py-0.5 text-[11px] font-mono text-slate-200 text-right focus:outline-none focus:ring-1 focus:ring-[#34B27B]/50 focus:border-[#34B27B]/30 disabled:opacity-40 disabled:cursor-not-allowed"
+				/>
+				<div className="flex flex-col gap-0">
+					<button
+						type="button"
+						disabled={disabled || valueMs >= maxMs}
+						onClick={stepUp}
+						className="h-[11px] w-[14px] flex items-center justify-center text-slate-500 hover:text-[#34B27B] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+					>
+						<ChevronUp className="w-2.5 h-2.5" />
+					</button>
+					<button
+						type="button"
+						disabled={disabled || valueMs <= minMs}
+						onClick={stepDown}
+						className="h-[11px] w-[14px] flex items-center justify-center text-slate-500 hover:text-[#34B27B] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+					>
+						<ChevronDown className="w-2.5 h-2.5" />
+					</button>
+				</div>
+			</div>
 		</div>
 	);
 }

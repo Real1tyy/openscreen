@@ -131,6 +131,26 @@ export function useAnnotationHandlers({
 		[updateAnnotation],
 	);
 
+	const handleAnnotationDuplicate = useCallback(
+		(id: string) => {
+			pushState((prev) => {
+				const original = prev.annotationRegions.find((r) => r.id === id);
+				if (!original) return {};
+				const duration = original.endMs - original.startMs;
+				const newId = `annotation-${nextIdRef.current++}`;
+				const clone: AnnotationRegion = {
+					...original,
+					id: newId,
+					startMs: original.endMs,
+					endMs: original.endMs + duration,
+					zIndex: nextZIndexRef.current++,
+				};
+				return { annotationRegions: [...prev.annotationRegions, clone] };
+			});
+		},
+		[pushState],
+	);
+
 	const resetIdCounters = useCallback((existingRegions: AnnotationRegion[]) => {
 		nextIdRef.current = deriveNextIdFromList("annotation", existingRegions.map((r) => r.id));
 		nextZIndexRef.current = existingRegions.reduce((max, r) => Math.max(max, r.zIndex), 0) + 1;
@@ -140,6 +160,7 @@ export function useAnnotationHandlers({
 		handleAnnotationAdded,
 		handleAnnotationSpanChange,
 		handleAnnotationDelete,
+		handleAnnotationDuplicate,
 		handleAnnotationContentChange,
 		handleAnnotationTypeChange,
 		handleAnnotationStyleChange,

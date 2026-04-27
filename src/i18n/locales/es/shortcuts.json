@@ -30,7 +30,9 @@
 		"deleteSelectedAlt": "Eliminar seleccionado (alt)",
 		"panTimeline": "Desplazar línea de tiempo",
 		"zoomTimeline": "Zoom en línea de tiempo",
-		"frameBack": "Fotograma anterior",
-		"frameForward": "Fotograma siguiente"
+		"seekBack": "Retroceder",
+		"seekForward": "Avanzar",
+		"seekBackLarge": "Retroceder (grande)",
+		"seekForwardLarge": "Avanzar (grande)"
 	}
 }

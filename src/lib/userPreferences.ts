@@ -15,14 +15,15 @@ const VALID_ASPECT_RATIOS: readonly string[] = [
 ];
 
 export interface UserPreferences {
-	/** Default padding % */
 	padding: number;
-	/** Default aspect ratio */
 	aspectRatio: AspectRatio;
-	/** Default export quality */
 	exportQuality: ExportQuality;
-	/** Default export format */
 	exportFormat: ExportFormat;
+	seekSmallSeconds: number;
+	seekLargeSeconds: number;
+	defaultZoomDurationMs: number;
+	defaultTrimDurationMs: number;
+	defaultSpeedDurationMs: number;
 }
 
 const DEFAULT_PREFS: UserPreferences = {
@@ -30,6 +31,11 @@ const DEFAULT_PREFS: UserPreferences = {
 	aspectRatio: "16:9",
 	exportQuality: "good",
 	exportFormat: "mp4",
+	seekSmallSeconds: 10,
+	seekLargeSeconds: 60,
+	defaultZoomDurationMs: 5000,
+	defaultTrimDurationMs: 5000,
+	defaultSpeedDurationMs: 5000,
 };
 
 function safeJsonParse(text: string | null): Record<string, unknown> | null {
@@ -54,6 +60,9 @@ export function loadUserPreferences(): UserPreferences {
 	}
 	if (!raw || typeof raw !== "object") return { ...DEFAULT_PREFS };
 
+	const finitePositive = (v: unknown, fallback: number, min = 0.1) =>
+		typeof v === "number" && Number.isFinite(v) && v >= min ? v : fallback;
+
 	return {
 		padding:
 			typeof raw.padding === "number" &&
@@ -76,6 +85,11 @@ export function loadUserPreferences(): UserPreferences {
 			raw.exportFormat === "gif" || raw.exportFormat === "mp4"
 				? (raw.exportFormat as ExportFormat)
 				: DEFAULT_PREFS.exportFormat,
+		seekSmallSeconds: finitePositive(raw.seekSmallSeconds, DEFAULT_PREFS.seekSmallSeconds, 1),
+		seekLargeSeconds: finitePositive(raw.seekLargeSeconds, DEFAULT_PREFS.seekLargeSeconds, 1),
+		defaultZoomDurationMs: finitePositive(raw.defaultZoomDurationMs, DEFAULT_PREFS.defaultZoomDurationMs, 500),
+		defaultTrimDurationMs: finitePositive(raw.defaultTrimDurationMs, DEFAULT_PREFS.defaultTrimDurationMs, 500),
+		defaultSpeedDurationMs: finitePositive(raw.defaultSpeedDurationMs, DEFAULT_PREFS.defaultSpeedDurationMs, 500),
 	};
 }
 
