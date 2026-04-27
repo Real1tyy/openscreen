@@ -127,6 +127,7 @@ interface Window {
 		onMenuLoadProject: (callback: () => void) => () => void;
 		onMenuSaveProject: (callback: () => void) => () => void;
 		onMenuSaveProjectAs: (callback: () => void) => () => void;
+		onMenuPreferences: (callback: () => void) => () => void;
 		getPlatform: () => Promise<string>;
 		revealInFolder: (
 			filePath: string,

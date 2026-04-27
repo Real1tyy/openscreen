@@ -25,6 +25,7 @@ import {
 import type { ProjectMedia } from "@/lib/recordingSession";
 import { getAPI, isTauri, readFileAsBlobUrl } from "@/lib/tauriBridge";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
+import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import {
 	type EditorState,
 	INITIAL_EDITOR_STATE,
@@ -34,7 +35,6 @@ import {
 	undoEditor,
 	useEditorStore,
 } from "@/stores/useEditorStore";
-import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import {
 	getAspectRatioValue,
 	getNativeAspectRatioValue,
@@ -46,6 +46,7 @@ import { useEditorKeyboard } from "./hooks/useEditorKeyboard";
 import { useExport } from "./hooks/useExport";
 import { useTrimPlayback } from "./hooks/useTrimPlayback";
 import PlaybackControls from "./PlaybackControls";
+import { PreferencesDialog } from "./PreferencesDialog";
 import {
 	createProjectData,
 	createProjectSnapshot,
@@ -93,15 +94,43 @@ export default function VideoEditor() {
 
 	const editorState: EditorState = useMemo(
 		() => ({
-			zoomRegions, trimRegions, speedRegions, annotationRegions, chapters,
-			cropRegion, wallpaper, shadowIntensity, showBlur, motionBlurAmount,
-			borderRadius, padding, aspectRatio, webcamLayoutPreset, webcamMaskShape,
-			webcamSizePreset, webcamPosition,
+			zoomRegions,
+			trimRegions,
+			speedRegions,
+			annotationRegions,
+			chapters,
+			cropRegion,
+			wallpaper,
+			shadowIntensity,
+			showBlur,
+			motionBlurAmount,
+			borderRadius,
+			padding,
+			aspectRatio,
+			webcamLayoutPreset,
+			webcamMaskShape,
+			webcamSizePreset,
+			webcamPosition,
 		}),
-		[zoomRegions, trimRegions, speedRegions, annotationRegions, chapters,
-			cropRegion, wallpaper, shadowIntensity, showBlur, motionBlurAmount,
-			borderRadius, padding, aspectRatio, webcamLayoutPreset, webcamMaskShape,
-			webcamSizePreset, webcamPosition],
+		[
+			zoomRegions,
+			trimRegions,
+			speedRegions,
+			annotationRegions,
+			chapters,
+			cropRegion,
+			wallpaper,
+			shadowIntensity,
+			showBlur,
+			motionBlurAmount,
+			borderRadius,
+			padding,
+			aspectRatio,
+			webcamLayoutPreset,
+			webcamMaskShape,
+			webcamSizePreset,
+			webcamPosition,
+		],
 	);
 
 	const sel = useEditorSelectionStore();
@@ -130,7 +159,6 @@ export default function VideoEditor() {
 		selectAnnotation: handleSelectAnnotation,
 		selectChapter,
 		setEditingChapterId,
-		clearAll: clearSelection,
 		clearStale,
 	} = sel;
 
@@ -152,6 +180,7 @@ export default function VideoEditor() {
 	const [gifSizePreset, setGifSizePreset] = useState<GifSizePreset>("medium");
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
 	const [isFullscreen, setIsFullscreen] = useState(false);
+	const [showPreferences, setShowPreferences] = useState(false);
 
 	const playerContainerRef = useRef<HTMLDivElement>(null);
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
@@ -166,9 +195,15 @@ export default function VideoEditor() {
 
 	// ── Trim playback (needs DOM refs, can't live in store) ──
 	const {
-		loopRegion, loopingTrimId, clearLoop, trimMarkStartMs,
-		handleTrimPlayFromStart, handleTrimPlayFromEnd, handleTrimToggleLoop,
-		handleQuickTrimStart, handleQuickTrimEnd,
+		loopRegion,
+		loopingTrimId,
+		clearLoop,
+		trimMarkStartMs,
+		handleTrimPlayFromStart,
+		handleTrimPlayFromEnd,
+		handleTrimToggleLoop,
+		handleQuickTrimStart,
+		handleQuickTrimEnd,
 	} = useTrimPlayback(videoPlaybackRef, currentTimeRef, durationRef);
 
 	// ── Chapter helpers that need DOM refs ─────────────────
@@ -179,10 +214,10 @@ export default function VideoEditor() {
 		const sorted = [...chapters].sort((a, b) => a.startMs - b.startMs);
 		const nextCh = sorted.find((ch) => ch.startMs > startMs);
 		const endMs = Math.max(startMs + 100, nextCh ? nextCh.startMs : totalMs);
-		const id = store.addChapter(startMs, endMs);
+		const id = useEditorStore.getState().addChapter(startMs, endMs);
 		setEditingChapterId(id);
 		selectChapter(id);
-	}, [store, chapters, setEditingChapterId, selectChapter, currentTimeRef, durationRef]);
+	}, [chapters, setEditingChapterId, selectChapter]);
 
 	const handleSelectChapter = useCallback(
 		(id: string | null) => {
@@ -194,21 +229,28 @@ export default function VideoEditor() {
 				}
 			}
 		},
-		[selectChapter, chapters, videoPlaybackRef],
+		[selectChapter, chapters],
 	);
 
 	const chaptersRef = useRef(chapters);
 	chaptersRef.current = chapters;
 	const handleChapterNavigatePrev = useCallback(() => {
 		const nowMs = Math.round(currentTimeRef.current * 1000);
-		const prev = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs).reverse().find((ch) => ch.startMs < nowMs - 100);
-		if (prev && videoPlaybackRef.current?.video) videoPlaybackRef.current.video.currentTime = prev.startMs / 1000;
-	}, [currentTimeRef, videoPlaybackRef]);
+		const prev = [...chaptersRef.current]
+			.sort((a, b) => a.startMs - b.startMs)
+			.reverse()
+			.find((ch) => ch.startMs < nowMs - 100);
+		if (prev && videoPlaybackRef.current?.video)
+			videoPlaybackRef.current.video.currentTime = prev.startMs / 1000;
+	}, []);
 	const handleChapterNavigateNext = useCallback(() => {
 		const nowMs = Math.round(currentTimeRef.current * 1000);
-		const next = [...chaptersRef.current].sort((a, b) => a.startMs - b.startMs).find((ch) => ch.startMs > nowMs + 100);
-		if (next && videoPlaybackRef.current?.video) videoPlaybackRef.current.video.currentTime = next.startMs / 1000;
-	}, [currentTimeRef, videoPlaybackRef]);
+		const next = [...chaptersRef.current]
+			.sort((a, b) => a.startMs - b.startMs)
+			.find((ch) => ch.startMs > nowMs + 100);
+		if (next && videoPlaybackRef.current?.video)
+			videoPlaybackRef.current.video.currentTime = next.startMs / 1000;
+	}, []);
 
 	const commitState = resumeEditorHistory;
 
@@ -252,61 +294,59 @@ export default function VideoEditor() {
 			: { screenVideoPath };
 	}, [videoPath, videoSourcePath, webcamVideoPath, webcamVideoSourcePath]);
 
-	const applyLoadedProject = useCallback(
-		async (candidate: unknown, path?: string | null) => {
-			if (!validateProjectData(candidate)) {
-				return false;
-			}
+	const applyLoadedProject = useCallback(async (candidate: unknown, path?: string | null) => {
+		if (!validateProjectData(candidate)) {
+			return false;
+		}
 
-			const project = candidate;
-			const media = resolveProjectMedia(project);
-			if (!media) {
-				return false;
-			}
-			const sourcePath = fromFileUrl(media.screenVideoPath);
-			const webcamSourcePath = media.webcamVideoPath ? fromFileUrl(media.webcamVideoPath) : null;
-			const normalizedEditor = normalizeProjectEditor(project.editor);
+		const project = candidate;
+		const media = resolveProjectMedia(project);
+		if (!media) {
+			return false;
+		}
+		const sourcePath = fromFileUrl(media.screenVideoPath);
+		const webcamSourcePath = media.webcamVideoPath ? fromFileUrl(media.webcamVideoPath) : null;
+		const normalizedEditor = normalizeProjectEditor(project.editor);
 
-			try {
-				videoPlaybackRef.current?.pause();
-			} catch {
-				// no-op
-			}
-			setIsPlaying(false);
-			setCurrentTime(0);
-			setDuration(0);
+		try {
+			videoPlaybackRef.current?.pause();
+		} catch {
+			// no-op
+		}
+		setIsPlaying(false);
+		setCurrentTime(0);
+		setDuration(0);
 
-			setError(null);
-			await getAPI().setCurrentVideoPath(sourcePath);
-			setVideoSourcePath(sourcePath);
-			setVideoPath(await toPlayableUrl(sourcePath));
-			setWebcamVideoSourcePath(webcamSourcePath);
-			setWebcamVideoPath(webcamSourcePath ? await toPlayableUrl(webcamSourcePath) : null);
-			setCurrentProjectPath(path ?? null);
+		setError(null);
+		await getAPI().setCurrentVideoPath(sourcePath);
+		setVideoSourcePath(sourcePath);
+		setVideoPath(await toPlayableUrl(sourcePath));
+		setWebcamVideoSourcePath(webcamSourcePath);
+		setWebcamVideoPath(webcamSourcePath ? await toPlayableUrl(webcamSourcePath) : null);
+		setCurrentProjectPath(path ?? null);
 
-			store.loadState(normalizedEditor);
-			const fullState = { ...INITIAL_EDITOR_STATE, ...normalizedEditor };
-			store.resetIdCounters(fullState);
-			setExportQuality(normalizedEditor.exportQuality);
-			setExportFormat(normalizedEditor.exportFormat);
-			setGifFrameRate(normalizedEditor.gifFrameRate);
-			setGifLoop(normalizedEditor.gifLoop);
-			setGifSizePreset(normalizedEditor.gifSizePreset);
+		const editorStore = useEditorStore.getState();
+		editorStore.loadState(normalizedEditor);
+		const fullState = { ...INITIAL_EDITOR_STATE, ...normalizedEditor };
+		editorStore.resetIdCounters(fullState);
+		setExportQuality(normalizedEditor.exportQuality);
+		setExportFormat(normalizedEditor.exportFormat);
+		setGifFrameRate(normalizedEditor.gifFrameRate);
+		setGifLoop(normalizedEditor.gifLoop);
+		setGifSizePreset(normalizedEditor.gifSizePreset);
 
-			clearSelection();
+		useEditorSelectionStore.getState().clearAll();
 
-			setLastSavedSnapshot(
-				createProjectSnapshot(
-					webcamSourcePath
-						? { screenVideoPath: sourcePath, webcamVideoPath: webcamSourcePath }
-						: { screenVideoPath: sourcePath },
-					normalizedEditor,
-				),
-			);
-			return true;
-		},
-		[store, clearSelection],
-	);
+		setLastSavedSnapshot(
+			createProjectSnapshot(
+				webcamSourcePath
+					? { screenVideoPath: sourcePath, webcamVideoPath: webcamSourcePath }
+					: { screenVideoPath: sourcePath },
+				normalizedEditor,
+			),
+		);
+		return true;
+	}, []);
 
 	const currentProjectSnapshot = useMemo(() => {
 		if (!currentProjectMedia) {
@@ -378,7 +418,7 @@ export default function VideoEditor() {
 
 					const cliConfig = await getAPI().getCliEditorConfig();
 					if (cliConfig) {
-						store.loadState({
+						useEditorStore.getState().loadState({
 							shadowIntensity: cliConfig.shadowIntensity,
 							showBlur: cliConfig.showBlur,
 							motionBlurAmount: cliConfig.motionBlurAmount,
@@ -450,18 +490,19 @@ export default function VideoEditor() {
 		}
 
 		loadInitialData();
-	}, [applyLoadedProject, store]);
+	}, [applyLoadedProject]);
 
 	const updatePrefs = useEditorPreferencesStore((s) => s.update);
 
 	// Apply persisted preferences to the editor store on mount
 	useEffect(() => {
 		const prefs = useEditorPreferencesStore.getState();
-		store.setPadding(prefs.padding);
-		store.setAspectRatio(prefs.aspectRatio);
+		const editorStore = useEditorStore.getState();
+		editorStore.setPadding(prefs.padding);
+		editorStore.setAspectRatio(prefs.aspectRatio);
 		setExportQuality(prefs.exportQuality);
 		setExportFormat(prefs.exportFormat);
-	}, [store]);
+	}, []);
 
 	// Persist preference changes back to localStorage
 	useEffect(() => {
@@ -617,11 +658,13 @@ export default function VideoEditor() {
 		const removeLoadListener = getAPI().onMenuLoadProject(handleLoadProject);
 		const removeSaveListener = getAPI().onMenuSaveProject(handleSaveProject);
 		const removeSaveAsListener = getAPI().onMenuSaveProjectAs(handleSaveProjectAs);
+		const removePrefsListener = getAPI().onMenuPreferences(() => setShowPreferences(true));
 
 		return () => {
 			removeLoadListener?.();
 			removeSaveListener?.();
 			removeSaveAsListener?.();
+			removePrefsListener?.();
 		};
 	}, [handleLoadProject, handleSaveProject, handleSaveProjectAs]);
 
@@ -857,7 +900,10 @@ export default function VideoEditor() {
 											webcamMaskShape={webcamMaskShape}
 											webcamSizePreset={webcamSizePreset}
 											webcamPosition={webcamPosition}
-											onWebcamPositionChange={(pos) => { pauseEditorHistory(); store.setWebcamPosition(pos); }}
+											onWebcamPositionChange={(pos) => {
+												pauseEditorHistory();
+												store.setWebcamPosition(pos);
+											}}
 											onWebcamPositionDragEnd={commitState}
 											onDurationChange={setDuration}
 											onTimeUpdate={setCurrentTime}
@@ -980,6 +1026,8 @@ export default function VideoEditor() {
 					/>
 				</div>
 			</div>
+
+			<PreferencesDialog isOpen={showPreferences} onClose={() => setShowPreferences(false)} />
 
 			<ExportDialog
 				isOpen={showExportDialog}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 import { useEditorStore } from "@/stores/useEditorStore";
 import type { VideoPlaybackRef } from "../VideoPlayback";
 
@@ -9,50 +10,72 @@ export function useTrimPlayback(
 ) {
 	const trimRegions = useEditorStore((s) => s.trimRegions);
 	const addAndSelectTrim = useEditorStore((s) => s.addAndSelectTrim);
+	const trimPlayFromStartOffsetMs = useEditorPreferencesStore((s) => s.trimPlayFromStartOffsetMs);
+	const trimLoopPaddingMs = useEditorPreferencesStore((s) => s.trimLoopPaddingMs);
 
 	const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
 	const [loopingTrimId, setLoopingTrimId] = useState<string | null>(null);
-	const clearLoop = useCallback(() => { setLoopRegion(null); setLoopingTrimId(null); }, []);
+	const clearLoop = useCallback(() => {
+		setLoopRegion(null);
+		setLoopingTrimId(null);
+	}, []);
 
 	useEffect(() => {
 		if (loopingTrimId && !trimRegions.some((r) => r.id === loopingTrimId)) clearLoop();
 	}, [loopingTrimId, trimRegions, clearLoop]);
 
-	const seekAndPlay = useCallback((seekToSec: number) => {
-		const video = videoPlaybackRef.current?.video;
-		if (!video) return;
-		video.currentTime = seekToSec;
-		setTimeout(() => { videoPlaybackRef.current?.play().catch(console.error); }, 50);
-	}, [videoPlaybackRef]);
+	const seekAndPlay = useCallback(
+		(seekToSec: number) => {
+			const video = videoPlaybackRef.current?.video;
+			if (!video) return;
+			video.currentTime = seekToSec;
+			setTimeout(() => {
+				videoPlaybackRef.current?.play().catch(console.error);
+			}, 50);
+		},
+		[videoPlaybackRef],
+	);
 
 	const handleTrimPlayFromStart = useCallback(
 		(id: string) => {
 			const trim = trimRegions.find((r) => r.id === id);
-			if (trim) { clearLoop(); seekAndPlay(Math.max(0, trim.startMs - 5000) / 1000); }
+			if (trim) {
+				clearLoop();
+				seekAndPlay(Math.max(0, trim.startMs - trimPlayFromStartOffsetMs) / 1000);
+			}
 		},
-		[trimRegions, clearLoop, seekAndPlay],
+		[trimRegions, clearLoop, seekAndPlay, trimPlayFromStartOffsetMs],
 	);
 
 	const handleTrimPlayFromEnd = useCallback(
 		(id: string) => {
 			const trim = trimRegions.find((r) => r.id === id);
-			if (trim) { clearLoop(); seekAndPlay(trim.endMs / 1000); }
+			if (trim) {
+				clearLoop();
+				seekAndPlay(trim.endMs / 1000);
+			}
 		},
 		[trimRegions, clearLoop, seekAndPlay],
 	);
 
 	const handleTrimToggleLoop = useCallback(
 		(id: string) => {
-			if (loopingTrimId === id) { clearLoop(); return; }
+			if (loopingTrimId === id) {
+				clearLoop();
+				return;
+			}
 			const trim = trimRegions.find((r) => r.id === id);
 			if (!trim) return;
 			const totalMs = Math.round(durationRef.current * 1000);
-			const region = { startMs: Math.max(0, trim.startMs - 3000), endMs: Math.min(totalMs, trim.endMs + 3000) };
+			const region = {
+				startMs: Math.max(0, trim.startMs - trimLoopPaddingMs),
+				endMs: Math.min(totalMs, trim.endMs + trimLoopPaddingMs),
+			};
 			setLoopRegion(region);
 			setLoopingTrimId(id);
 			seekAndPlay(region.startMs / 1000);
 		},
-		[loopingTrimId, trimRegions, clearLoop, seekAndPlay, durationRef],
+		[loopingTrimId, trimRegions, clearLoop, seekAndPlay, durationRef, trimLoopPaddingMs],
 	);
 
 	// Quick-trim

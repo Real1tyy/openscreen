@@ -4,7 +4,14 @@ import type { AspectRatio } from "@/utils/aspectRatioUtils";
 const PREFS_KEY = "openscreen_user_preferences";
 
 const VALID_ASPECT_RATIOS = [
-	"16:9", "9:16", "1:1", "4:3", "4:5", "16:10", "10:16", "native",
+	"16:9",
+	"9:16",
+	"1:1",
+	"4:3",
+	"4:5",
+	"16:10",
+	"10:16",
+	"native",
 ] as const;
 
 export const UserPreferencesSchema = z.object({
@@ -21,6 +28,8 @@ export const UserPreferencesSchema = z.object({
 	defaultZoomDurationMs: z.number().min(500).catch(5000).default(5000),
 	defaultTrimDurationMs: z.number().min(500).catch(5000).default(5000),
 	defaultSpeedDurationMs: z.number().min(500).catch(5000).default(5000),
+	trimPlayFromStartOffsetMs: z.number().min(500).catch(5000).default(5000),
+	trimLoopPaddingMs: z.number().min(500).catch(3000).default(3000),
 });
 
 export type UserPreferences = z.infer<typeof UserPreferencesSchema>;

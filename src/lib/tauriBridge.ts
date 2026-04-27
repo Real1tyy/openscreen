@@ -141,8 +141,7 @@ function buildTauriAPI(): ElectronAPI {
 
 		openVideoFilePicker: () => invoke("open_video_file_picker"),
 		setCurrentVideoPath: (path) => invoke("set_current_video_path", { path }),
-		setCurrentRecordingSession: (session) =>
-			invoke("set_current_recording_session", { session }),
+		setCurrentRecordingSession: (session) => invoke("set_current_recording_session", { session }),
 		getCurrentVideoPath: () => invoke("get_current_video_path"),
 		getCurrentRecordingSession: () => invoke("get_current_recording_session"),
 		clearCurrentVideoPath: () => invoke("clear_current_video_path"),
@@ -199,14 +198,22 @@ function buildTauriAPI(): ElectronAPI {
 				unlisten?.();
 			};
 		},
+		onMenuPreferences: (callback: () => void) => {
+			let unlisten: (() => void) | null = null;
+			listen("menu-preferences", () => callback()).then((fn_) => {
+				unlisten = fn_;
+			});
+			return () => {
+				unlisten?.();
+			};
+		},
 		getPlatform: () => invoke("get_platform"),
 		revealInFolder: (filePath) => invoke("reveal_in_folder", { filePath }),
 		getShortcuts: () => invoke("get_shortcuts"),
 		saveShortcuts: (shortcuts) => invoke("save_shortcuts", { shortcuts }),
 		setLocale: (locale) => invoke("set_locale", { locale }),
 		setMicrophoneExpanded: (_expanded) => {},
-		setHasUnsavedChanges: (hasChanges) =>
-			invoke("set_has_unsaved_changes", { hasChanges }),
+		setHasUnsavedChanges: (hasChanges) => invoke("set_has_unsaved_changes", { hasChanges }),
 		onRequestSaveBeforeClose: (callback) => {
 			let unlisten: (() => void) | null = null;
 			listen("request-save-before-close", async () => {
@@ -222,8 +229,7 @@ function buildTauriAPI(): ElectronAPI {
 			invoke("write_text_file", { filePath, content }),
 		getCliInputFile: () => invoke("get_cli_input_file").catch(() => null),
 		getCliEditorConfig: () => invoke("get_cli_editor_config").catch(() => null),
-		getHeadlessExportConfig: () =>
-			invoke("get_headless_export_config").catch(() => null),
+		getHeadlessExportConfig: () => invoke("get_headless_export_config").catch(() => null),
 		sendHeadlessExportProgress: (_percentage) => {},
 		sendHeadlessExportDone: (_result) => Promise.resolve(),
 	} as ElectronAPI;
@@ -273,7 +279,11 @@ export function getNvencAPI(): NvencExportAPI | null {
 		feedFrame: (sessionId, framePath, width, height, isKeyframe) =>
 			invoke("feed_frame", { sessionId, framePath, width, height, isKeyframe }),
 		finishExport: (sessionId, trimRegions, speedRegions) =>
-			invoke("finish_export", { sessionId, trimRegions: trimRegions ?? null, speedRegions: speedRegions ?? null }),
+			invoke("finish_export", {
+				sessionId,
+				trimRegions: trimRegions ?? null,
+				speedRegions: speedRegions ?? null,
+			}),
 		cancelExport: (sessionId) => invoke("cancel_export", { sessionId }),
 		getFrameTempDir: () => invoke("get_frame_temp_dir"),
 	};

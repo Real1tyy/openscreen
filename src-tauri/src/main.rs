@@ -164,13 +164,28 @@ fn setup_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .select_all()
         .build()?;
 
+    let preferences_item = MenuItemBuilder::with_id("preferences", "Preferences...")
+        .accelerator(format!("{}+,", mod_key))
+        .build(app)?;
+    let fullscreen_item = MenuItemBuilder::with_id("toggle-fullscreen", "Toggle Fullscreen")
+        .accelerator("F11")
+        .build(app)?;
+
     let view_menu = SubmenuBuilder::new(app, "View")
-        .fullscreen()
+        .item(&preferences_item)
+        .separator()
+        .item(&fullscreen_item)
         .build()?;
 
+    let minimize_item = MenuItemBuilder::with_id("minimize-window", "Minimize")
+        .build(app)?;
+    let close_item = MenuItemBuilder::with_id("close-window", "Close Window")
+        .accelerator(format!("{}+W", mod_key))
+        .build(app)?;
+
     let window_menu = SubmenuBuilder::new(app, "Window")
-        .minimize()
-        .close_window()
+        .item(&minimize_item)
+        .item(&close_item)
         .build()?;
 
     let menu = MenuBuilder::new(app)
@@ -194,6 +209,27 @@ fn setup_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             "save-project-as" => {
                 if let Some(editor) = app.get_webview_window("editor") {
                     editor.emit("menu-save-project-as", ()).ok();
+                }
+            }
+            "preferences" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.emit("menu-preferences", ()).ok();
+                }
+            }
+            "toggle-fullscreen" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    let is_fullscreen = editor.is_fullscreen().unwrap_or(false);
+                    editor.set_fullscreen(!is_fullscreen).ok();
+                }
+            }
+            "minimize-window" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.minimize().ok();
+                }
+            }
+            "close-window" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.close().ok();
                 }
             }
             _ => {}
