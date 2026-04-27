@@ -38,7 +38,6 @@ import {
 	getZoomScale,
 	type SpeedRegion,
 	type TrimRegion,
-	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomRegion,
 } from "./types";
@@ -51,7 +50,7 @@ import {
 	ZOOM_TRANSLATION_DEADZONE_PX,
 } from "./videoPlayback/constants";
 import { adaptiveSmoothFactor, smoothCursorFocus } from "./videoPlayback/cursorFollowUtils";
-import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
+import { clampFocusToScale } from "./videoPlayback/focusUtils";
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
@@ -218,8 +217,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const smoothedAutoFocusRef = useRef<ZoomFocus | null>(null);
 		const prevTargetProgressRef = useRef(0);
 
-		const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
-			return clampFocusToStageUtil(focus, depth);
+		const clampFocusForRegion = useCallback((focus: ZoomFocus, region: ZoomRegion) => {
+			return clampFocusToScale(focus, getZoomScale(region));
 		}, []);
 
 		const updateOverlayForRegion = useCallback(
@@ -394,7 +393,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				cx: clamp01(localX / stageWidth),
 				cy: clamp01(localY / stageHeight),
 			};
-			const clampedFocus = clampFocusToStage(unclampedFocus, region.depth);
+			const clampedFocus = clampFocusForRegion(unclampedFocus, region);
 
 			onZoomFocusChange(region.id, clampedFocus);
 			updateOverlayForRegion({ ...region, focus: clampedFocus }, clampedFocus);
