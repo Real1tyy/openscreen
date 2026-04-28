@@ -20,7 +20,10 @@
 		"addAnnotation": "Add Annotation",
 		"addKeyframe": "Add Keyframe",
 		"deleteSelected": "Delete Selected",
-		"playPause": "Play / Pause"
+		"playPause": "Play / Pause",
+		"goToNow": "Go to Playhead",
+		"followPlayhead": "Follow Playhead",
+		"goToTrimStart": "Go to Trim Start"
 	},
 	"fixedActions": {
 		"undo": "Undo",

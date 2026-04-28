@@ -229,10 +229,10 @@ export function LaunchWindow() {
 	};
 
 	return (
-		<div className={`w-screen h-screen bg-transparent ${styles.electronDrag}`}>
+		<div className={`w-screen h-screen bg-transparent ${styles.windowDrag}`}>
 			{/* Language switcher — top-left, beside traffic lights */}
 			<div
-				className={`fixed top-2 flex items-center gap-1 px-2 py-1 rounded-md text-white/50 hover:text-white/90 hover:bg-white/10 transition-all duration-150 ${isMac ? "left-[72px]" : "left-2"} ${styles.electronNoDrag}`}
+				className={`fixed top-2 flex items-center gap-1 px-2 py-1 rounded-md text-white/50 hover:text-white/90 hover:bg-white/10 transition-all duration-150 ${isMac ? "left-[72px]" : "left-2"} ${styles.windowNoDrag}`}
 			>
 				<Languages size={14} />
 				<select
@@ -252,7 +252,7 @@ export function LaunchWindow() {
 			{/* Device selectors — fixed above HUD bar, viewport-relative, never clipped */}
 			{(showMicControls || showWebcamControls) && (
 				<div
-					className={`fixed bottom-[60px] left-1/2 -translate-x-1/2 flex items-center gap-2 animate-mic-panel-in ${styles.electronNoDrag}`}
+					className={`fixed bottom-[60px] left-1/2 -translate-x-1/2 flex items-center gap-2 animate-mic-panel-in ${styles.windowNoDrag}`}
 				>
 					{/* Mic selector */}
 					{showMicControls && (
@@ -380,13 +380,13 @@ export function LaunchWindow() {
 				className={`fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2 py-1.5 rounded-full shadow-hud-bar bg-gradient-to-br from-[rgba(28,28,36,0.97)] to-[rgba(18,18,26,0.96)] backdrop-blur-[16px] backdrop-saturate-[140%] border border-[rgba(80,80,120,0.25)]`}
 			>
 				{/* Drag handle */}
-				<div className={`flex items-center px-1 ${styles.electronDrag}`}>
+				<div className={`flex items-center px-1 ${styles.windowDrag}`}>
 					{getIcon("drag", "text-white/30")}
 				</div>
 
 				{/* Source selector */}
 				<button
-					className={`${hudGroupClasses} p-2 ${styles.electronNoDrag}`}
+					className={`${hudGroupClasses} p-2 ${styles.windowNoDrag}`}
 					onClick={openSourceSelector}
 					disabled={recording}
 					title={selectedSource}
@@ -396,7 +396,7 @@ export function LaunchWindow() {
 				</button>
 
 				{/* Audio controls group */}
-				<div className={`${hudGroupClasses} ${styles.electronNoDrag}`}>
+				<div className={`${hudGroupClasses} ${styles.windowNoDrag}`}>
 					<button
 						className={`${hudIconBtnClasses} ${systemAudioEnabled ? "drop-shadow-[0_0_4px_rgba(74,222,128,0.4)]" : ""}`}
 						onClick={() => !recording && setSystemAudioEnabled(!systemAudioEnabled)}
@@ -434,7 +434,7 @@ export function LaunchWindow() {
 
 				{/* Record/Stop group */}
 				<button
-					className={`flex items-center gap-0.5 rounded-full p-2 transition-colors duration-150 ${styles.electronNoDrag} ${
+					className={`flex items-center gap-0.5 rounded-full p-2 transition-colors duration-150 ${styles.windowNoDrag} ${
 						recording
 							? paused
 								? "bg-amber-500/10 hover:bg-amber-500/15"
@@ -462,7 +462,7 @@ export function LaunchWindow() {
 				{recording && (
 					<Tooltip content={paused ? t("tooltips.resumeRecording") : t("tooltips.pauseRecording")}>
 						<button
-							className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
+							className={`${hudIconBtnClasses} ${styles.windowNoDrag}`}
 							onClick={togglePaused}
 						>
 							{getIcon(paused ? "resume" : "pause", paused ? "text-amber-400" : "text-white/60")}
@@ -474,7 +474,7 @@ export function LaunchWindow() {
 				{recording && (
 					<Tooltip content={t("tooltips.restartRecording")}>
 						<button
-							className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
+							className={`${hudIconBtnClasses} ${styles.windowNoDrag}`}
 							onClick={restartRecording}
 						>
 							{getIcon("restart", "text-white/60")}
@@ -486,7 +486,7 @@ export function LaunchWindow() {
 				{recording && (
 					<Tooltip content={t("tooltips.cancelRecording")}>
 						<button
-							className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
+							className={`${hudIconBtnClasses} ${styles.windowNoDrag}`}
 							onClick={cancelRecording}
 						>
 							{getIcon("cancel", "text-white/60")}
@@ -497,7 +497,7 @@ export function LaunchWindow() {
 				{/* Open video file */}
 				<Tooltip content={t("tooltips.openVideoFile")}>
 					<button
-						className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
+						className={`${hudIconBtnClasses} ${styles.windowNoDrag}`}
 						onClick={openVideoFile}
 						disabled={recording}
 					>
@@ -508,7 +508,7 @@ export function LaunchWindow() {
 				{/* Open project */}
 				<Tooltip content={t("tooltips.openProject")}>
 					<button
-						className={`${hudIconBtnClasses} ${styles.electronNoDrag}`}
+						className={`${hudIconBtnClasses} ${styles.windowNoDrag}`}
 						onClick={openProjectFile}
 						disabled={recording}
 					>
@@ -517,7 +517,7 @@ export function LaunchWindow() {
 				</Tooltip>
 
 				{/* Window controls */}
-				<div className={`flex items-center gap-0.5 ${styles.electronNoDrag}`}>
+				<div className={`flex items-center gap-0.5 ${styles.windowNoDrag}`}>
 					<button
 						className={windowBtnClasses}
 						title={t("tooltips.hideHUD")}

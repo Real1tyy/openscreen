@@ -1,6 +1,11 @@
-import { Settings } from "lucide-react";
+import { Keyboard, Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { useI18n } from "@/contexts/I18nContext";
+import { useShortcuts } from "@/contexts/ShortcutsContext";
+import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
+import { getLocaleName } from "@/i18n/loader";
 import type { UserPreferences } from "@/lib/userPreferences";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 
@@ -81,6 +86,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
 	const prefs = useEditorPreferencesStore();
 	const update = useEditorPreferencesStore((s) => s.update);
+	const { locale, setLocale } = useI18n();
+	const { openConfig } = useShortcuts();
 
 	const set = useCallback(
 		(key: keyof UserPreferences, value: number) => {
@@ -100,6 +107,23 @@ export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
 				</DialogHeader>
 
 				<div className="space-y-5 mt-2 max-h-[60vh] overflow-y-auto pr-1">
+					<Section title="Language">
+						<div className="flex items-center justify-between gap-4">
+							<span className="text-[13px] text-slate-300 shrink-0">Display language</span>
+							<select
+								value={locale}
+								onChange={(e) => setLocale(e.target.value as Locale)}
+								className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-[13px] text-slate-200 outline-none focus:ring-1 focus:ring-[#34B27B]/50 cursor-pointer"
+							>
+								{SUPPORTED_LOCALES.map((loc) => (
+									<option key={loc} value={loc} className="bg-[#141414] text-white">
+										{getLocaleName(loc)}
+									</option>
+								))}
+							</select>
+						</div>
+					</Section>
+
 					<Section title="Navigation">
 						<NumberField
 							label="Arrow key seek"
@@ -168,6 +192,39 @@ export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
 							max={30}
 							step={0.5}
 						/>
+					</Section>
+
+					<Section title="Interface">
+						<div className="flex items-center justify-between gap-4">
+							<span className="text-[13px] text-slate-300 shrink-0">Show trimming tutorial</span>
+							<Switch
+								checked={prefs.showTrimHelp}
+								onCheckedChange={(v) => update({ showTrimHelp: v })}
+								className="data-[state=checked]:bg-[#34B27B] scale-75"
+							/>
+						</div>
+						<div className="flex items-center justify-between gap-4">
+							<span className="text-[13px] text-slate-300 shrink-0">Show scroll/pan help</span>
+							<Switch
+								checked={prefs.showScrollHelp}
+								onCheckedChange={(v) => update({ showScrollHelp: v })}
+								className="data-[state=checked]:bg-[#34B27B] scale-75"
+							/>
+						</div>
+						<div className="flex items-center justify-between gap-4">
+							<span className="text-[13px] text-slate-300 shrink-0">Keyboard shortcuts</span>
+							<button
+								type="button"
+								onClick={() => {
+									onClose();
+									openConfig();
+								}}
+								className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/5 border border-white/10 text-[12px] text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+							>
+								<Keyboard className="w-3.5 h-3.5" />
+								Customize
+							</button>
+						</div>
 					</Section>
 				</div>
 			</DialogContent>

@@ -1,8 +1,7 @@
-/* Electron-specific: no Tailwind equivalent for -webkit-app-region */
-.electronDrag {
+.windowDrag {
 	-webkit-app-region: drag;
 }
 
-.electronNoDrag {
+.windowNoDrag {
 	-webkit-app-region: no-drag;
 }

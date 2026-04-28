@@ -28,6 +28,8 @@ release/
 # Playwright
 test-results
 playwright-report/
+.playwright-mcp/
+ui-check-*.png
 
 # Vitest browser mode screenshots
 __screenshots__/

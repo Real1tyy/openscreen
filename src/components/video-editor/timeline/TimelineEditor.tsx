@@ -6,12 +6,15 @@ import {
 	ChevronDown,
 	Clock,
 	Copy,
+	Crosshair,
 	Gauge,
+	LocateFixed,
 	MessageSquare,
 	Play,
 	Plus,
 	Repeat,
 	Scissors,
+	SkipForward,
 	Trash2,
 	WandSparkles,
 	ZoomIn,
@@ -38,12 +41,7 @@ import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/as
 import { formatShortcut } from "@/utils/platformUtils";
 import { formatMsCompact } from "@/utils/timeUtils";
 import { TutorialHelp } from "../TutorialHelp";
-import type {
-	CursorTelemetryPoint,
-	SpeedRegion,
-	TrimRegion,
-	ZoomRegion,
-} from "../types";
+import type { CursorTelemetryPoint, SpeedRegion, TrimRegion, ZoomRegion } from "../types";
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import Row from "./Row";
@@ -956,13 +954,7 @@ export default function TimelineEditor({
 
 	// ── Read state & actions from stores ───────────────────────
 	const store = useEditorStore();
-	const {
-		zoomRegions,
-		trimRegions,
-		speedRegions,
-		annotationRegions,
-		chapters,
-	} = store;
+	const { zoomRegions, trimRegions, speedRegions, annotationRegions, chapters } = store;
 
 	const {
 		selectedZoomId,
@@ -980,6 +972,12 @@ export default function TimelineEditor({
 	const defaultZoomDurationMs = useEditorPreferencesStore((s) => s.defaultZoomDurationMs);
 	const defaultTrimDurationMs = useEditorPreferencesStore((s) => s.defaultTrimDurationMs);
 	const defaultSpeedDurationMs = useEditorPreferencesStore((s) => s.defaultSpeedDurationMs);
+	const followPlayhead = useEditorPreferencesStore((s) => s.followPlayhead);
+	const showTrimHelp = useEditorPreferencesStore((s) => s.showTrimHelp);
+	const showScrollHelp = useEditorPreferencesStore((s) => s.showScrollHelp);
+	const updatePrefs = useEditorPreferencesStore((s) => s.update);
+	const rangeRef = useRef(range);
+	rangeRef.current = range;
 
 	useEffect(() => {
 		formatShortcut(["mod", "Scroll"]).then((zoom) => {
@@ -1167,11 +1165,7 @@ export default function TimelineEditor({
 				store.setChapterSpan(ch.id, { start: normalized.startMs, end: normalized.endMs });
 			}
 		});
-	}, [
-		totalMs,
-		safeMinDurationMs,
-		store,
-	]);
+	}, [totalMs, safeMinDurationMs, store]);
 
 	const hasOverlap = useCallback(
 		(newSpan: Span, excludeId?: string): boolean => {
@@ -1338,7 +1332,10 @@ export default function TimelineEditor({
 
 			reservedSpans.push({ start: candidateStart, end: candidateEnd });
 			acceptedCenters.push(candidate.centerTimeMs);
-			store.addAndSelectZoomSuggested({ start: candidateStart, end: candidateEnd }, candidate.focus);
+			store.addAndSelectZoomSuggested(
+				{ start: candidateStart, end: candidateEnd },
+				candidate.focus,
+			);
 			addedCount += 1;
 		});
 
@@ -1457,14 +1454,59 @@ export default function TimelineEditor({
 		const endPos = Math.min(startPos + dur, totalMs);
 
 		store.addAndSelectAnnotation({ start: startPos, end: endPos });
-	}, [
-		videoDuration,
-		totalMs,
-		currentTimeMs,
-		store,
-		defaultZoomDurationMs,
-		clampDuration,
-	]);
+	}, [videoDuration, totalMs, currentTimeMs, store, defaultZoomDurationMs, clampDuration]);
+
+	const handleGoToNow = useCallback(() => {
+		const currentRange = rangeRef.current;
+		const visibleMs = currentRange.end - currentRange.start;
+		if (visibleMs <= 0 || totalMs === 0) return;
+
+		let newStart = currentTimeMs - visibleMs / 2;
+		let newEnd = currentTimeMs + visibleMs / 2;
+
+		if (newStart < 0) {
+			newStart = 0;
+			newEnd = Math.min(visibleMs, totalMs);
+		}
+		if (newEnd > totalMs) {
+			newEnd = totalMs;
+			newStart = Math.max(0, totalMs - visibleMs);
+		}
+
+		setRange({ start: newStart, end: newEnd });
+	}, [currentTimeMs, totalMs]);
+
+	useEffect(() => {
+		if (!followPlayhead || totalMs === 0) return;
+
+		const currentRange = rangeRef.current;
+		const visibleMs = currentRange.end - currentRange.start;
+		if (visibleMs <= 0) return;
+
+		let newStart = currentTimeMs - visibleMs / 2;
+		let newEnd = currentTimeMs + visibleMs / 2;
+
+		if (newStart < 0) {
+			newStart = 0;
+			newEnd = Math.min(visibleMs, totalMs);
+		}
+		if (newEnd > totalMs) {
+			newEnd = totalMs;
+			newStart = Math.max(0, totalMs - visibleMs);
+		}
+
+		setRange({ start: newStart, end: newEnd });
+	}, [followPlayhead, currentTimeMs, totalMs]);
+
+	const handleGoToTrimStart = useCallback(() => {
+		if (trimRegions.length === 0 || !onSeek) return;
+		const sorted = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
+		const nowMs = currentTimeMs;
+		const next = sorted.find((t) => t.startMs > nowMs + 50);
+		const target = next ?? sorted[0];
+		onSeek(target.startMs / 1000);
+		handleGoToNow();
+	}, [trimRegions, currentTimeMs, onSeek, handleGoToNow]);
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -1486,6 +1528,15 @@ export default function TimelineEditor({
 			}
 			if (matchesShortcut(e, keyShortcuts.addSpeed, isMac)) {
 				handleAddSpeed();
+			}
+			if (matchesShortcut(e, keyShortcuts.goToNow, isMac)) {
+				handleGoToNow();
+			}
+			if (matchesShortcut(e, keyShortcuts.followPlayhead, isMac)) {
+				updatePrefs({ followPlayhead: !followPlayhead });
+			}
+			if (matchesShortcut(e, keyShortcuts.goToTrimStart, isMac)) {
+				handleGoToTrimStart();
 			}
 
 			// Tab: Cycle through overlapping annotations at current time
@@ -1539,6 +1590,10 @@ export default function TimelineEditor({
 		handleAddTrim,
 		handleAddAnnotation,
 		handleAddSpeed,
+		handleGoToNow,
+		handleGoToTrimStart,
+		followPlayhead,
+		updatePrefs,
 		deleteSelectedKeyframe,
 		deleteSelectedZoom,
 		deleteSelectedTrim,
@@ -1654,14 +1709,7 @@ export default function TimelineEditor({
 				store.setChapterSpan(id, span);
 			}
 		},
-		[
-			zoomRegions,
-			trimRegions,
-			speedRegions,
-			annotationRegions,
-			chapters,
-			store,
-		],
+		[zoomRegions, trimRegions, speedRegions, annotationRegions, chapters, store],
 	);
 
 	if (!videoDuration || videoDuration === 0) {
@@ -1737,6 +1785,40 @@ export default function TimelineEditor({
 						<BookMarked className="w-4 h-4" />
 					</Button>
 				</div>
+				<div className="w-[1px] h-4 bg-white/10" />
+				<Button
+					onClick={handleGoToNow}
+					variant="ghost"
+					size="icon"
+					className="h-7 w-7 text-slate-400 hover:text-[#34B27B] hover:bg-[#34B27B]/10 transition-all"
+					title="Go to playhead position (G)"
+				>
+					<Crosshair className="w-4 h-4" />
+				</Button>
+				<Button
+					onClick={handleGoToTrimStart}
+					variant="ghost"
+					size="icon"
+					className="h-7 w-7 text-slate-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-all"
+					title="Go to next trim start (I)"
+				>
+					<SkipForward className="w-4 h-4" />
+				</Button>
+				<Button
+					onClick={() => updatePrefs({ followPlayhead: !followPlayhead })}
+					variant="ghost"
+					size="icon"
+					className={cn(
+						"h-7 w-7 transition-all",
+						followPlayhead
+							? "text-[#34B27B] bg-[#34B27B]/10"
+							: "text-slate-400 hover:text-[#34B27B] hover:bg-[#34B27B]/10",
+					)}
+					title={followPlayhead ? "Stop following playhead (L)" : "Follow playhead (L)"}
+				>
+					<LocateFixed className="w-4 h-4" />
+				</Button>
+
 				<div className="flex items-center gap-2">
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
@@ -1762,24 +1844,30 @@ export default function TimelineEditor({
 							))}
 						</DropdownMenuContent>
 					</DropdownMenu>
-					<div className="w-[1px] h-4 bg-white/10" />
-					<TutorialHelp />
+					{showTrimHelp && (
+						<>
+							<div className="w-[1px] h-4 bg-white/10" />
+							<TutorialHelp />
+						</>
+					)}
 				</div>
 				<div className="flex-1" />
-				<div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
-					<span className="flex items-center gap-1.5">
-						<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#34B27B] font-sans">
-							{scrollLabels.pan}
-						</kbd>
-						<span>{t("labels.pan")}</span>
-					</span>
-					<span className="flex items-center gap-1.5">
-						<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#34B27B] font-sans">
-							{scrollLabels.zoom}
-						</kbd>
-						<span>{t("labels.zoom")}</span>
-					</span>
-				</div>
+				{showScrollHelp && (
+					<div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+						<span className="flex items-center gap-1.5">
+							<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#34B27B] font-sans">
+								{scrollLabels.pan}
+							</kbd>
+							<span>{t("labels.pan")}</span>
+						</span>
+						<span className="flex items-center gap-1.5">
+							<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#34B27B] font-sans">
+								{scrollLabels.zoom}
+							</kbd>
+							<span>{t("labels.zoom")}</span>
+						</span>
+					</div>
+				)}
 			</div>
 			<div
 				ref={timelineContainerRef}

@@ -20,7 +20,10 @@
 		"addAnnotation": "Agregar anotación",
 		"addKeyframe": "Agregar fotograma clave",
 		"deleteSelected": "Eliminar seleccionado",
-		"playPause": "Reproducir / Pausar"
+		"playPause": "Reproducir / Pausar",
+		"goToNow": "Go to Playhead",
+		"followPlayhead": "Follow Playhead",
+		"goToTrimStart": "Go to Trim Start"
 	},
 	"fixedActions": {
 		"undo": "Deshacer",

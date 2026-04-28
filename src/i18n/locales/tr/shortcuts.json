@@ -20,7 +20,10 @@
 		"addAnnotation": "Açıklama Ekle",
 		"addKeyframe": "Anahtar Kare Ekle",
 		"deleteSelected": "Seçileni Sil",
-		"playPause": "Oynat / Duraklat"
+		"playPause": "Oynat / Duraklat",
+		"goToNow": "Go to Playhead",
+		"followPlayhead": "Follow Playhead",
+		"goToTrimStart": "Go to Trim Start"
 	},
 	"fixedActions": {
 		"undo": "Geri Al",

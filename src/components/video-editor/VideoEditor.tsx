@@ -1,4 +1,3 @@
-import { FolderOpen, Languages, Save, Video } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
@@ -10,10 +9,8 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
-import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
-import { getLocaleName } from "@/i18n/loader";
 import {
 	calculateOutputDimensions,
 	type ExportFormat,
@@ -181,6 +178,11 @@ export default function VideoEditor() {
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
 	const [isFullscreen, setIsFullscreen] = useState(false);
 	const [showPreferences, setShowPreferences] = useState(false);
+	const [sidebarWidth, setSidebarWidth] = useState(
+		() => useEditorPreferencesStore.getState().sidebarWidth,
+	);
+	const sidebarWidthRef = useRef(sidebarWidth);
+	sidebarWidthRef.current = sidebarWidth;
 
 	const playerContainerRef = useRef<HTMLDivElement>(null);
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
@@ -190,8 +192,6 @@ export default function VideoEditor() {
 
 	const { shortcuts, isMac } = useShortcuts();
 	const t = useScopedT("editor");
-	const ts = useScopedT("settings");
-	const { locale, setLocale } = useI18n();
 
 	// ── Trim playback (needs DOM refs, can't live in store) ──
 	const {
@@ -717,6 +717,33 @@ export default function VideoEditor() {
 		setIsFullscreen((prev) => !prev);
 	}, []);
 
+	const handleSidebarResizeStart = useCallback(
+		(e: React.MouseEvent) => {
+			e.preventDefault();
+			const startX = e.clientX;
+			const startWidth = sidebarWidthRef.current;
+
+			const onMouseMove = (ev: MouseEvent) => {
+				const delta = startX - ev.clientX;
+				const newWidth = Math.max(200, Math.min(500, startWidth + delta));
+				setSidebarWidth(newWidth);
+				sidebarWidthRef.current = newWidth;
+			};
+
+			const onMouseUp = () => {
+				window.removeEventListener("mousemove", onMouseMove);
+				window.removeEventListener("mouseup", onMouseUp);
+				document.body.style.cursor = "";
+				updatePrefs({ sidebarWidth: sidebarWidthRef.current });
+			};
+
+			document.body.style.cursor = "col-resize";
+			window.addEventListener("mousemove", onMouseMove);
+			window.addEventListener("mouseup", onMouseUp);
+		},
+		[updatePrefs],
+	);
+
 	useEffect(() => {
 		if (!isFullscreen) return;
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -802,62 +829,10 @@ export default function VideoEditor() {
 				</DialogContent>
 			</Dialog>
 
-			<div
-				className="h-10 flex-shrink-0 bg-[#09090b]/80 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-6 z-50"
-				style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-			>
-				<div
-					className="flex-1 flex items-center gap-1"
-					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-				>
-					<div
-						className={`flex items-center gap-1 px-2 py-1 rounded-md text-white/50 hover:text-white/90 hover:bg-white/10 transition-all duration-150 ${isMac ? "ml-14" : "ml-2"}`}
-					>
-						<Languages size={14} />
-						<select
-							value={locale}
-							onChange={(e) => setLocale(e.target.value as Locale)}
-							className="bg-transparent text-[11px] font-medium outline-none cursor-pointer appearance-none pr-1"
-							style={{ color: "inherit" }}
-						>
-							{SUPPORTED_LOCALES.map((loc) => (
-								<option key={loc} value={loc} className="bg-[#09090b] text-white">
-									{getLocaleName(loc)}
-								</option>
-							))}
-						</select>
-					</div>
-					<button
-						type="button"
-						onClick={() => setShowNewRecordingDialog(true)}
-						className="flex items-center gap-1 px-2 py-1 rounded-md text-white/50 hover:text-white/90 hover:bg-white/10 transition-all duration-150 text-[11px] font-medium"
-					>
-						<Video size={14} />
-						{t("newRecording.title")}
-					</button>
-					<button
-						type="button"
-						onClick={handleLoadProject}
-						className="flex items-center gap-1 px-2 py-1 rounded-md text-white/50 hover:text-white/90 hover:bg-white/10 transition-all duration-150 text-[11px] font-medium"
-					>
-						<FolderOpen size={14} />
-						{ts("project.load")}
-					</button>
-					<button
-						type="button"
-						onClick={handleSaveProject}
-						className="flex items-center gap-1 px-2 py-1 rounded-md text-white/50 hover:text-white/90 hover:bg-white/10 transition-all duration-150 text-[11px] font-medium"
-					>
-						<Save size={14} />
-						{ts("project.save")}
-					</button>
-				</div>
-			</div>
-
-			<div className="flex-1 p-5 gap-4 flex min-h-0 relative">
+			<div className="flex-1 p-3 gap-2 flex min-h-0 relative">
 				{/* Left Column - Video & Timeline */}
-				<div className="flex-[7] flex flex-col gap-3 min-w-0 h-full">
-					<PanelGroup direction="vertical" className="gap-3">
+				<div className="flex-1 flex flex-col min-w-0 h-full">
+					<PanelGroup direction="vertical">
 						{/* Top section: video preview and controls */}
 						<Panel defaultSize={70} maxSize={70} minSize={40}>
 							<div
@@ -958,12 +933,10 @@ export default function VideoEditor() {
 							</div>
 						</Panel>
 
-						<PanelResizeHandle className="bg-[#09090b]/80 hover:bg-[#09090b] transition-colors rounded-full flex items-center justify-center">
-							<div className="w-8 h-1 bg-white/20 rounded-full"></div>
-						</PanelResizeHandle>
+						<PanelResizeHandle className="h-[3px] cursor-row-resize hover:bg-white/10 transition-colors" />
 
 						{/* Timeline section */}
-						<Panel defaultSize={30} maxSize={60} minSize={30}>
+						<Panel defaultSize={30} maxSize={70} minSize={15}>
 							<div className="h-full bg-[#09090b] rounded-2xl border border-white/5 shadow-lg overflow-hidden flex flex-col">
 								<TimelineEditor
 									videoDuration={duration}
@@ -991,7 +964,15 @@ export default function VideoEditor() {
 				</div>
 
 				{/* Right section: settings panel */}
-				<div className="flex-[3] min-w-[280px] max-w-[420px] h-full">
+				<div
+					className="h-full flex-shrink-0 overflow-hidden relative"
+					style={{ width: sidebarWidth }}
+				>
+					{/* Edge resize zone */}
+					<div
+						className="absolute left-0 top-0 bottom-0 w-[4px] cursor-col-resize z-10 hover:bg-white/10 transition-colors"
+						onMouseDown={handleSidebarResizeStart}
+					/>
 					<SettingsPanel
 						videoElement={videoPlaybackRef.current?.video || null}
 						exportQuality={exportQuality}
@@ -1023,6 +1004,7 @@ export default function VideoEditor() {
 						hasCursorTelemetry={cursorTelemetry.length > 0}
 						videoDuration={duration}
 						hasWebcam={Boolean(webcamVideoPath)}
+						onNewRecording={() => setShowNewRecordingDialog(true)}
 					/>
 				</div>
 			</div>

@@ -1,4 +1,4 @@
-import { Bug, Download, Film, Image, Lock, Star, Trash2, Unlock, X } from "lucide-react";
+import { Bug, Download, Film, Image, Lock, Star, Trash2, Unlock, Video, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,8 @@ import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@
 import { GIF_FRAME_RATES, GIF_SIZE_PRESETS } from "@/lib/exporter";
 import { getAPI } from "@/lib/tauriBridge";
 import { cn } from "@/lib/utils";
-import { useEditorStore } from "@/stores/useEditorStore";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
+import { useEditorStore } from "@/stores/useEditorStore";
 import { getTestId } from "@/utils/getTestId";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { CropControl } from "./CropControl";
@@ -44,6 +44,7 @@ interface SettingsPanelProps {
 	hasCursorTelemetry?: boolean;
 	videoDuration?: number;
 	hasWebcam?: boolean;
+	onNewRecording?: () => void;
 }
 
 export function SettingsPanel({
@@ -65,6 +66,7 @@ export function SettingsPanel({
 	hasCursorTelemetry = false,
 	videoDuration = 0,
 	hasWebcam = false,
+	onNewRecording,
 }: SettingsPanelProps) {
 	const t = useScopedT("settings");
 
@@ -210,10 +212,7 @@ export function SettingsPanel({
 	return (
 		<div className="flex-[2] min-w-0 bg-[#09090b] border border-white/5 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-0">
-				<ZoomSection
-					hasCursorTelemetry={hasCursorTelemetry}
-					videoDuration={videoDuration}
-				/>
+				<ZoomSection hasCursorTelemetry={hasCursorTelemetry} videoDuration={videoDuration} />
 
 				{trimEnabled && (
 					<div className="mb-4">
@@ -246,22 +245,16 @@ export function SettingsPanel({
 					</div>
 				)}
 
-				<SpeedSection
-					videoDuration={videoDuration}
-				/>
+				<SpeedSection videoDuration={videoDuration} />
 
 				<Accordion
 					type="multiple"
 					defaultValue={hasWebcam ? ["layout", "effects", "background"] : ["effects", "background"]}
 					className="space-y-1"
 				>
-					{hasWebcam && (
-						<WebcamSection />
-					)}
+					{hasWebcam && <WebcamSection />}
 
-					<EffectsSection
-						onCropToggle={handleCropToggle}
-					/>
+					<EffectsSection onCropToggle={handleCropToggle} />
 
 					<BackgroundSection />
 				</Accordion>
@@ -533,6 +526,16 @@ export function SettingsPanel({
 				</Button>
 
 				<div className="flex gap-2 mt-3">
+					{onNewRecording && (
+						<button
+							type="button"
+							onClick={onNewRecording}
+							className="flex-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
+						>
+							<Video className="w-3 h-3 text-[#34B27B]" />
+							New Recording
+						</button>
+					)}
 					<button
 						type="button"
 						onClick={() => {

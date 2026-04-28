@@ -30,6 +30,10 @@ export const UserPreferencesSchema = z.object({
 	defaultSpeedDurationMs: z.number().min(500).catch(5000).default(5000),
 	trimPlayFromStartOffsetMs: z.number().min(500).catch(5000).default(5000),
 	trimLoopPaddingMs: z.number().min(500).catch(3000).default(3000),
+	showTrimHelp: z.boolean().catch(true).default(true),
+	showScrollHelp: z.boolean().catch(true).default(true),
+	sidebarWidth: z.number().min(200).max(500).catch(350).default(350),
+	followPlayhead: z.boolean().catch(false).default(false),
 });
 
 export type UserPreferences = z.infer<typeof UserPreferencesSchema>;

@@ -20,7 +20,10 @@
 		"addAnnotation": "Ajouter une annotation",
 		"addKeyframe": "Ajouter une image-clé",
 		"deleteSelected": "Supprimer la sélection",
-		"playPause": "Lecture / Pause"
+		"playPause": "Lecture / Pause",
+		"goToNow": "Go to Playhead",
+		"followPlayhead": "Follow Playhead",
+		"goToTrimStart": "Go to Trim Start"
 	},
 	"fixedActions": {
 		"undo": "Annuler",
