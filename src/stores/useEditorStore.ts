@@ -1,16 +1,15 @@
 import type { Span } from "dnd-timeline";
 import { z } from "zod";
+import { temporal } from "zundo";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { temporal } from "zundo";
-import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	type AnnotationRegion,
 	type AnnotationType,
 	type ChapterMarker,
 	type CropRegion,
+	clampFocusToDepth,
 	DEFAULT_ANNOTATION_POSITION,
-	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
 	DEFAULT_CROP_REGION,
 	DEFAULT_FIGURE_DATA,
@@ -32,8 +31,9 @@ import {
 	type ZoomFocus,
 	type ZoomFocusMode,
 	type ZoomRegion,
-	clampFocusToDepth,
 } from "@/components/video-editor/types";
+import type { AspectRatio } from "@/utils/aspectRatioUtils";
+import { useEditorPreferencesStore } from "./useEditorPreferencesStore";
 import { useEditorSelectionStore } from "./useEditorSelectionStore";
 
 // ── EditorState (Zod schema = single source of truth) ───────────────
@@ -190,7 +190,13 @@ export const useEditorStore = create<EditorStore>()(
 				const id = `zoom-${get()._nextIds.zoom}`;
 				set((s) => {
 					s._nextIds.zoom++;
-					s.zoomRegions.push({ id, startMs: Math.round(span.start), endMs: Math.round(span.end), depth: DEFAULT_ZOOM_DEPTH, focus: { cx: 0.5, cy: 0.5 } });
+					s.zoomRegions.push({
+						id,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+						depth: DEFAULT_ZOOM_DEPTH,
+						focus: { cx: 0.5, cy: 0.5 },
+					});
 				});
 				return id;
 			},
@@ -198,49 +204,84 @@ export const useEditorStore = create<EditorStore>()(
 				const id = `zoom-${get()._nextIds.zoom}`;
 				set((s) => {
 					s._nextIds.zoom++;
-					s.zoomRegions.push({ id, startMs: Math.round(span.start), endMs: Math.round(span.end), depth: DEFAULT_ZOOM_DEPTH, focus: clampFocusToDepth(focus, DEFAULT_ZOOM_DEPTH) });
+					s.zoomRegions.push({
+						id,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+						depth: DEFAULT_ZOOM_DEPTH,
+						focus: clampFocusToDepth(focus, DEFAULT_ZOOM_DEPTH),
+					});
 				});
 				return id;
 			},
-			addAndSelectZoom: (span) => { sel().selectZoom(get().addZoom(span)); },
-			addAndSelectZoomSuggested: (span, focus) => { sel().selectZoom(get().addZoomSuggested(span, focus)); },
+			addAndSelectZoom: (span) => {
+				sel().selectZoom(get().addZoom(span));
+			},
+			addAndSelectZoomSuggested: (span, focus) => {
+				sel().selectZoom(get().addZoomSuggested(span, focus));
+			},
 			setZoomSpan: (id, span) => set({ zoomRegions: setSpan(get().zoomRegions, id, span) }),
-			setZoomFocus: (id, focus) => set((s) => {
-				const r = s.zoomRegions.find((z) => z.id === id);
-				if (r) r.focus = clampFocusToDepth(focus, r.depth);
-			}),
-			setZoomDepth: (id, depth) => set((s) => {
-				const r = s.zoomRegions.find((z) => z.id === id);
-				if (r) { r.depth = depth; r.customScale = undefined; r.focus = clampFocusToDepth(r.focus, depth); }
-			}),
-			setZoomFocusMode: (id, mode) => set((s) => {
-				const r = s.zoomRegions.find((z) => z.id === id);
-				if (r) r.focusMode = mode;
-			}),
-			setZoomCustomScale: (id, customScale) => set((s) => {
-				const r = s.zoomRegions.find((z) => z.id === id);
-				if (r) r.customScale = customScale;
-			}),
-			duplicateZoom: (id) => set((s) => {
-				const src = s.zoomRegions.find((z) => z.id === id);
-				if (!src) return;
-				const dur = src.endMs - src.startMs;
-				s.zoomRegions.push({ ...src, id: `zoom-${s._nextIds.zoom++}`, startMs: src.endMs, endMs: src.endMs + dur });
-			}),
-			deleteZoom: (id) => { set((s) => { s.zoomRegions = s.zoomRegions.filter((r) => r.id !== id); }); clearSelectionIf("Zoom", id); },
+			setZoomFocus: (id, focus) =>
+				set((s) => {
+					const r = s.zoomRegions.find((z) => z.id === id);
+					if (r) r.focus = clampFocusToDepth(focus, r.depth);
+				}),
+			setZoomDepth: (id, depth) =>
+				set((s) => {
+					const r = s.zoomRegions.find((z) => z.id === id);
+					if (r) {
+						r.depth = depth;
+						r.customScale = undefined;
+						r.focus = clampFocusToDepth(r.focus, depth);
+					}
+				}),
+			setZoomFocusMode: (id, mode) =>
+				set((s) => {
+					const r = s.zoomRegions.find((z) => z.id === id);
+					if (r) r.focusMode = mode;
+				}),
+			setZoomCustomScale: (id, customScale) =>
+				set((s) => {
+					const r = s.zoomRegions.find((z) => z.id === id);
+					if (r) r.customScale = customScale;
+				}),
+			duplicateZoom: (id) =>
+				set((s) => {
+					const src = s.zoomRegions.find((z) => z.id === id);
+					if (!src) return;
+					const dur = src.endMs - src.startMs;
+					s.zoomRegions.push({
+						...src,
+						id: `zoom-${s._nextIds.zoom++}`,
+						startMs: src.endMs,
+						endMs: src.endMs + dur,
+					});
+				}),
+			deleteZoom: (id) => {
+				set((s) => {
+					s.zoomRegions = s.zoomRegions.filter((r) => r.id !== id);
+				});
+				clearSelectionIf("Zoom", id);
+			},
 
 			// ── Trim ──────────────────────────────────────────
 			addTrim: (span) => {
 				const id = `trim-${get()._nextIds.trim}`;
-				set((s) => { s._nextIds.trim++; s.trimRegions.push({ id, startMs: Math.round(span.start), endMs: Math.round(span.end) }); });
+				set((s) => {
+					s._nextIds.trim++;
+					s.trimRegions.push({ id, startMs: Math.round(span.start), endMs: Math.round(span.end) });
+				});
 				return id;
 			},
-			addAndSelectTrim: (span) => { sel().selectTrim(get().addTrim(span)); },
+			addAndSelectTrim: (span) => {
+				sel().selectTrim(get().addTrim(span));
+			},
 			setTrimSpan: (id, span) => set({ trimRegions: setSpan(get().trimRegions, id, span) }),
-			setTrimField: (id, updater) => set((s) => {
-				const r = s.trimRegions.find((t) => t.id === id);
-				if (r) Object.assign(r, updater(r));
-			}),
+			setTrimField: (id, updater) =>
+				set((s) => {
+					const r = s.trimRegions.find((t) => t.id === id);
+					if (r) Object.assign(r, updater(r));
+				}),
 			setTrimStartToNow: (id, nowMs) => {
 				const r = get().trimRegions.find((t) => t.id === id);
 				if (r && nowMs < r.endMs) get().setTrimSpan(id, { start: nowMs, end: r.endMs });
@@ -253,94 +294,196 @@ export const useEditorStore = create<EditorStore>()(
 				const { trimRegions: regions } = get();
 				const target = regions.find((r) => r.id === id);
 				if (!target) return;
-				const adj = [...regions].filter((r) => r.id !== id && r.endMs <= target.startMs).sort((a, b) => b.endMs - a.endMs)[0];
+				const adj = [...regions]
+					.filter((r) => r.id !== id && r.endMs <= target.startMs)
+					.sort((a, b) => b.endMs - a.endMs)[0];
 				if (adj) get().setTrimSpan(id, { start: adj.endMs, end: target.endMs });
 			},
 			setTrimEndFromAdjacent: (id) => {
 				const { trimRegions: regions } = get();
 				const target = regions.find((r) => r.id === id);
 				if (!target) return;
-				const adj = [...regions].filter((r) => r.id !== id && r.startMs >= target.endMs).sort((a, b) => a.startMs - b.startMs)[0];
+				const adj = [...regions]
+					.filter((r) => r.id !== id && r.startMs >= target.endMs)
+					.sort((a, b) => a.startMs - b.startMs)[0];
 				if (adj) get().setTrimSpan(id, { start: target.startMs, end: adj.startMs });
 			},
-			duplicateTrim: (id) => set((s) => {
-				const src = s.trimRegions.find((t) => t.id === id);
-				if (!src) return;
-				const dur = src.endMs - src.startMs;
-				s.trimRegions.push({ id: `trim-${s._nextIds.trim++}`, startMs: src.endMs, endMs: src.endMs + dur });
-			}),
-			deleteTrim: (id) => { set((s) => { s.trimRegions = s.trimRegions.filter((r) => r.id !== id); }); clearSelectionIf("Trim", id); },
+			duplicateTrim: (id) =>
+				set((s) => {
+					const src = s.trimRegions.find((t) => t.id === id);
+					if (!src) return;
+					const dur = src.endMs - src.startMs;
+					s.trimRegions.push({
+						id: `trim-${s._nextIds.trim++}`,
+						startMs: src.endMs,
+						endMs: src.endMs + dur,
+					});
+				}),
+			deleteTrim: (id) => {
+				set((s) => {
+					s.trimRegions = s.trimRegions.filter((r) => r.id !== id);
+				});
+				clearSelectionIf("Trim", id);
+			},
 
 			// ── Speed ──────────────────────────────────────────
 			addSpeed: (span) => {
 				const id = `speed-${get()._nextIds.speed}`;
-				set((s) => { s._nextIds.speed++; s.speedRegions.push({ id, startMs: Math.round(span.start), endMs: Math.round(span.end), speed: DEFAULT_PLAYBACK_SPEED }); });
-				return id;
-			},
-			addAndSelectSpeed: (span) => { sel().selectSpeed(get().addSpeed(span)); },
-			setSpeedSpan: (id, span) => set({ speedRegions: setSpan(get().speedRegions, id, span) }),
-			setSpeed: (id, speed) => set((s) => { const r = s.speedRegions.find((sp) => sp.id === id); if (r) r.speed = speed; }),
-			duplicateSpeed: (id) => set((s) => {
-				const src = s.speedRegions.find((sp) => sp.id === id);
-				if (!src) return;
-				const dur = src.endMs - src.startMs;
-				s.speedRegions.push({ ...src, id: `speed-${s._nextIds.speed++}`, startMs: src.endMs, endMs: src.endMs + dur });
-			}),
-			deleteSpeed: (id) => { set((s) => { s.speedRegions = s.speedRegions.filter((r) => r.id !== id); }); clearSelectionIf("Speed", id); },
-
-			// ── Annotation ──────────────────────────────────────
-			addAnnotation: (span) => {
-				const id = `annotation-${get()._nextIds.annotation}`;
 				set((s) => {
-					s._nextIds.annotation++;
-					const zIndex = s._nextAnnotationZIndex++;
-					s.annotationRegions.push({
-						id, startMs: Math.round(span.start), endMs: Math.round(span.end),
-						type: "text", content: "Enter text...",
-						position: { ...DEFAULT_ANNOTATION_POSITION }, size: { ...DEFAULT_ANNOTATION_SIZE },
-						style: { ...DEFAULT_ANNOTATION_STYLE }, zIndex,
+					s._nextIds.speed++;
+					s.speedRegions.push({
+						id,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+						speed: DEFAULT_PLAYBACK_SPEED,
 					});
 				});
 				return id;
 			},
-			addAndSelectAnnotation: (span) => { sel().selectAnnotation(get().addAnnotation(span)); },
-			setAnnotationSpan: (id, span) => set({ annotationRegions: setSpan(get().annotationRegions, id, span) }),
-			setAnnotationContent: (id, content) => set((s) => {
-				const r = s.annotationRegions.find((a) => a.id === id);
-				if (!r) return;
-				if (r.type === "text") { r.content = content; r.textContent = content; }
-				else if (r.type === "image") { r.content = content; r.imageContent = content; }
-				else r.content = content;
-			}),
-			setAnnotationType: (id, type) => set((s) => {
-				const r = s.annotationRegions.find((a) => a.id === id);
-				if (!r) return;
-				r.type = type;
-				if (type === "text") r.content = r.textContent || "Enter text...";
-				else if (type === "image") r.content = r.imageContent || "";
-				else if (type === "figure") { r.content = ""; if (!r.figureData) r.figureData = { ...DEFAULT_FIGURE_DATA }; }
-			}),
-			setAnnotationStyle: (id, style) => set((s) => { const r = s.annotationRegions.find((a) => a.id === id); if (r) Object.assign(r.style, style); }),
-			setAnnotationFigureData: (id, figureData) => set((s) => { const r = s.annotationRegions.find((a) => a.id === id); if (r) r.figureData = figureData; }),
-			setAnnotationPosition: (id, position) => set((s) => { const r = s.annotationRegions.find((a) => a.id === id); if (r) r.position = position; }),
-			setAnnotationSize: (id, size) => set((s) => { const r = s.annotationRegions.find((a) => a.id === id); if (r) r.size = size; }),
-			duplicateAnnotation: (id) => set((s) => {
-				const src = s.annotationRegions.find((a) => a.id === id);
-				if (!src) return;
-				const dur = src.endMs - src.startMs;
-				s.annotationRegions.push({ ...src, id: `annotation-${s._nextIds.annotation++}`, zIndex: s._nextAnnotationZIndex++, startMs: src.endMs, endMs: src.endMs + dur });
-			}),
-			deleteAnnotation: (id) => { set((s) => { s.annotationRegions = s.annotationRegions.filter((r) => r.id !== id); }); clearSelectionIf("Annotation", id); },
+			addAndSelectSpeed: (span) => {
+				sel().selectSpeed(get().addSpeed(span));
+			},
+			setSpeedSpan: (id, span) => set({ speedRegions: setSpan(get().speedRegions, id, span) }),
+			setSpeed: (id, speed) =>
+				set((s) => {
+					const r = s.speedRegions.find((sp) => sp.id === id);
+					if (r) r.speed = speed;
+				}),
+			duplicateSpeed: (id) =>
+				set((s) => {
+					const src = s.speedRegions.find((sp) => sp.id === id);
+					if (!src) return;
+					const dur = src.endMs - src.startMs;
+					s.speedRegions.push({
+						...src,
+						id: `speed-${s._nextIds.speed++}`,
+						startMs: src.endMs,
+						endMs: src.endMs + dur,
+					});
+				}),
+			deleteSpeed: (id) => {
+				set((s) => {
+					s.speedRegions = s.speedRegions.filter((r) => r.id !== id);
+				});
+				clearSelectionIf("Speed", id);
+			},
+
+			// ── Annotation ──────────────────────────────────────
+			addAnnotation: (span) => {
+				const id = `annotation-${get()._nextIds.annotation}`;
+				const prefs = useEditorPreferencesStore.getState();
+				set((s) => {
+					s._nextIds.annotation++;
+					const zIndex = s._nextAnnotationZIndex++;
+					s.annotationRegions.push({
+						id,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+						type: "text",
+						content: "Enter text...",
+						position: { ...DEFAULT_ANNOTATION_POSITION },
+						size: { width: prefs.defaultAnnotationWidth, height: prefs.defaultAnnotationHeight },
+						style: {
+							...DEFAULT_ANNOTATION_STYLE,
+							fontSize: prefs.defaultAnnotationFontSize,
+							color: prefs.defaultAnnotationColor,
+							backgroundColor: prefs.defaultAnnotationBgColor,
+						},
+						zIndex,
+					});
+				});
+				return id;
+			},
+			addAndSelectAnnotation: (span) => {
+				sel().selectAnnotation(get().addAnnotation(span));
+			},
+			setAnnotationSpan: (id, span) =>
+				set({ annotationRegions: setSpan(get().annotationRegions, id, span) }),
+			setAnnotationContent: (id, content) =>
+				set((s) => {
+					const r = s.annotationRegions.find((a) => a.id === id);
+					if (!r) return;
+					if (r.type === "text") {
+						r.content = content;
+						r.textContent = content;
+					} else if (r.type === "image") {
+						r.content = content;
+						r.imageContent = content;
+					} else r.content = content;
+				}),
+			setAnnotationType: (id, type) =>
+				set((s) => {
+					const r = s.annotationRegions.find((a) => a.id === id);
+					if (!r) return;
+					r.type = type;
+					if (type === "text") r.content = r.textContent || "Enter text...";
+					else if (type === "image") r.content = r.imageContent || "";
+					else if (type === "figure") {
+						r.content = "";
+						if (!r.figureData) r.figureData = { ...DEFAULT_FIGURE_DATA };
+					}
+				}),
+			setAnnotationStyle: (id, style) =>
+				set((s) => {
+					const r = s.annotationRegions.find((a) => a.id === id);
+					if (r) Object.assign(r.style, style);
+				}),
+			setAnnotationFigureData: (id, figureData) =>
+				set((s) => {
+					const r = s.annotationRegions.find((a) => a.id === id);
+					if (r) r.figureData = figureData;
+				}),
+			setAnnotationPosition: (id, position) =>
+				set((s) => {
+					const r = s.annotationRegions.find((a) => a.id === id);
+					if (r) r.position = position;
+				}),
+			setAnnotationSize: (id, size) =>
+				set((s) => {
+					const r = s.annotationRegions.find((a) => a.id === id);
+					if (r) r.size = size;
+				}),
+			duplicateAnnotation: (id) =>
+				set((s) => {
+					const src = s.annotationRegions.find((a) => a.id === id);
+					if (!src) return;
+					const dur = src.endMs - src.startMs;
+					s.annotationRegions.push({
+						...src,
+						id: `annotation-${s._nextIds.annotation++}`,
+						zIndex: s._nextAnnotationZIndex++,
+						startMs: src.endMs,
+						endMs: src.endMs + dur,
+					});
+				}),
+			deleteAnnotation: (id) => {
+				set((s) => {
+					s.annotationRegions = s.annotationRegions.filter((r) => r.id !== id);
+				});
+				clearSelectionIf("Annotation", id);
+			},
 
 			// ── Chapter ──────────────────────────────────────────
 			addChapter: (startMs, endMs) => {
 				const id = `chapter-${get()._nextIds.chapter}`;
-				set((s) => { s._nextIds.chapter++; s.chapters.push({ id, startMs, endMs, name: "" }); });
+				set((s) => {
+					s._nextIds.chapter++;
+					s.chapters.push({ id, startMs, endMs, name: "" });
+				});
 				return id;
 			},
-			renameChapter: (id, name) => set((s) => { const ch = s.chapters.find((c) => c.id === id); if (ch) ch.name = name; }),
+			renameChapter: (id, name) =>
+				set((s) => {
+					const ch = s.chapters.find((c) => c.id === id);
+					if (ch) ch.name = name;
+				}),
 			setChapterSpan: (id, span) => set({ chapters: setSpan(get().chapters, id, span) }),
-			deleteChapter: (id) => { set((s) => { s.chapters = s.chapters.filter((c) => c.id !== id); }); clearSelectionIf("Chapter", id); },
+			deleteChapter: (id) => {
+				set((s) => {
+					s.chapters = s.chapters.filter((c) => c.id !== id);
+				});
+				clearSelectionIf("Chapter", id);
+			},
 
 			// ── Visual settings ──────────────────────────────────
 			setWallpaper: (w) => set({ wallpaper: w }),
@@ -358,16 +501,33 @@ export const useEditorStore = create<EditorStore>()(
 
 			// ── Batch / project ──────────────────────────────────
 			loadState: (state) => set({ ...INITIAL_EDITOR_STATE, ...state }),
-			resetIdCounters: (state) => set({
-				_nextIds: {
-					zoom: deriveNextId("zoom", state.zoomRegions.map((r) => r.id)),
-					trim: deriveNextId("trim", state.trimRegions.map((r) => r.id)),
-					speed: deriveNextId("speed", state.speedRegions.map((r) => r.id)),
-					annotation: deriveNextId("annotation", state.annotationRegions.map((r) => r.id)),
-					chapter: deriveNextId("chapter", state.chapters.map((c) => c.id)),
-				},
-				_nextAnnotationZIndex: state.annotationRegions.reduce((max, r) => Math.max(max, r.zIndex), 0) + 1,
-			}),
+			resetIdCounters: (state) =>
+				set({
+					_nextIds: {
+						zoom: deriveNextId(
+							"zoom",
+							state.zoomRegions.map((r) => r.id),
+						),
+						trim: deriveNextId(
+							"trim",
+							state.trimRegions.map((r) => r.id),
+						),
+						speed: deriveNextId(
+							"speed",
+							state.speedRegions.map((r) => r.id),
+						),
+						annotation: deriveNextId(
+							"annotation",
+							state.annotationRegions.map((r) => r.id),
+						),
+						chapter: deriveNextId(
+							"chapter",
+							state.chapters.map((c) => c.id),
+						),
+					},
+					_nextAnnotationZIndex:
+						state.annotationRegions.reduce((max, r) => Math.max(max, r.zIndex), 0) + 1,
+				}),
 		})),
 		{
 			limit: 80,

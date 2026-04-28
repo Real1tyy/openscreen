@@ -85,30 +85,30 @@ describe("formatTimePlayback", () => {
 
 describe("formatMsCompact", () => {
 	it("formats sub-minute as Xs", () => {
-		expect(formatMsCompact(2300)).toBe("2.3s");
+		expect(formatMsCompact(2300)).toBe("2.30s");
 	});
 
 	it("formats zero", () => {
-		expect(formatMsCompact(0)).toBe("0.0s");
+		expect(formatMsCompact(0)).toBe("0.00s");
 	});
 
 	it("formats sub-second values", () => {
-		expect(formatMsCompact(500)).toBe("0.5s");
+		expect(formatMsCompact(500)).toBe("0.50s");
 	});
 
-	it("formats over a minute with M:SS.s", () => {
-		expect(formatMsCompact(62300)).toBe("1:02.3");
+	it("formats over a minute with M:SS.ss", () => {
+		expect(formatMsCompact(62300)).toBe("1:02.30");
 	});
 
-	it("pads seconds to 4 chars after minute", () => {
-		expect(formatMsCompact(61000)).toBe("1:01.0");
+	it("pads seconds to 5 chars after minute", () => {
+		expect(formatMsCompact(61000)).toBe("1:01.00");
 	});
 
 	it("formats exact minute boundary", () => {
-		expect(formatMsCompact(60000)).toBe("1:00.0");
+		expect(formatMsCompact(60000)).toBe("1:00.00");
 	});
 
 	it("handles large values", () => {
-		expect(formatMsCompact(600000)).toBe("10:00.0");
+		expect(formatMsCompact(600000)).toBe("10:00.00");
 	});
 });

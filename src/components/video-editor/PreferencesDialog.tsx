@@ -327,6 +327,14 @@ export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
 							/>
 						</div>
 						<div className="flex items-center justify-between gap-4">
+							<span className="text-[13px] text-slate-300 shrink-0">Show sidebar footer links</span>
+							<Switch
+								checked={prefs.showSidebarFooter}
+								onCheckedChange={(v) => update({ showSidebarFooter: v })}
+								className="data-[state=checked]:bg-[#34B27B] scale-75"
+							/>
+						</div>
+						<div className="flex items-center justify-between gap-4">
 							<span className="text-[13px] text-slate-300 shrink-0">Keyboard shortcuts</span>
 							<button
 								type="button"

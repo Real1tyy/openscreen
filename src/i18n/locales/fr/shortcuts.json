@@ -23,7 +23,8 @@
 		"playPause": "Lecture / Pause",
 		"goToNow": "Go to Playhead",
 		"followPlayhead": "Follow Playhead",
-		"goToTrimStart": "Go to Trim Start"
+		"goToTrimStart": "Go to Next Trim",
+		"goToPrevTrimStart": "Go to Previous Trim"
 	},
 	"fixedActions": {
 		"undo": "Annuler",

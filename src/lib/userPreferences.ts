@@ -29,11 +29,36 @@ export const UserPreferencesSchema = z.object({
 	defaultTrimDurationMs: z.number().min(500).catch(5000).default(5000),
 	defaultSpeedDurationMs: z.number().min(500).catch(5000).default(5000),
 	trimPlayFromStartOffsetMs: z.number().min(500).catch(5000).default(5000),
-	trimLoopPaddingMs: z.number().min(500).catch(3000).default(3000),
+	trimLoopPaddingMs: z.number().min(0).catch(3000).default(3000),
+	trimLoopBeforeMs: z.number().min(0).catch(500).default(500),
+	trimLoopAfterMs: z.number().min(0).catch(3000).default(3000),
+	defaultAnnotationDurationMs: z.number().min(500).catch(5000).default(5000),
+	defaultAnnotationWidth: z.number().min(5).max(100).catch(30).default(30),
+	defaultAnnotationHeight: z.number().min(5).max(100).catch(20).default(20),
+	defaultAnnotationFontSize: z.number().min(8).max(200).catch(32).default(32),
+	defaultAnnotationColor: z.string().catch("#ffffff").default("#ffffff"),
+	defaultAnnotationBgColor: z.string().catch("transparent").default("transparent"),
+	annotationPresets: z
+		.array(
+			z.object({
+				name: z.string(),
+				width: z.number(),
+				height: z.number(),
+				fontSize: z.number(),
+				color: z.string(),
+				backgroundColor: z.string(),
+				fontWeight: z.enum(["normal", "bold"]).catch("bold"),
+				fontStyle: z.enum(["normal", "italic"]).catch("normal"),
+				textAlign: z.enum(["left", "center", "right"]).catch("center"),
+			}),
+		)
+		.catch([])
+		.default([]),
 	showTrimHelp: z.boolean().catch(true).default(true),
 	showScrollHelp: z.boolean().catch(true).default(true),
 	sidebarWidth: z.number().min(200).max(500).catch(350).default(350),
 	followPlayhead: z.boolean().catch(false).default(false),
+	showSidebarFooter: z.boolean().catch(true).default(true),
 });
 
 export type UserPreferences = z.infer<typeof UserPreferencesSchema>;

@@ -9,6 +9,7 @@ export const SHORTCUT_ACTIONS = [
 	"goToNow",
 	"followPlayhead",
 	"goToTrimStart",
+	"goToPrevTrimStart",
 ] as const;
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
@@ -129,6 +130,7 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	goToNow: { key: "g" },
 	followPlayhead: { key: "l" },
 	goToTrimStart: { key: "i" },
+	goToPrevTrimStart: { key: "i", shift: true },
 };
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
@@ -141,7 +143,8 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	playPause: "Play / Pause",
 	goToNow: "Go to Playhead",
 	followPlayhead: "Follow Playhead",
-	goToTrimStart: "Go to Trim Start",
+	goToTrimStart: "Go to Next Trim",
+	goToPrevTrimStart: "Go to Previous Trim",
 };
 
 export function matchesShortcut(

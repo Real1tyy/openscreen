@@ -832,18 +832,18 @@ export default function VideoEditor() {
 				</DialogContent>
 			</Dialog>
 
-			<div className="flex-1 p-3 gap-2 flex min-h-0 relative">
+			<div className="flex-1 flex min-h-0 relative">
 				{/* Left Column - Video & Timeline */}
 				<div className="flex-1 flex flex-col min-w-0 h-full">
 					<PanelGroup direction="vertical">
 						{/* Top section: video preview and controls */}
-						<Panel defaultSize={70} maxSize={70} minSize={40}>
+						<Panel defaultSize={70} maxSize={95} minSize={15}>
 							<div
 								ref={playerContainerRef}
 								className={
 									isFullscreen
 										? "fixed inset-0 z-[99999] w-full h-full flex flex-col items-center justify-center bg-[#09090b]"
-										: "w-full h-full flex flex-col items-center justify-center bg-black/40 rounded-2xl border border-white/5 shadow-2xl overflow-hidden relative"
+										: "w-full h-full flex flex-col items-center justify-center bg-black/40 overflow-hidden relative"
 								}
 							>
 								{/* Quick-trim mark indicator */}
@@ -944,11 +944,11 @@ export default function VideoEditor() {
 							</div>
 						</Panel>
 
-						<PanelResizeHandle className="h-[3px] cursor-row-resize hover:bg-white/10 transition-colors" />
+						<PanelResizeHandle className="h-px cursor-row-resize hover:bg-white/10 transition-colors" />
 
 						{/* Timeline section */}
-						<Panel defaultSize={30} maxSize={70} minSize={15}>
-							<div className="h-full bg-[#09090b] rounded-2xl border border-white/5 shadow-lg overflow-hidden flex flex-col">
+						<Panel defaultSize={30} maxSize={85} minSize={5}>
+							<div className="h-full bg-[#09090b] overflow-hidden flex flex-col">
 								<TimelineEditor
 									videoDuration={duration}
 									currentTime={currentTime}

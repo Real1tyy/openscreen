@@ -22,8 +22,8 @@ export function formatTimePlayback(seconds: number): string {
 }
 
 /**
- * "1:02.3" or "2.3s" — millisecond input, one-decimal precision.
- * Shows "Xs" for sub-minute values, "M:SS.s" for longer values.
+ * "1:02.34" or "2.34s" — millisecond input, two-decimal precision.
+ * Shows "Xs" for sub-minute values, "M:SS.ss" for longer values.
  * Used for timeline items, trim badges, and playhead tooltips.
  */
 export function formatMsCompact(ms: number): string {
@@ -31,7 +31,7 @@ export function formatMsCompact(ms: number): string {
 	const minutes = Math.floor(totalSeconds / 60);
 	const seconds = totalSeconds % 60;
 	if (minutes > 0) {
-		return `${minutes}:${seconds.toFixed(1).padStart(4, "0")}`;
+		return `${minutes}:${seconds.toFixed(2).padStart(5, "0")}`;
 	}
-	return `${seconds.toFixed(1)}s`;
+	return `${seconds.toFixed(2)}s`;
 }
