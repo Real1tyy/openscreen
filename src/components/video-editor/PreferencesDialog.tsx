@@ -98,7 +98,10 @@ export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
 
 	return (
 		<Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-			<DialogContent className="bg-[#141414] border-white/10 text-white max-w-md">
+			<DialogContent
+				aria-describedby={undefined}
+				className="bg-[#141414] border-white/10 text-white max-w-md"
+			>
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2 text-slate-100">
 						<Settings className="w-4 h-4" />
@@ -171,6 +174,15 @@ export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
 							max={120}
 							step={0.5}
 						/>
+						<NumberField
+							label="Annotation"
+							value={prefs.defaultAnnotationDurationMs / 1000}
+							onChange={(v) => set("defaultAnnotationDurationMs", v * 1000)}
+							suffix="sec"
+							min={0.5}
+							max={120}
+							step={0.5}
+						/>
 					</Section>
 
 					<Section title="Trim playback">
@@ -184,14 +196,117 @@ export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
 							step={0.5}
 						/>
 						<NumberField
-							label="Loop padding"
-							value={prefs.trimLoopPaddingMs / 1000}
-							onChange={(v) => set("trimLoopPaddingMs", v * 1000)}
+							label="Loop before trim"
+							value={prefs.trimLoopBeforeMs / 1000}
+							onChange={(v) => set("trimLoopBeforeMs", v * 1000)}
 							suffix="sec"
-							min={0.5}
+							min={0}
 							max={30}
-							step={0.5}
+							step={0.1}
 						/>
+						<NumberField
+							label="Loop after trim"
+							value={prefs.trimLoopAfterMs / 1000}
+							onChange={(v) => set("trimLoopAfterMs", v * 1000)}
+							suffix="sec"
+							min={0}
+							max={30}
+							step={0.1}
+						/>
+					</Section>
+
+					<Section title="Annotation defaults">
+						<NumberField
+							label="Width"
+							value={prefs.defaultAnnotationWidth}
+							onChange={(v) => update({ defaultAnnotationWidth: v })}
+							suffix="%"
+							min={5}
+							max={100}
+						/>
+						<NumberField
+							label="Height"
+							value={prefs.defaultAnnotationHeight}
+							onChange={(v) => update({ defaultAnnotationHeight: v })}
+							suffix="%"
+							min={5}
+							max={100}
+						/>
+						<NumberField
+							label="Font size"
+							value={prefs.defaultAnnotationFontSize}
+							onChange={(v) => update({ defaultAnnotationFontSize: v })}
+							suffix="px"
+							min={8}
+							max={200}
+						/>
+						<div className="flex items-center justify-between gap-4">
+							<span className="text-[13px] text-slate-300 shrink-0">Text color</span>
+							<input
+								type="color"
+								value={prefs.defaultAnnotationColor}
+								onChange={(e) => update({ defaultAnnotationColor: e.target.value })}
+								className="w-8 h-6 rounded border border-white/10 bg-transparent cursor-pointer [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border-none"
+							/>
+						</div>
+						<div className="flex items-center justify-between gap-4">
+							<span className="text-[13px] text-slate-300 shrink-0">Background</span>
+							<div className="flex items-center gap-1.5">
+								<button
+									type="button"
+									onClick={() => update({ defaultAnnotationBgColor: "transparent" })}
+									className={`px-2 py-0.5 rounded text-[11px] border transition-colors ${prefs.defaultAnnotationBgColor === "transparent" ? "border-[#34B27B]/50 bg-[#34B27B]/10 text-[#34B27B]" : "border-white/10 bg-white/5 text-slate-400 hover:text-slate-200"}`}
+								>
+									None
+								</button>
+								<input
+									type="color"
+									value={
+										prefs.defaultAnnotationBgColor === "transparent"
+											? "#000000"
+											: prefs.defaultAnnotationBgColor
+									}
+									onChange={(e) => update({ defaultAnnotationBgColor: e.target.value })}
+									className="w-8 h-6 rounded border border-white/10 bg-transparent cursor-pointer [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded [&::-webkit-color-swatch]:border-none"
+								/>
+							</div>
+						</div>
+					</Section>
+
+					<Section title="Annotation presets">
+						{prefs.annotationPresets.length === 0 && (
+							<p className="text-[12px] text-slate-500">
+								No presets saved yet. Configure an annotation, then save it as a preset from the
+								annotation settings panel.
+							</p>
+						)}
+						{prefs.annotationPresets.map((preset, i) => (
+							<div key={preset.name} className="flex items-center justify-between gap-2">
+								<div className="flex items-center gap-2 min-w-0">
+									<div
+										className="w-4 h-4 rounded border border-white/10 flex-shrink-0"
+										style={{
+											backgroundColor:
+												preset.backgroundColor === "transparent"
+													? undefined
+													: preset.backgroundColor,
+											color: preset.color,
+										}}
+									/>
+									<span className="text-[12px] text-slate-300 truncate">{preset.name}</span>
+								</div>
+								<button
+									type="button"
+									onClick={() => {
+										const next = prefs.annotationPresets.filter((_, idx) => idx !== i);
+										update({ annotationPresets: next });
+									}}
+									className="text-[10px] text-red-400 hover:text-red-300 shrink-0"
+								>
+									Remove
+								</button>
+							</div>
+						))}
 					</Section>
 
 					<Section title="Interface">

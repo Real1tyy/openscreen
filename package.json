@@ -17,6 +17,7 @@
 		"dev:frontend": "vite",
 		"dev:tauri": "tauri dev",
 		"build": "tsc && vite build",
+		"build:frontend": "tsc && vite build",
 		"build:tauri": "tauri build",
 		"build:tauri:mac": "tauri build --target universal-apple-darwin",
 		"build:tauri:win": "tauri build --target x86_64-pc-windows-msvc",

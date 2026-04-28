@@ -4,10 +4,12 @@ import {
 	AlignLeft,
 	AlignRight,
 	Bold,
+	Bookmark,
 	ChevronDown,
 	Image as ImageIcon,
 	Info,
 	Italic,
+	Save,
 	Trash2,
 	Type,
 	Underline,
@@ -32,8 +34,9 @@ import { BRAND_GREEN } from "@/lib/constants/colors";
 import { type CustomFont, getCustomFonts } from "@/lib/customFonts";
 import { handleImageFileUpload } from "@/lib/imageHandling";
 import { cn } from "@/lib/utils";
-import { useEditorStore } from "@/stores/useEditorStore";
+import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
+import { useEditorStore } from "@/stores/useEditorStore";
 import { AddCustomFontDialog } from "./AddCustomFontDialog";
 import { getArrowComponent } from "./ArrowSvgs";
 import type { AnnotationType, ArrowDirection, FigureData } from "./types";
@@ -63,6 +66,9 @@ export function AnnotationSettingsPanel() {
 	const setAnnotationStyle = useEditorStore((s) => s.setAnnotationStyle);
 	const setAnnotationFigureData = useEditorStore((s) => s.setAnnotationFigureData);
 	const deleteAnnotation = useEditorStore((s) => s.deleteAnnotation);
+	const setAnnotationSize = useEditorStore((s) => s.setAnnotationSize);
+	const annotationPresets = useEditorPreferencesStore((s) => s.annotationPresets);
+	const updatePrefs = useEditorPreferencesStore((s) => s.update);
 
 	const annotation = selectedAnnotationId
 		? annotationRegions.find((a) => a.id === selectedAnnotationId)
@@ -599,6 +605,71 @@ export function AnnotationSettingsPanel() {
 						</div>
 					</TabsContent>
 				</Tabs>
+
+				{annotation && annotation.type === "text" && (
+					<div className="mt-4 space-y-2">
+						<div className="flex items-center justify-between">
+							<span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
+								Presets
+							</span>
+							<button
+								type="button"
+								onClick={() => {
+									const name = prompt("Preset name:");
+									if (!name?.trim()) return;
+									const preset = {
+										name: name.trim(),
+										width: annotation.size.width,
+										height: annotation.size.height,
+										fontSize: annotation.style.fontSize,
+										color: annotation.style.color,
+										backgroundColor: annotation.style.backgroundColor,
+										fontWeight: annotation.style.fontWeight,
+										fontStyle: annotation.style.fontStyle,
+										textAlign: annotation.style.textAlign,
+									};
+									updatePrefs({ annotationPresets: [...annotationPresets, preset] });
+									toast.success(`Preset "${name.trim()}" saved`);
+								}}
+								className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-[#34B27B] transition-colors"
+							>
+								<Save className="w-3 h-3" />
+								Save current
+							</button>
+						</div>
+						{annotationPresets.length > 0 && (
+							<div className="flex flex-wrap gap-1">
+								{annotationPresets.map((preset) => (
+									<button
+										key={preset.name}
+										type="button"
+										onClick={() => {
+											if (!selectedAnnotationId) return;
+											setAnnotationSize(selectedAnnotationId, {
+												width: preset.width,
+												height: preset.height,
+											});
+											onStyleChange({
+												fontSize: preset.fontSize,
+												color: preset.color,
+												backgroundColor: preset.backgroundColor,
+												fontWeight: preset.fontWeight,
+												fontStyle: preset.fontStyle,
+												textAlign: preset.textAlign,
+											});
+											toast.success(`Applied preset "${preset.name}"`);
+										}}
+										className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+										title={`Apply preset: ${preset.fontSize}px, ${preset.width}×${preset.height}%`}
+									>
+										<Bookmark className="w-3 h-3 text-[#34B27B]" />
+										{preset.name}
+									</button>
+								))}
+							</div>
+						)}
+					</div>
+				)}
 
 				<Button
 					onClick={onDelete}

@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
-import { useEditorStore } from "@/stores/useEditorStore";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
+import { useEditorStore } from "@/stores/useEditorStore";
 import { KeyboardShortcutsHelp } from "../KeyboardShortcutsHelp";
 import type { ZoomDepth } from "../types";
 import { getZoomScale, MAX_ZOOM_SCALE, ZOOM_DEPTH_SCALES } from "../types";
@@ -14,6 +14,7 @@ import { RegionSection } from "./RegionSection";
 interface ZoomSectionProps {
 	hasCursorTelemetry?: boolean;
 	videoDuration?: number;
+	currentTimeMs?: number;
 }
 
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
@@ -91,6 +92,7 @@ function CustomZoomInput({
 export function ZoomSection({
 	hasCursorTelemetry = false,
 	videoDuration = 0,
+	currentTimeMs,
 }: ZoomSectionProps) {
 	const t = useScopedT("settings");
 
@@ -208,6 +210,7 @@ export function ZoomSection({
 						region={selectedZoomRegion}
 						videoDurationMs={durationMs}
 						onSpanChange={setZoomSpan}
+						currentTimeMs={currentTimeMs}
 					/>
 				</div>
 			)}

@@ -11,7 +11,8 @@ export function useTrimPlayback(
 	const trimRegions = useEditorStore((s) => s.trimRegions);
 	const addAndSelectTrim = useEditorStore((s) => s.addAndSelectTrim);
 	const trimPlayFromStartOffsetMs = useEditorPreferencesStore((s) => s.trimPlayFromStartOffsetMs);
-	const trimLoopPaddingMs = useEditorPreferencesStore((s) => s.trimLoopPaddingMs);
+	const trimLoopBeforeMs = useEditorPreferencesStore((s) => s.trimLoopBeforeMs);
+	const trimLoopAfterMs = useEditorPreferencesStore((s) => s.trimLoopAfterMs);
 
 	const [loopRegion, setLoopRegion] = useState<{ startMs: number; endMs: number } | null>(null);
 	const [loopingTrimId, setLoopingTrimId] = useState<string | null>(null);
@@ -68,14 +69,22 @@ export function useTrimPlayback(
 			if (!trim) return;
 			const totalMs = Math.round(durationRef.current * 1000);
 			const region = {
-				startMs: Math.max(0, trim.startMs - trimLoopPaddingMs),
-				endMs: Math.min(totalMs, trim.endMs + trimLoopPaddingMs),
+				startMs: Math.max(0, trim.startMs - trimLoopBeforeMs),
+				endMs: Math.min(totalMs, trim.endMs + trimLoopAfterMs),
 			};
 			setLoopRegion(region);
 			setLoopingTrimId(id);
 			seekAndPlay(region.startMs / 1000);
 		},
-		[loopingTrimId, trimRegions, clearLoop, seekAndPlay, durationRef, trimLoopPaddingMs],
+		[
+			loopingTrimId,
+			trimRegions,
+			clearLoop,
+			seekAndPlay,
+			durationRef,
+			trimLoopBeforeMs,
+			trimLoopAfterMs,
+		],
 	);
 
 	// Quick-trim

@@ -191,7 +191,7 @@ export default function TimelineWrapper({
 		const s = ms / 1000;
 		const min = Math.floor(s / 60);
 		const sec = s % 60;
-		return min > 0 ? `${min}:${sec.toFixed(1).padStart(4, "0")}` : `${sec.toFixed(1)}s`;
+		return min > 0 ? `${min}:${sec.toFixed(2).padStart(5, "0")}` : `${sec.toFixed(2)}s`;
 	}, []);
 
 	const showTooltip = useCallback(

@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
@@ -39,6 +40,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { formatMsCompact } from "@/utils/timeUtils";
 import { ExportDialog } from "./ExportDialog";
+import { ExportSettingsDialog } from "./ExportSettingsDialog";
 import { useEditorKeyboard } from "./hooks/useEditorKeyboard";
 import { useExport } from "./hooks/useExport";
 import { useTrimPlayback } from "./hooks/useTrimPlayback";
@@ -178,6 +180,7 @@ export default function VideoEditor() {
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
 	const [isFullscreen, setIsFullscreen] = useState(false);
 	const [showPreferences, setShowPreferences] = useState(false);
+	const [showExportSettings, setShowExportSettings] = useState(false);
 	const [sidebarWidth, setSidebarWidth] = useState(
 		() => useEditorPreferencesStore.getState().sidebarWidth,
 	);
@@ -913,8 +916,8 @@ export default function VideoEditor() {
 									</div>
 								</div>
 								{/* Playback controls */}
-								<div className="w-full flex justify-center items-center h-12 flex-shrink-0 px-3 py-1.5 my-1.5">
-									<div className="w-full max-w-[700px]">
+								<div className="w-full flex justify-center items-center h-12 flex-shrink-0 px-3 py-1.5 my-1.5 gap-2">
+									<div className="flex-1 max-w-[700px]">
 										<PlaybackControls
 											isPlaying={isPlaying}
 											currentTime={currentTime}
@@ -929,6 +932,14 @@ export default function VideoEditor() {
 											onStopLoop={clearLoop}
 										/>
 									</div>
+									<button
+										type="button"
+										onClick={() => setShowExportSettings(true)}
+										className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#34B27B] text-white text-xs font-semibold shadow-lg shadow-[#34B27B]/20 hover:bg-[#34B27B]/90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shrink-0"
+									>
+										<Download className="w-3.5 h-3.5" />
+										Export
+									</button>
 								</div>
 							</div>
 						</Panel>
@@ -975,34 +986,9 @@ export default function VideoEditor() {
 					/>
 					<SettingsPanel
 						videoElement={videoPlaybackRef.current?.video || null}
-						exportQuality={exportQuality}
-						onExportQualityChange={setExportQuality}
-						exportFormat={exportFormat}
-						onExportFormatChange={setExportFormat}
-						gifFrameRate={gifFrameRate}
-						onGifFrameRateChange={setGifFrameRate}
-						gifLoop={gifLoop}
-						onGifLoopChange={setGifLoop}
-						gifSizePreset={gifSizePreset}
-						onGifSizePresetChange={setGifSizePreset}
-						gifOutputDimensions={calculateOutputDimensions(
-							videoPlaybackRef.current?.video?.videoWidth || 1920,
-							videoPlaybackRef.current?.video?.videoHeight || 1080,
-							gifSizePreset,
-							GIF_SIZE_PRESETS,
-							aspectRatio === "native"
-								? getNativeAspectRatioValue(
-										videoPlaybackRef.current?.video?.videoWidth || 1920,
-										videoPlaybackRef.current?.video?.videoHeight || 1080,
-										cropRegion,
-									)
-								: getAspectRatioValue(aspectRatio),
-						)}
-						onExport={handleOpenExportDialog}
-						unsavedExport={unsavedExport}
-						onSaveUnsavedExport={handleSaveUnsavedExport}
 						hasCursorTelemetry={cursorTelemetry.length > 0}
 						videoDuration={duration}
+						currentTimeMs={Math.round(currentTime * 1000)}
 						hasWebcam={Boolean(webcamVideoPath)}
 						onNewRecording={() => setShowNewRecordingDialog(true)}
 					/>
@@ -1010,6 +996,37 @@ export default function VideoEditor() {
 			</div>
 
 			<PreferencesDialog isOpen={showPreferences} onClose={() => setShowPreferences(false)} />
+
+			<ExportSettingsDialog
+				isOpen={showExportSettings}
+				onClose={() => setShowExportSettings(false)}
+				exportFormat={exportFormat}
+				onExportFormatChange={setExportFormat}
+				exportQuality={exportQuality}
+				onExportQualityChange={setExportQuality}
+				gifFrameRate={gifFrameRate}
+				onGifFrameRateChange={setGifFrameRate}
+				gifLoop={gifLoop}
+				onGifLoopChange={setGifLoop}
+				gifSizePreset={gifSizePreset}
+				onGifSizePresetChange={setGifSizePreset}
+				gifOutputDimensions={calculateOutputDimensions(
+					videoPlaybackRef.current?.video?.videoWidth || 1920,
+					videoPlaybackRef.current?.video?.videoHeight || 1080,
+					gifSizePreset,
+					GIF_SIZE_PRESETS,
+					aspectRatio === "native"
+						? getNativeAspectRatioValue(
+								videoPlaybackRef.current?.video?.videoWidth || 1920,
+								videoPlaybackRef.current?.video?.videoHeight || 1080,
+								cropRegion,
+							)
+						: getAspectRatioValue(aspectRatio),
+				)}
+				onExport={handleOpenExportDialog}
+				unsavedExport={unsavedExport}
+				onSaveUnsavedExport={handleSaveUnsavedExport}
+			/>
 
 			<ExportDialog
 				isOpen={showExportDialog}

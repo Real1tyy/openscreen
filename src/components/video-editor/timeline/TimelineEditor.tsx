@@ -14,6 +14,7 @@ import {
 	Plus,
 	Repeat,
 	Scissors,
+	SkipBack,
 	SkipForward,
 	Trash2,
 	WandSparkles,
@@ -972,6 +973,9 @@ export default function TimelineEditor({
 	const defaultZoomDurationMs = useEditorPreferencesStore((s) => s.defaultZoomDurationMs);
 	const defaultTrimDurationMs = useEditorPreferencesStore((s) => s.defaultTrimDurationMs);
 	const defaultSpeedDurationMs = useEditorPreferencesStore((s) => s.defaultSpeedDurationMs);
+	const defaultAnnotationDurationMs = useEditorPreferencesStore(
+		(s) => s.defaultAnnotationDurationMs,
+	);
 	const followPlayhead = useEditorPreferencesStore((s) => s.followPlayhead);
 	const showTrimHelp = useEditorPreferencesStore((s) => s.showTrimHelp);
 	const showScrollHelp = useEditorPreferencesStore((s) => s.showScrollHelp);
@@ -1447,14 +1451,14 @@ export default function TimelineEditor({
 			return;
 		}
 
-		const dur = clampDuration(defaultZoomDurationMs);
+		const dur = clampDuration(defaultAnnotationDurationMs);
 		if (dur <= 0) return;
 
 		const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 		const endPos = Math.min(startPos + dur, totalMs);
 
 		store.addAndSelectAnnotation({ start: startPos, end: endPos });
-	}, [videoDuration, totalMs, currentTimeMs, store, defaultZoomDurationMs, clampDuration]);
+	}, [videoDuration, totalMs, currentTimeMs, store, defaultAnnotationDurationMs, clampDuration]);
 
 	const handleGoToNow = useCallback(() => {
 		const currentRange = rangeRef.current;
@@ -1508,6 +1512,16 @@ export default function TimelineEditor({
 		handleGoToNow();
 	}, [trimRegions, currentTimeMs, onSeek, handleGoToNow]);
 
+	const handleGoToPrevTrimStart = useCallback(() => {
+		if (trimRegions.length === 0 || !onSeek) return;
+		const sorted = [...trimRegions].sort((a, b) => b.startMs - a.startMs);
+		const nowMs = currentTimeMs;
+		const prev = sorted.find((t) => t.startMs < nowMs - 50);
+		const target = prev ?? sorted[0];
+		onSeek(target.startMs / 1000);
+		handleGoToNow();
+	}, [trimRegions, currentTimeMs, onSeek, handleGoToNow]);
+
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
@@ -1537,6 +1551,9 @@ export default function TimelineEditor({
 			}
 			if (matchesShortcut(e, keyShortcuts.goToTrimStart, isMac)) {
 				handleGoToTrimStart();
+			}
+			if (matchesShortcut(e, keyShortcuts.goToPrevTrimStart, isMac)) {
+				handleGoToPrevTrimStart();
 			}
 
 			// Tab: Cycle through overlapping annotations at current time
@@ -1592,6 +1609,7 @@ export default function TimelineEditor({
 		handleAddSpeed,
 		handleGoToNow,
 		handleGoToTrimStart,
+		handleGoToPrevTrimStart,
 		followPlayhead,
 		updatePrefs,
 		deleteSelectedKeyframe,
@@ -1796,11 +1814,20 @@ export default function TimelineEditor({
 					<Crosshair className="w-4 h-4" />
 				</Button>
 				<Button
+					onClick={handleGoToPrevTrimStart}
+					variant="ghost"
+					size="icon"
+					className="h-7 w-7 text-slate-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-all"
+					title="Go to previous trim (Shift+I)"
+				>
+					<SkipBack className="w-4 h-4" />
+				</Button>
+				<Button
 					onClick={handleGoToTrimStart}
 					variant="ghost"
 					size="icon"
 					className="h-7 w-7 text-slate-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-all"
-					title="Go to next trim start (I)"
+					title="Go to next trim (I)"
 				>
 					<SkipForward className="w-4 h-4" />
 				</Button>

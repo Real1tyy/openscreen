@@ -4,13 +4,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
-import { useEditorStore } from "@/stores/useEditorStore";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
+import { useEditorStore } from "@/stores/useEditorStore";
 import { MAX_PLAYBACK_SPEED, SPEED_OPTIONS } from "../types";
 import { RegionSection } from "./RegionSection";
 
 interface SpeedSectionProps {
 	videoDuration?: number;
+	currentTimeMs?: number;
 }
 
 function CustomSpeedInput({
@@ -74,9 +75,7 @@ function CustomSpeedInput({
 	);
 }
 
-export function SpeedSection({
-	videoDuration = 0,
-}: SpeedSectionProps) {
+export function SpeedSection({ videoDuration = 0, currentTimeMs }: SpeedSectionProps) {
 	const t = useScopedT("settings");
 
 	const selectedSpeedId = useEditorSelectionStore((s) => s.selectedSpeedId);
@@ -158,6 +157,7 @@ export function SpeedSection({
 						region={selectedSpeedRegion}
 						videoDurationMs={durationMs}
 						onSpanChange={setSpeedSpan}
+						currentTimeMs={currentTimeMs}
 					/>
 				</div>
 			)}

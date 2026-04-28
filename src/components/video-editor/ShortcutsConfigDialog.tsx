@@ -126,7 +126,10 @@ export function ShortcutsConfigDialog() {
 				if (!open) handleClose();
 			}}
 		>
-			<DialogContent className="bg-[#09090b] border-white/10 text-white max-w-[420px]">
+			<DialogContent
+				aria-describedby={undefined}
+				className="bg-[#09090b] border-white/10 text-white max-w-[420px]"
+			>
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2 text-sm">
 						<Keyboard className="w-4 h-4 text-[#34B27B]" />

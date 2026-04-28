@@ -6,9 +6,9 @@ export function formatMsForInput(ms: number): string {
 	const minutes = Math.floor(totalSeconds / 60);
 	const seconds = totalSeconds % 60;
 	if (minutes > 0) {
-		return `${minutes}:${seconds.toFixed(1).padStart(4, "0")}`;
+		return `${minutes}:${seconds.toFixed(2).padStart(5, "0")}`;
 	}
-	return seconds.toFixed(1);
+	return seconds.toFixed(2);
 }
 
 export function parseMsFromInput(input: string): number | null {
@@ -108,7 +108,7 @@ export function TimestampInput({
 					onChange={(e) => setDraft(e.target.value)}
 					onBlur={commit}
 					onKeyDown={handleKeyDown}
-					className="w-[72px] bg-white/5 border border-white/10 rounded-md px-2 py-0.5 text-[11px] font-mono text-slate-200 text-right focus:outline-none focus:ring-1 focus:ring-[#34B27B]/50 focus:border-[#34B27B]/30 disabled:opacity-40 disabled:cursor-not-allowed"
+					className="w-[80px] bg-white/5 border border-white/10 rounded-md px-2 py-0.5 text-[11px] font-mono text-slate-200 text-right focus:outline-none focus:ring-1 focus:ring-[#34B27B]/50 focus:border-[#34B27B]/30 disabled:opacity-40 disabled:cursor-not-allowed"
 				/>
 				<div className="flex flex-col gap-0">
 					<button

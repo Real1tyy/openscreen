@@ -1,42 +1,42 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { TimestampInput } from "./TimestampInput";
 
 describe("TimestampInput", () => {
 	describe("display formatting", () => {
 		it("displays formatted milliseconds when not focused", () => {
 			render(<TimestampInput label="Start" valueMs={5500} onChange={() => {}} />);
-			expect(screen.getByDisplayValue("5.5")).toBeTruthy();
+			expect(screen.getByDisplayValue("5.50")).toBeTruthy();
 		});
 
 		it("displays minutes:seconds for values >= 60s", () => {
 			render(<TimestampInput label="End" valueMs={90000} onChange={() => {}} />);
-			expect(screen.getByDisplayValue("1:30.0")).toBeTruthy();
+			expect(screen.getByDisplayValue("1:30.00")).toBeTruthy();
 		});
 
 		it("handles zero value", () => {
 			render(<TimestampInput label="Start" valueMs={0} onChange={() => {}} />);
-			expect(screen.getByDisplayValue("0.0")).toBeTruthy();
+			expect(screen.getByDisplayValue("0.00")).toBeTruthy();
 		});
 
 		it("formats sub-second values", () => {
 			render(<TimestampInput label="Start" valueMs={400} onChange={() => {}} />);
-			expect(screen.getByDisplayValue("0.4")).toBeTruthy();
+			expect(screen.getByDisplayValue("0.40")).toBeTruthy();
 		});
 
-		it("formats exact seconds without fractional part showing .0", () => {
+		it("formats exact seconds without fractional part showing .00", () => {
 			render(<TimestampInput label="Start" valueMs={3000} onChange={() => {}} />);
-			expect(screen.getByDisplayValue("3.0")).toBeTruthy();
+			expect(screen.getByDisplayValue("3.00")).toBeTruthy();
 		});
 
 		it("formats large values with minutes correctly", () => {
 			render(<TimestampInput label="End" valueMs={600000} onChange={() => {}} />);
-			expect(screen.getByDisplayValue("10:00.0")).toBeTruthy();
+			expect(screen.getByDisplayValue("10:00.00")).toBeTruthy();
 		});
 
 		it("formats 59.9 seconds without minutes prefix", () => {
 			render(<TimestampInput label="End" valueMs={59900} onChange={() => {}} />);
-			expect(screen.getByDisplayValue("59.9")).toBeTruthy();
+			expect(screen.getByDisplayValue("59.90")).toBeTruthy();
 		});
 
 		it("shows label text", () => {
@@ -182,7 +182,15 @@ describe("TimestampInput", () => {
 
 		it("accepts value within bounds", () => {
 			const onChange = vi.fn();
-			render(<TimestampInput label="Start" valueMs={5000} minMs={1000} maxMs={10000} onChange={onChange} />);
+			render(
+				<TimestampInput
+					label="Start"
+					valueMs={5000}
+					minMs={1000}
+					maxMs={10000}
+					onChange={onChange}
+				/>,
+			);
 			const input = screen.getByRole("textbox");
 
 			fireEvent.focus(input);
@@ -314,7 +322,7 @@ describe("TimestampInput", () => {
 
 			fireEvent.focus(input);
 
-			expect((input as HTMLInputElement).value).toBe("5.5");
+			expect((input as HTMLInputElement).value).toBe("5.50");
 		});
 
 		it("allows editing after focus", () => {
