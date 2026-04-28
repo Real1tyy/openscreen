@@ -10,6 +10,9 @@ export const SHORTCUT_ACTIONS = [
 	"followPlayhead",
 	"goToTrimStart",
 	"goToPrevTrimStart",
+	"addMarker",
+	"goToNextMarker",
+	"goToPrevMarker",
 ] as const;
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
@@ -131,6 +134,9 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	followPlayhead: { key: "l" },
 	goToTrimStart: { key: "i" },
 	goToPrevTrimStart: { key: "i", shift: true },
+	addMarker: { key: "m" },
+	goToNextMarker: { key: "m", shift: true },
+	goToPrevMarker: { key: "m", alt: true },
 };
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
@@ -145,6 +151,9 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 	followPlayhead: "Follow Playhead",
 	goToTrimStart: "Go to Next Trim",
 	goToPrevTrimStart: "Go to Previous Trim",
+	addMarker: "Add Marker",
+	goToNextMarker: "Go to Next Marker",
+	goToPrevMarker: "Go to Previous Marker",
 };
 
 export function matchesShortcut(

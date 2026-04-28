@@ -7,6 +7,7 @@ import {
 	Clock,
 	Copy,
 	Crosshair,
+	Flag,
 	Gauge,
 	LocateFixed,
 	MessageSquare,
@@ -42,7 +43,7 @@ import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/as
 import { formatShortcut } from "@/utils/platformUtils";
 import { formatMsCompact } from "@/utils/timeUtils";
 import { TutorialHelp } from "../TutorialHelp";
-import type { CursorTelemetryPoint, SpeedRegion, TrimRegion, ZoomRegion } from "../types";
+import type { CursorTelemetryPoint, Marker, SpeedRegion, TrimRegion, ZoomRegion } from "../types";
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import Row from "./Row";
@@ -632,6 +633,60 @@ function TrimMarkIndicator({
 	);
 }
 
+function MarkerIndicators({
+	markers,
+	videoDurationMs,
+	onSeek,
+	onDelete,
+}: {
+	markers: Marker[];
+	videoDurationMs: number;
+	onSeek?: (time: number) => void;
+	onDelete?: (id: string) => void;
+}) {
+	const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
+	const sideProperty = direction === "rtl" ? "right" : "left";
+
+	return (
+		<>
+			{markers
+				.filter((m) => videoDurationMs > 0 && m.timeMs >= range.start && m.timeMs <= range.end)
+				.map((m) => {
+					const offset = valueToPixels(m.timeMs - range.start);
+					return (
+						<div
+							key={m.id}
+							className="absolute top-0 bottom-0 z-40 cursor-pointer"
+							style={{
+								[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
+							}}
+							onClick={(e) => {
+								e.stopPropagation();
+								onSeek?.(m.timeMs / 1000);
+							}}
+							onContextMenu={(e) => {
+								e.preventDefault();
+								onDelete?.(m.id);
+							}}
+						>
+							<div
+								className="absolute top-0 bottom-0 w-[2px] bg-cyan-400/80 shadow-[0_0_8px_rgba(34,211,238,0.4)] hover:bg-cyan-300 transition-colors"
+								style={{ [sideProperty]: `${offset}px` }}
+							>
+								<div
+									className="absolute -top-1 left-1/2 -translate-x-1/2"
+									style={{ width: "12px", height: "12px" }}
+								>
+									<div className="w-2.5 h-2.5 mx-auto mt-[1px] bg-cyan-400 rotate-45 rounded-sm shadow-lg border border-white/20" />
+								</div>
+							</div>
+						</div>
+					);
+				})}
+		</>
+	);
+}
+
 function Timeline({
 	items,
 	videoDurationMs,
@@ -644,6 +699,8 @@ function Timeline({
 	onRegionContextMenu,
 	trimMarkStartMs,
 	loopingTrimId,
+	markers = [],
+	onDeleteMarker,
 }: {
 	items: TimelineRenderItem[];
 	videoDurationMs: number;
@@ -656,6 +713,8 @@ function Timeline({
 	onRegionContextMenu?: (type: RegionType, id: string, event: React.MouseEvent) => void;
 	trimMarkStartMs?: number | null;
 	loopingTrimId?: string | null;
+	markers?: Marker[];
+	onDeleteMarker?: (id: string) => void;
 }) {
 	const t = useScopedT("timeline");
 	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
@@ -885,6 +944,12 @@ function Timeline({
 				keyframes={keyframes}
 			/>
 			<TrimMarkIndicator timeMs={trimMarkStartMs ?? null} videoDurationMs={videoDurationMs} />
+			<MarkerIndicators
+				markers={markers}
+				videoDurationMs={videoDurationMs}
+				onSeek={onSeek}
+				onDelete={onDeleteMarker}
+			/>
 
 			{renderRow(
 				ZOOM_ROW_ID,
@@ -955,7 +1020,15 @@ export default function TimelineEditor({
 
 	// ── Read state & actions from stores ───────────────────────
 	const store = useEditorStore();
-	const { zoomRegions, trimRegions, speedRegions, annotationRegions, chapters } = store;
+	const {
+		zoomRegions,
+		trimRegions,
+		speedRegions,
+		annotationRegions,
+		chapters,
+		markers,
+		deleteMarker,
+	} = store;
 
 	const {
 		selectedZoomId,
@@ -1555,6 +1628,29 @@ export default function TimelineEditor({
 			if (matchesShortcut(e, keyShortcuts.goToPrevTrimStart, isMac)) {
 				handleGoToPrevTrimStart();
 			}
+			if (matchesShortcut(e, keyShortcuts.addMarker, isMac)) {
+				store.addMarker(currentTimeMs);
+			}
+			if (matchesShortcut(e, keyShortcuts.goToNextMarker, isMac)) {
+				if (markers.length > 0 && onSeek) {
+					const sorted = [...markers].sort((a, b) => a.timeMs - b.timeMs);
+					const next = sorted.find((m) => m.timeMs > currentTimeMs + 50);
+					if (next) {
+						onSeek(next.timeMs / 1000);
+						handleGoToNow();
+					}
+				}
+			}
+			if (matchesShortcut(e, keyShortcuts.goToPrevMarker, isMac)) {
+				if (markers.length > 0 && onSeek) {
+					const sorted = [...markers].sort((a, b) => b.timeMs - a.timeMs);
+					const prev = sorted.find((m) => m.timeMs < currentTimeMs - 50);
+					if (prev) {
+						onSeek(prev.timeMs / 1000);
+						handleGoToNow();
+					}
+				}
+			}
 
 			// Tab: Cycle through overlapping annotations at current time
 			if (e.key === "Tab" && annotationRegions.length > 0) {
@@ -1625,10 +1721,14 @@ export default function TimelineEditor({
 		selectedSpeedId,
 		selectedChapterId,
 		annotationRegions,
+		markers,
+		store,
 		currentTime,
 		onSelectAnnotation,
 		keyShortcuts,
 		isMac,
+		onSeek,
+		currentTimeMs,
 	]);
 
 	const clampedRange = useMemo<Range>(() => {
@@ -1845,6 +1945,15 @@ export default function TimelineEditor({
 				>
 					<LocateFixed className="w-4 h-4" />
 				</Button>
+				<Button
+					onClick={() => store.addMarker(currentTimeMs)}
+					variant="ghost"
+					size="icon"
+					className="h-7 w-7 text-slate-400 hover:text-cyan-400 hover:bg-cyan-400/10 transition-all"
+					title="Add marker (M)"
+				>
+					<Flag className="w-4 h-4" />
+				</Button>
 
 				<div className="flex items-center gap-2">
 					<DropdownMenu>
@@ -1931,6 +2040,8 @@ export default function TimelineEditor({
 						onRegionContextMenu={handleRegionContextMenu}
 						trimMarkStartMs={trimMarkStartMs}
 						loopingTrimId={loopingTrimId}
+						markers={markers}
+						onDeleteMarker={deleteMarker}
 					/>
 				</TimelineWrapper>
 			</div>

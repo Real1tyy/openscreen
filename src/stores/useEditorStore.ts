@@ -20,6 +20,7 @@ import {
 	DEFAULT_WEBCAM_SIZE_PRESET,
 	DEFAULT_ZOOM_DEPTH,
 	type FigureData,
+	type Marker,
 	type PlaybackSpeed,
 	type SpeedRegion,
 	type TrimRegion,
@@ -44,6 +45,7 @@ export const EditorStateSchema = z.object({
 	speedRegions: z.custom<SpeedRegion[]>().default([]),
 	annotationRegions: z.custom<AnnotationRegion[]>().default([]),
 	chapters: z.custom<ChapterMarker[]>().default([]),
+	markers: z.custom<Marker[]>().default([]),
 	cropRegion: z.custom<CropRegion>().default(DEFAULT_CROP_REGION),
 	wallpaper: z.string().default("/wallpapers/wallpaper1.jpg"),
 	shadowIntensity: z.number().default(0),
@@ -64,7 +66,14 @@ export const INITIAL_EDITOR_STATE: EditorState = EditorStateSchema.parse({});
 // ── Internal counters (excluded from undo history) ──────────────────
 
 interface InternalState {
-	_nextIds: { zoom: number; trim: number; speed: number; annotation: number; chapter: number };
+	_nextIds: {
+		zoom: number;
+		trim: number;
+		speed: number;
+		annotation: number;
+		chapter: number;
+		marker: number;
+	};
 	_nextAnnotationZIndex: number;
 }
 
@@ -122,6 +131,10 @@ interface EditorActions {
 	renameChapter: (id: string, name: string) => void;
 	setChapterSpan: (id: string, span: Span) => void;
 	deleteChapter: (id: string) => void;
+
+	// Marker
+	addMarker: (timeMs: number) => string;
+	deleteMarker: (id: string) => void;
 
 	// Visual settings
 	setWallpaper: (w: string) => void;
@@ -182,7 +195,7 @@ export const useEditorStore = create<EditorStore>()(
 	temporal(
 		immer((set, get) => ({
 			...INITIAL_EDITOR_STATE,
-			_nextIds: { zoom: 1, trim: 1, speed: 1, annotation: 1, chapter: 1 },
+			_nextIds: { zoom: 1, trim: 1, speed: 1, annotation: 1, chapter: 1, marker: 1 },
 			_nextAnnotationZIndex: 1,
 
 			// ── Zoom ──────────────────────────────────────────
@@ -485,6 +498,21 @@ export const useEditorStore = create<EditorStore>()(
 				clearSelectionIf("Chapter", id);
 			},
 
+			// ── Marker ──────────────────────────────────────────
+			addMarker: (timeMs) => {
+				const id = `marker-${get()._nextIds.marker}`;
+				set((s) => {
+					s._nextIds.marker++;
+					s.markers.push({ id, timeMs: Math.round(timeMs) });
+				});
+				return id;
+			},
+			deleteMarker: (id) => {
+				set((s) => {
+					s.markers = s.markers.filter((m) => m.id !== id);
+				});
+			},
+
 			// ── Visual settings ──────────────────────────────────
 			setWallpaper: (w) => set({ wallpaper: w }),
 			setShadowIntensity: (v) => set({ shadowIntensity: v }),
@@ -523,6 +551,10 @@ export const useEditorStore = create<EditorStore>()(
 						chapter: deriveNextId(
 							"chapter",
 							state.chapters.map((c) => c.id),
+						),
+						marker: deriveNextId(
+							"marker",
+							state.markers.map((m) => m.id),
 						),
 					},
 					_nextAnnotationZIndex:
