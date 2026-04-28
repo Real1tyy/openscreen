@@ -1,13 +1,5 @@
 /// <reference types="vite/client" />
 
-interface ProcessedDesktopSource {
-	id: string;
-	name: string;
-	display_id: string;
-	thumbnail: string | null;
-	appIcon: string | null;
-}
-
 interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
@@ -31,57 +23,13 @@ interface HeadlessExportConfig {
 
 interface Window {
 	electronAPI: {
-		getSources: (opts: {
-			types: string[];
-			thumbnailSize?: { width: number; height: number };
-			fetchWindowIcons?: boolean;
-		}) => Promise<ProcessedDesktopSource[]>;
-		switchToEditor: () => Promise<void>;
-		switchToHud: () => Promise<void>;
-		startNewRecording: () => Promise<{ success: boolean; error?: string }>;
-		openSourceSelector: () => Promise<void>;
-		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource | null>;
-		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
-		requestCameraAccess: () => Promise<{
-			success: boolean;
-			granted: boolean;
-			status: string;
-			error?: string;
-		}>;
-		storeRecordedVideo: (
-			videoData: ArrayBuffer,
-			fileName: string,
-		) => Promise<{
-			success: boolean;
-			path?: string;
-			session?: import("./lib/recordingSession").RecordingSession;
-			message?: string;
-			error?: string;
-		}>;
-		storeRecordedSession: (
-			payload: import("./lib/recordingSession").StoreRecordedSessionInput,
-		) => Promise<{
-			success: boolean;
-			path?: string;
-			session?: import("./lib/recordingSession").RecordingSession;
-			message?: string;
-			error?: string;
-		}>;
-		getRecordedVideoPath: () => Promise<{
-			success: boolean;
-			path?: string;
-			message?: string;
-			error?: string;
-		}>;
 		getAssetBasePath: () => Promise<string | null>;
-		setRecordingState: (recording: boolean) => Promise<void>;
 		getCursorTelemetry: (videoPath?: string) => Promise<{
 			success: boolean;
 			samples: CursorTelemetryPoint[];
 			message?: string;
 			error?: string;
 		}>;
-		onStopRecordingFromTray: (callback: () => void) => () => void;
 		openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>;
 		saveExportedVideo: (
 			videoData: ArrayBuffer,
@@ -94,18 +42,15 @@ interface Window {
 		}>;
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
-		setCurrentRecordingSession: (
-			session: import("./lib/recordingSession").RecordingSession | null,
-		) => Promise<{
-			success: boolean;
-			session?: import("./lib/recordingSession").RecordingSession;
-		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
-		getCurrentRecordingSession: () => Promise<{
-			success: boolean;
-			session?: import("./lib/recordingSession").RecordingSession;
-		}>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
+		readBinaryFile: (filePath: string) => Promise<{
+			success: boolean;
+			data?: ArrayBuffer;
+			path?: string;
+			message?: string;
+			error?: string;
+		}>;
 		saveProjectFile: (
 			projectData: unknown,
 			suggestedName?: string,
@@ -137,25 +82,15 @@ interface Window {
 		onMenuSaveProject: (callback: () => void) => () => void;
 		onMenuSaveProjectAs: (callback: () => void) => () => void;
 		onMenuPreferences: (callback: () => void) => () => void;
-		setMicrophoneExpanded: (expanded: boolean) => void;
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;
 		setLocale: (locale: string) => Promise<void>;
-		hudOverlayHide: () => void;
-		hudOverlayClose: () => void;
 		getPlatform: () => Promise<string>;
 		revealInFolder: (
 			filePath: string,
 		) => Promise<{ success: boolean; message?: string; error?: string }>;
 		getShortcuts: () => Promise<unknown>;
 		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
-		readBinaryFile: (filePath: string) => Promise<{
-			success: boolean;
-			data?: ArrayBuffer;
-			path?: string;
-			message?: string;
-			error?: string;
-		}>;
 		writeTextFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
 		getCliInputFile: () => Promise<string | null>;
 		getCliEditorConfig: () => Promise<{

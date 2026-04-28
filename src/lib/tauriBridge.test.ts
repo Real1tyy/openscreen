@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Test the path utilities and helper functions that are extractable/testable
 // without the full Tauri runtime
@@ -292,9 +292,7 @@ describe("finishExport audio muxing contract", () => {
 	});
 
 	it("trim regions have positive duration", () => {
-		const trimRegions = [
-			{ id: "t1", startMs: 1000, endMs: 5000 },
-		];
+		const trimRegions = [{ id: "t1", startMs: 1000, endMs: 5000 }];
 		for (const tr of trimRegions) {
 			expect(tr.endMs).toBeGreaterThan(tr.startMs);
 		}
@@ -344,28 +342,5 @@ describe("RGBA frame data validation", () => {
 				expect(isKeyframe).toBe(false);
 			}
 		}
-	});
-});
-
-describe("recording session serialization contract", () => {
-	it("RecordingSession uses camelCase field names matching Rust serde renames", () => {
-		const session = {
-			screenVideoPath: "/tmp/screen.webm",
-			webcamVideoPath: "/tmp/webcam.webm",
-			createdAt: Date.now(),
-		};
-
-		// Rust struct uses #[serde(rename = "screenVideoPath")] etc.
-		expect(session).toHaveProperty("screenVideoPath");
-		expect(session).toHaveProperty("createdAt");
-		expect(typeof session.createdAt).toBe("number");
-	});
-
-	it("session without webcam omits webcamVideoPath", () => {
-		const session = {
-			screenVideoPath: "/tmp/screen.webm",
-			createdAt: Date.now(),
-		};
-		expect(session).not.toHaveProperty("webcamVideoPath");
 	});
 });

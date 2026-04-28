@@ -4,7 +4,6 @@ export const I18N_NAMESPACES = [
 	"common",
 	"dialogs",
 	"editor",
-	"launch",
 	"settings",
 	"shortcuts",
 	"timeline",

@@ -1,6 +1,4 @@
 import { lazy, useEffect, useState } from "react";
-import { LaunchWindow } from "./components/launch/LaunchWindow";
-import { SourceSelector } from "./components/launch/SourceSelector";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { ShortcutsConfigDialog } from "./components/video-editor/ShortcutsConfigDialog";
@@ -17,13 +15,7 @@ export default function App() {
 		const params = new URLSearchParams(window.location.search);
 		const type = params.get("windowType") || "";
 		setWindowType(type);
-		if (type === "hud-overlay" || type === "source-selector") {
-			document.body.style.background = "transparent";
-			document.documentElement.style.background = "transparent";
-			document.getElementById("root")?.style.setProperty("background", "transparent");
-		}
 
-		// Load custom fonts on app initialization
 		loadAllCustomFonts().catch((error) => {
 			console.error("Failed to load custom fonts:", error);
 		});
@@ -31,24 +23,14 @@ export default function App() {
 
 	const content = (() => {
 		switch (windowType) {
-			case "hud-overlay":
-				return <LaunchWindow />;
-			case "source-selector":
-				return <SourceSelector />;
-			case "editor":
+			case "headless-export":
+				return <HeadlessExport />;
+			default:
 				return (
 					<ShortcutsProvider>
 						<VideoEditor />
 						<ShortcutsConfigDialog />
 					</ShortcutsProvider>
-				);
-			case "headless-export":
-				return <HeadlessExport />;
-			default:
-				return (
-					<div className="w-full h-full bg-background text-foreground">
-						<h1>Openscreen</h1>
-					</div>
 				);
 		}
 	})();

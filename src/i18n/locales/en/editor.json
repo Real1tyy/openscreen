@@ -1,10 +1,4 @@
 {
-	"newRecording": {
-		"title": "Return to Recorder",
-		"description": "Your current session has been saved.",
-		"cancel": "Cancel",
-		"confirm": "Confirm"
-	},
 	"errors": {
 		"noVideoLoaded": "No video loaded",
 		"videoNotReady": "Video not ready",
@@ -29,13 +23,5 @@
 		"failedToLoad": "Failed to load project",
 		"invalidFormat": "Invalid project file format",
 		"loadedFrom": "Project loaded from {{path}}"
-	},
-	"recording": {
-		"failedCameraAccess": "Failed to request camera access.",
-		"cameraBlocked": "Camera access is blocked. Enable it in system settings to use the webcam.",
-		"systemAudioUnavailable": "System audio not available. Recording without system audio.",
-		"microphoneDenied": "Microphone access denied. Recording will continue without audio.",
-		"cameraDenied": "Camera access denied. Recording will continue without webcam.",
-		"permissionDenied": "Recording permission denied. Please allow screen recording."
 	}
 }

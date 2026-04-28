@@ -1,7 +1,0 @@
-.windowDrag {
-	-webkit-app-region: drag;
-}
-
-.windowNoDrag {
-	-webkit-app-region: no-drag;
-}

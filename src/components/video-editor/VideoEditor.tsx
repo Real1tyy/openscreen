@@ -2,14 +2,6 @@ import { Download } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import {
@@ -20,7 +12,6 @@ import {
 	type GifFrameRate,
 	type GifSizePreset,
 } from "@/lib/exporter";
-import type { ProjectMedia } from "@/lib/recordingSession";
 import { getAPI, isTauri, readFileAsBlobUrl } from "@/lib/tauriBridge";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
@@ -52,6 +43,7 @@ import {
 	fromFileUrl,
 	hasProjectUnsavedChanges,
 	normalizeProjectEditor,
+	type ProjectMedia,
 	resolveProjectMedia,
 	toFileUrl,
 	validateProjectData,
@@ -77,6 +69,7 @@ export default function VideoEditor() {
 		speedRegions,
 		annotationRegions,
 		chapters,
+		markers,
 		cropRegion,
 		wallpaper,
 		shadowIntensity,
@@ -98,6 +91,7 @@ export default function VideoEditor() {
 			speedRegions,
 			annotationRegions,
 			chapters,
+			markers,
 			cropRegion,
 			wallpaper,
 			shadowIntensity,
@@ -117,6 +111,7 @@ export default function VideoEditor() {
 			speedRegions,
 			annotationRegions,
 			chapters,
+			markers,
 			cropRegion,
 			wallpaper,
 			shadowIntensity,
@@ -171,7 +166,6 @@ export default function VideoEditor() {
 		});
 	}, [zoomRegions, trimRegions, speedRegions, annotationRegions, chapters, clearStale]);
 
-	const [showNewRecordingDialog, setShowNewRecordingDialog] = useState(false);
 	const [exportQuality, setExportQuality] = useState<ExportQuality>("good");
 	const [exportFormat, setExportFormat] = useState<ExportFormat>("mp4");
 	const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
@@ -448,29 +442,6 @@ export default function VideoEditor() {
 					}
 				}
 
-				const currentSessionResult = await getAPI().getCurrentRecordingSession();
-				if (currentSessionResult.success && currentSessionResult.session) {
-					const session = currentSessionResult.session;
-					const sourcePath = fromFileUrl(session.screenVideoPath);
-					const webcamSourcePath = session.webcamVideoPath
-						? fromFileUrl(session.webcamVideoPath)
-						: null;
-					setVideoSourcePath(sourcePath);
-					setVideoPath(await toPlayableUrl(sourcePath));
-					setWebcamVideoSourcePath(webcamSourcePath);
-					setWebcamVideoPath(webcamSourcePath ? await toPlayableUrl(webcamSourcePath) : null);
-					setCurrentProjectPath(null);
-					setLastSavedSnapshot(
-						createProjectSnapshot(
-							webcamSourcePath
-								? { screenVideoPath: sourcePath, webcamVideoPath: webcamSourcePath }
-								: { screenVideoPath: sourcePath },
-							INITIAL_EDITOR_STATE,
-						),
-					);
-					return;
-				}
-
 				const result = await getAPI().getCurrentVideoPath();
 				if (result.success && result.path) {
 					const sourcePath = fromFileUrl(result.path);
@@ -625,16 +596,6 @@ export default function VideoEditor() {
 	const handleSaveProjectAs = useCallback(async () => {
 		await saveProject(true);
 	}, [saveProject]);
-
-	const handleNewRecordingConfirm = useCallback(async () => {
-		const result = await getAPI().startNewRecording();
-		if (result.success) {
-			setShowNewRecordingDialog(false);
-		} else {
-			console.error("Failed to start new recording:", result.error);
-			setError("Failed to start new recording: " + (result.error || "Unknown error"));
-		}
-	}, []);
 
 	const handleLoadProject = useCallback(async () => {
 		const result = await getAPI().loadProjectFile();
@@ -804,34 +765,6 @@ export default function VideoEditor() {
 
 	return (
 		<div className="flex flex-col h-screen bg-[#09090b] text-slate-200 overflow-hidden selection:bg-[#34B27B]/30">
-			<Dialog open={showNewRecordingDialog} onOpenChange={setShowNewRecordingDialog}>
-				<DialogContent
-					className="sm:max-w-[425px]"
-					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-				>
-					<DialogHeader>
-						<DialogTitle>{t("newRecording.title")}</DialogTitle>
-						<DialogDescription>{t("newRecording.description")}</DialogDescription>
-					</DialogHeader>
-					<DialogFooter>
-						<button
-							type="button"
-							onClick={() => setShowNewRecordingDialog(false)}
-							className="px-4 py-2 rounded-md bg-white/10 text-white hover:bg-white/20 text-sm font-medium transition-colors"
-						>
-							{t("newRecording.cancel")}
-						</button>
-						<button
-							type="button"
-							onClick={handleNewRecordingConfirm}
-							className="px-4 py-2 rounded-md bg-[#34B27B] text-white hover:bg-[#34B27B]/90 text-sm font-medium transition-colors"
-						>
-							{t("newRecording.confirm")}
-						</button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
-
 			<div className="flex-1 flex min-h-0 relative">
 				{/* Left Column - Video & Timeline */}
 				<div className="flex-1 flex flex-col min-w-0 h-full">
@@ -990,7 +923,6 @@ export default function VideoEditor() {
 						videoDuration={duration}
 						currentTimeMs={Math.round(currentTime * 1000)}
 						hasWebcam={Boolean(webcamVideoPath)}
-						onNewRecording={() => setShowNewRecordingDialog(true)}
 					/>
 				</div>
 			</div>

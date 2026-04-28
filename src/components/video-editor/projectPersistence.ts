@@ -1,7 +1,5 @@
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import { clamp } from "@/lib/mathUtils";
-import type { ProjectMedia } from "@/lib/recordingSession";
-import { normalizeProjectMedia } from "@/lib/recordingSession";
 import { ASPECT_RATIOS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	type AnnotationRegion,
@@ -28,6 +26,36 @@ import {
 	type WebcamSizePreset,
 	type ZoomRegion,
 } from "./types";
+
+export interface ProjectMedia {
+	screenVideoPath: string;
+	webcamVideoPath?: string;
+}
+
+function normalizePath(value: unknown): string | undefined {
+	if (typeof value !== "string") {
+		return undefined;
+	}
+	const trimmed = value.trim();
+	return trimmed ? trimmed : undefined;
+}
+
+export function normalizeProjectMedia(candidate: unknown): ProjectMedia | null {
+	if (!candidate || typeof candidate !== "object") {
+		return null;
+	}
+
+	const raw = candidate as Partial<ProjectMedia>;
+	const screenVideoPath = normalizePath(raw.screenVideoPath);
+
+	if (!screenVideoPath) {
+		return null;
+	}
+
+	const webcamVideoPath = normalizePath(raw.webcamVideoPath);
+
+	return webcamVideoPath ? { screenVideoPath, webcamVideoPath } : { screenVideoPath };
+}
 
 const WALLPAPER_COUNT = 18;
 

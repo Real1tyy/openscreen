@@ -1,7 +1,5 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { StoreRecordedSessionInput } from "./recordingSession";
-
 export function isTauri(): boolean {
 	return "__TAURI_INTERNALS__" in window;
 }
@@ -63,63 +61,9 @@ async function cleanupTempFile(path: string): Promise<void> {
 
 function buildTauriAPI(): AppAPI {
 	return {
-		hudOverlayHide: () => {
-			invoke("hud_overlay_hide");
-		},
-		hudOverlayClose: () => {
-			invoke("hud_overlay_close");
-		},
-		getSources: async (_opts) => {
-			return [];
-		},
-		switchToEditor: () => invoke("switch_to_editor"),
-		switchToHud: () => invoke("switch_to_hud"),
-		startNewRecording: () => invoke("start_new_recording"),
-		openSourceSelector: () => invoke("open_source_selector"),
-		selectSource: (source) => invoke("select_source", { source }),
-		getSelectedSource: () => invoke("get_selected_source"),
-		requestCameraAccess: () => invoke("request_camera_access"),
-
-		storeRecordedVideo: async (videoData, fileName) => {
-			const screenTempPath = await writeToTempFile(videoData, "webm");
-			return invoke("store_recorded_session_from_files", {
-				payload: {
-					screen: { fileName, tempPath: screenTempPath },
-					createdAt: Date.now(),
-				},
-			});
-		},
-
-		storeRecordedSession: async (payload: StoreRecordedSessionInput) => {
-			const screenTempPath = await writeToTempFile(payload.screen.videoData, "webm");
-			const tauriPayload: Record<string, unknown> = {
-				screen: { fileName: payload.screen.fileName, tempPath: screenTempPath },
-				createdAt: payload.createdAt ?? Date.now(),
-			};
-			if (payload.webcam) {
-				const webcamTempPath = await writeToTempFile(payload.webcam.videoData, "webm");
-				tauriPayload.webcam = {
-					fileName: payload.webcam.fileName,
-					tempPath: webcamTempPath,
-				};
-			}
-			return invoke("store_recorded_session_from_files", { payload: tauriPayload });
-		},
-
-		getRecordedVideoPath: () => invoke("get_recorded_video_path"),
 		getAssetBasePath: () => invoke("get_asset_base_path"),
-		setRecordingState: (recording) => invoke("set_recording_state", { recording }),
 		getCursorTelemetry: (videoPath) =>
 			invoke("get_cursor_telemetry", { videoPath: videoPath ?? null }),
-		onStopRecordingFromTray: (callback) => {
-			let unlisten: (() => void) | null = null;
-			listen("stop-recording-from-tray", () => callback()).then((fn_) => {
-				unlisten = fn_;
-			});
-			return () => {
-				unlisten?.();
-			};
-		},
 		openExternalUrl: (url) => invoke("open_external_url", { url }),
 
 		saveExportedVideo: async (videoData, fileName) => {
@@ -141,9 +85,7 @@ function buildTauriAPI(): AppAPI {
 
 		openVideoFilePicker: () => invoke("open_video_file_picker"),
 		setCurrentVideoPath: (path) => invoke("set_current_video_path", { path }),
-		setCurrentRecordingSession: (session) => invoke("set_current_recording_session", { session }),
 		getCurrentVideoPath: () => invoke("get_current_video_path"),
-		getCurrentRecordingSession: () => invoke("get_current_recording_session"),
 		clearCurrentVideoPath: () => invoke("clear_current_video_path"),
 
 		readBinaryFile: async (filePath) => {
@@ -212,7 +154,6 @@ function buildTauriAPI(): AppAPI {
 		getShortcuts: () => invoke("get_shortcuts"),
 		saveShortcuts: (shortcuts) => invoke("save_shortcuts", { shortcuts }),
 		setLocale: (locale) => invoke("set_locale", { locale }),
-		setMicrophoneExpanded: (_expanded) => {},
 		setHasUnsavedChanges: (hasChanges) => invoke("set_has_unsaved_changes", { hasChanges }),
 		onRequestSaveBeforeClose: (callback) => {
 			let unlisten: (() => void) | null = null;
@@ -227,9 +168,18 @@ function buildTauriAPI(): AppAPI {
 		},
 		writeTextFile: (filePath: string, content: string) =>
 			invoke("write_text_file", { filePath, content }),
-		getCliInputFile: () => invoke("get_cli_input_file").catch(() => null),
-		getCliEditorConfig: () => invoke("get_cli_editor_config").catch(() => null),
-		getHeadlessExportConfig: () => invoke("get_headless_export_config").catch(() => null),
+		getCliInputFile: () => invoke<string | null>("get_cli_input_file").catch(() => null),
+		getCliEditorConfig: () =>
+			invoke<{
+				shadowIntensity: number;
+				showBlur: boolean;
+				motionBlurAmount: number;
+				borderRadius: number;
+				padding: number;
+				wallpaper: string;
+			} | null>("get_cli_editor_config").catch(() => null),
+		getHeadlessExportConfig: () =>
+			invoke<HeadlessExportConfig | null>("get_headless_export_config").catch(() => null),
 		sendHeadlessExportProgress: (_percentage) => {},
 		sendHeadlessExportDone: (_result) => Promise.resolve(),
 	} as AppAPI;
