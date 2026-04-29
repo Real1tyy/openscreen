@@ -594,6 +594,45 @@ export default function VideoEditor() {
 		await saveProject(true);
 	}, [saveProject]);
 
+	const handleOpenVideo = useCallback(async () => {
+		const result = await getAPI().openVideoFilePicker();
+
+		if (result.canceled || !result.path) {
+			return;
+		}
+
+		if (!result.success) {
+			toast.error("Selected file is not a supported video");
+			return;
+		}
+
+		try {
+			videoPlaybackRef.current?.pause();
+		} catch {
+			// no-op
+		}
+		setIsPlaying(false);
+		setCurrentTime(0);
+		setDuration(0);
+
+		setError(null);
+		await getAPI().setCurrentVideoPath(result.path);
+		setVideoSourcePath(result.path);
+		setVideoPath(await toPlayableUrl(result.path));
+		setWebcamVideoSourcePath(null);
+		setWebcamVideoPath(null);
+		setCurrentProjectPath(null);
+
+		useEditorStore.getState().loadState(INITIAL_EDITOR_STATE);
+		useEditorSelectionStore.getState().clearAll();
+
+		setLastSavedSnapshot(
+			createProjectSnapshot({ screenVideoPath: result.path }, INITIAL_EDITOR_STATE),
+		);
+
+		toast.success("Video loaded");
+	}, []);
+
 	const handleLoadProject = useCallback(async () => {
 		const result = await getAPI().loadProjectFile();
 
@@ -615,6 +654,8 @@ export default function VideoEditor() {
 		toast.success(`Project loaded from ${result.path}`);
 	}, [applyLoadedProject]);
 
+	const handleOpenVideoRef = useRef(handleOpenVideo);
+	handleOpenVideoRef.current = handleOpenVideo;
 	const handleLoadProjectRef = useRef(handleLoadProject);
 	handleLoadProjectRef.current = handleLoadProject;
 	const handleSaveProjectRef = useRef(handleSaveProject);
@@ -623,6 +664,7 @@ export default function VideoEditor() {
 	handleSaveProjectAsRef.current = handleSaveProjectAs;
 
 	useEffect(() => {
+		const removeOpenVideoListener = getAPI().onMenuOpenVideo(() => handleOpenVideoRef.current());
 		const removeLoadListener = getAPI().onMenuLoadProject(() => handleLoadProjectRef.current());
 		const removeSaveListener = getAPI().onMenuSaveProject(() => handleSaveProjectRef.current());
 		const removeSaveAsListener = getAPI().onMenuSaveProjectAs(() =>
@@ -631,6 +673,7 @@ export default function VideoEditor() {
 		const removePrefsListener = getAPI().onMenuPreferences(() => setShowPreferences(true));
 
 		return () => {
+			removeOpenVideoListener?.();
 			removeLoadListener?.();
 			removeSaveListener?.();
 			removeSaveAsListener?.();

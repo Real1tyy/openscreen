@@ -136,6 +136,8 @@ fn setup_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let is_mac = cfg!(target_os = "macos");
     let mod_key = if is_mac { "Cmd" } else { "Ctrl" };
 
+    let open_video = MenuItemBuilder::with_id("open-video", "Open Video...")
+        .build(app)?;
     let load_project = MenuItemBuilder::with_id("load-project", "Open Project...")
         .accelerator(format!("{}+O", mod_key))
         .build(app)?;
@@ -147,6 +149,7 @@ fn setup_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .build(app)?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&open_video)
         .item(&load_project)
         .item(&save_project)
         .item(&save_project_as)
@@ -196,6 +199,11 @@ fn setup_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     app.on_menu_event(move |app, event| {
         match event.id().as_ref() {
+            "open-video" => {
+                if let Some(editor) = app.get_webview_window("editor") {
+                    editor.emit("menu-open-video", ()).ok();
+                }
+            }
             "load-project" => {
                 if let Some(editor) = app.get_webview_window("editor") {
                     editor.emit("menu-load-project", ()).ok();

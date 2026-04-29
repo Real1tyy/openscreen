@@ -78,6 +78,7 @@ interface Window {
 			canceled?: boolean;
 			error?: string;
 		}>;
+		onMenuOpenVideo: (callback: () => void) => () => void;
 		onMenuLoadProject: (callback: () => void) => () => void;
 		onMenuSaveProject: (callback: () => void) => () => void;
 		onMenuSaveProjectAs: (callback: () => void) => () => void;

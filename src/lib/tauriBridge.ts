@@ -113,6 +113,15 @@ function buildTauriAPI(): AppAPI {
 			}),
 		loadProjectFile: () => invoke("load_project_file"),
 		loadCurrentProjectFile: () => invoke("load_current_project_file"),
+		onMenuOpenVideo: (callback) => {
+			let unlisten: (() => void) | null = null;
+			listen("menu-open-video", () => callback()).then((fn_) => {
+				unlisten = fn_;
+			});
+			return () => {
+				unlisten?.();
+			};
+		},
 		onMenuLoadProject: (callback) => {
 			let unlisten: (() => void) | null = null;
 			listen("menu-load-project", () => callback()).then((fn_) => {
