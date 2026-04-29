@@ -784,6 +784,7 @@ export default function VideoEditor() {
 		handleAddChapter,
 		handleChapterNavigatePrev,
 		handleChapterNavigateNext,
+		toggleFullscreen,
 	});
 
 	if (loading) {

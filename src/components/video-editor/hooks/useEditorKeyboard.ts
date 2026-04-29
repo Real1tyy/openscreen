@@ -17,6 +17,7 @@ interface UseEditorKeyboardParams {
 	handleAddChapter: () => void;
 	handleChapterNavigatePrev: () => void;
 	handleChapterNavigateNext: () => void;
+	toggleFullscreen: () => void;
 }
 
 export function useEditorKeyboard(params: UseEditorKeyboardParams) {
@@ -32,6 +33,7 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 		handleAddChapter,
 		handleChapterNavigatePrev,
 		handleChapterNavigateNext,
+		toggleFullscreen,
 	} = params;
 
 	const seekSmallSeconds = useEditorPreferencesStore((s) => s.seekSmallSeconds);
@@ -108,6 +110,10 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 				handleQuickTrimEnd();
 			}
 
+			if (key === "f" && !mod && !e.shiftKey && !e.altKey) {
+				e.preventDefault();
+				toggleFullscreen();
+			}
 			if (key === "c" && !mod && !e.shiftKey && !e.altKey) {
 				e.preventDefault();
 				handleAddChapter();
@@ -136,6 +142,7 @@ export function useEditorKeyboard(params: UseEditorKeyboardParams) {
 		handleAddChapter,
 		handleChapterNavigatePrev,
 		handleChapterNavigateNext,
+		toggleFullscreen,
 		seekSmallSeconds,
 		seekLargeSeconds,
 	]);

@@ -31,6 +31,7 @@
 		"cycleAnnotationsForward": "Recorrer anotaciones hacia adelante",
 		"cycleAnnotationsBackward": "Recorrer anotaciones hacia atrás",
 		"deleteSelectedAlt": "Eliminar seleccionado (alt)",
+		"toggleFullscreen": "Alternar pantalla completa",
 		"panTimeline": "Desplazar línea de tiempo",
 		"zoomTimeline": "Zoom en línea de tiempo",
 		"seekBack": "Retroceder",

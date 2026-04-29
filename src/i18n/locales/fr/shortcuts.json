@@ -31,6 +31,7 @@
 		"cycleAnnotationsForward": "Parcourir les annotations en avant",
 		"cycleAnnotationsBackward": "Parcourir les annotations en arrière",
 		"deleteSelectedAlt": "Supprimer la sélection (alt)",
+		"toggleFullscreen": "Basculer en plein écran",
 		"panTimeline": "Panoramique de la timeline",
 		"zoomTimeline": "Zoom de la timeline",
 		"seekBack": "Reculer",

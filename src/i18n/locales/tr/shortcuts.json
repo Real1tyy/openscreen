@@ -31,6 +31,7 @@
 		"cycleAnnotationsForward": "Açıklamalar Arasında İleri Geç",
 		"cycleAnnotationsBackward": "Açıklamalar Arasında Geri Geç",
 		"deleteSelectedAlt": "Seçileni Sil (alternatif)",
+		"toggleFullscreen": "Tam Ekranı Aç/Kapat",
 		"panTimeline": "Zaman Çizelgesini Kaydır",
 		"zoomTimeline": "Zaman Çizelgesini Yakınlaştır",
 		"seekBack": "Geri Sar",

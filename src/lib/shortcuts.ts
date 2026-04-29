@@ -60,6 +60,12 @@ export const FIXED_SHORTCUTS: FixedShortcut[] = [
 		bindings: [{ key: "delete" }, { key: "backspace" }],
 	},
 	{
+		i18nKey: "toggleFullscreen",
+		label: "Toggle Fullscreen",
+		display: "F",
+		bindings: [{ key: "f" }],
+	},
+	{
 		i18nKey: "panTimeline",
 		label: "Pan Timeline",
 		display: "Shift + Ctrl + Scroll",
