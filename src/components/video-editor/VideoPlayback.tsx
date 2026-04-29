@@ -1347,7 +1347,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				)}
 				<video
 					ref={videoRef}
-					src={videoPath}
+					src={videoPath || undefined}
 					className="hidden"
 					preload="metadata"
 					playsInline

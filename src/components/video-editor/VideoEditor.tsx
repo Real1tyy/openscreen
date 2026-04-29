@@ -887,7 +887,7 @@ export default function VideoEditor() {
 											key={`${videoPath || "no-video"}:${webcamVideoPath || "no-webcam"}`}
 											aspectRatio={aspectRatio}
 											ref={videoPlaybackRef}
-											videoPath={videoPath || ""}
+											videoPath={videoPath}
 											webcamVideoPath={webcamVideoPath || undefined}
 											webcamLayoutPreset={webcamLayoutPreset}
 											webcamMaskShape={webcamMaskShape}
