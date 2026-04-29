@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
-import { cn } from "@/lib/utils";
+import { cn, parseDecimalInput } from "@/lib/utils";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { KeyboardShortcutsHelp } from "../KeyboardShortcutsHelp";
@@ -47,19 +47,14 @@ function CustomZoomInput({
 
 	const handleChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const raw = e.target.value.replace(/[^\d.]/g, "");
-			if (raw === "" || raw === ".") {
-				setDraft(raw);
-				return;
-			}
-			const num = Number.parseFloat(raw);
-			if (Number.isNaN(num)) return;
-			if (num > MAX_ZOOM_SCALE) {
+			const { raw, value: num } = parseDecimalInput(e.target.value);
+			if (raw === e.target.value && num === null) return;
+			if (num !== null && num > MAX_ZOOM_SCALE) {
 				onError();
 				return;
 			}
 			setDraft(raw);
-			if (num >= 1) onChange(num);
+			if (num !== null && num >= 1) onChange(num);
 		},
 		[onChange, onError],
 	);

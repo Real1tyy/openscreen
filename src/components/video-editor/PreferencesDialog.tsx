@@ -7,6 +7,7 @@ import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { type Locale, SUPPORTED_LOCALES } from "@/i18n/config";
 import { getLocaleName } from "@/i18n/loader";
 import type { UserPreferences } from "@/lib/userPreferences";
+import { parseDecimalInput } from "@/lib/utils";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 
 interface PreferencesDialogProps {
@@ -39,8 +40,8 @@ function NumberField({
 
 	const commit = useCallback(
 		(raw: string) => {
-			const num = Number.parseFloat(raw);
-			if (Number.isNaN(num)) {
+			const { value: num } = parseDecimalInput(raw);
+			if (num === null) {
 				setDraft(String(value));
 				return;
 			}

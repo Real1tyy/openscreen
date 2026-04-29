@@ -3,10 +3,10 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
-import { cn } from "@/lib/utils";
+import { cn, parseDecimalInput } from "@/lib/utils";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { useEditorStore } from "@/stores/useEditorStore";
-import { MAX_PLAYBACK_SPEED, SPEED_OPTIONS } from "../types";
+import { MAX_PLAYBACK_SPEED, MIN_PLAYBACK_SPEED, SPEED_OPTIONS } from "../types";
 import { RegionSection } from "./RegionSection";
 
 interface SpeedSectionProps {
@@ -24,37 +24,36 @@ function CustomSpeedInput({
 	onError: () => void;
 }) {
 	const isPreset = SPEED_OPTIONS.some((o) => o.speed === value);
-	const [draft, setDraft] = useState(isPreset ? "" : String(Math.round(value)));
+	const [draft, setDraft] = useState(isPreset ? "" : String(value));
 	const [isFocused, setIsFocused] = useState(false);
 
 	const prevValue = useRef(value);
 	if (!isFocused && prevValue.current !== value) {
 		prevValue.current = value;
-		setDraft(isPreset ? "" : String(Math.round(value)));
+		setDraft(isPreset ? "" : String(value));
 	}
 
 	const handleChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const digits = e.target.value.replace(/\D/g, "");
-			if (digits === "") {
-				setDraft("");
-				return;
-			}
-			const num = Number(digits);
-			if (num > MAX_PLAYBACK_SPEED) {
+			const { raw, value: num } = parseDecimalInput(e.target.value);
+			if (raw === e.target.value && num === null) return;
+			if (num !== null && num > MAX_PLAYBACK_SPEED) {
 				onError();
 				return;
 			}
-			setDraft(digits);
-			if (num >= 1) onChange(num);
+			setDraft(raw);
+			if (num !== null && num >= MIN_PLAYBACK_SPEED) onChange(Math.round(num * 100) / 100);
 		},
 		[onChange, onError],
 	);
 
 	const handleBlur = useCallback(() => {
 		setIsFocused(false);
-		if (!draft || Number(draft) < 1) {
-			setDraft(isPreset ? "" : String(Math.round(value)));
+		const num = Number.parseFloat(draft);
+		if (!draft || Number.isNaN(num) || num < MIN_PLAYBACK_SPEED) {
+			setDraft(isPreset ? "" : String(value));
+		} else {
+			setDraft(String(Math.round(num * 100) / 100));
 		}
 	}, [draft, isPreset, value]);
 
@@ -62,7 +61,7 @@ function CustomSpeedInput({
 		<div className="flex items-center gap-1">
 			<input
 				type="text"
-				inputMode="numeric"
+				inputMode="decimal"
 				value={isFocused ? draft : isPreset ? "" : draft}
 				placeholder="--"
 				onFocus={() => setIsFocused(true)}
