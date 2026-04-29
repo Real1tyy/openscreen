@@ -41,14 +41,24 @@ export default defineConfig({
 				? "chrome105"
 				: "safari13"
 			: "esnext",
-		minify: isTauri ? (!process.env.TAURI_ENV_DEBUG ? "esbuild" : false) : "esbuild",
+		minify: isTauri ? (!process.env.TAURI_ENV_DEBUG ? true : false) : true,
 		sourcemap: isTauri ? !!process.env.TAURI_ENV_DEBUG : false,
 		rollupOptions: {
 			output: {
-				manualChunks: {
-					pixi: ["pixi.js"],
-					"react-vendor": ["react", "react-dom"],
-					"video-processing": ["mediabunny", "mp4box", "@fix-webm-duration/fix"],
+				manualChunks(id) {
+					if (id.includes("node_modules/pixi.js") || id.includes("node_modules/pixi-filters")) {
+						return "pixi";
+					}
+					if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+						return "react-vendor";
+					}
+					if (
+						id.includes("node_modules/mediabunny") ||
+						id.includes("node_modules/mp4box") ||
+						id.includes("node_modules/@fix-webm-duration")
+					) {
+						return "video-processing";
+					}
 				},
 			},
 		},
