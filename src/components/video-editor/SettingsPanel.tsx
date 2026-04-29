@@ -11,6 +11,7 @@ import { useEditorStore } from "@/stores/useEditorStore";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { CropControl } from "./CropControl";
 import { BackgroundSection } from "./settings/BackgroundSection";
+import { ChaptersSection } from "./settings/ChaptersSection";
 import { EffectsSection } from "./settings/EffectsSection";
 import { RegionSection } from "./settings/RegionSection";
 import { SpeedSection } from "./settings/SpeedSection";
@@ -24,6 +25,8 @@ interface SettingsPanelProps {
 	videoDuration?: number;
 	currentTimeMs?: number;
 	hasWebcam?: boolean;
+	onSeek?: (time: number) => void;
+	onAddChapter?: () => void;
 }
 
 export function SettingsPanel({
@@ -32,6 +35,8 @@ export function SettingsPanel({
 	videoDuration = 0,
 	currentTimeMs,
 	hasWebcam = false,
+	onSeek,
+	onAddChapter,
 }: SettingsPanelProps) {
 	const t = useScopedT("settings");
 
@@ -223,7 +228,18 @@ export function SettingsPanel({
 					<SpeedSection videoDuration={videoDuration} currentTimeMs={currentTimeMs} />
 				)}
 
-				<Accordion type="multiple" defaultValue={hasWebcam ? ["layout"] : []} className="space-y-1">
+				<Accordion
+					type="multiple"
+					defaultValue={hasWebcam ? ["layout", "chapters"] : ["chapters"]}
+					className="space-y-1"
+				>
+					<ChaptersSection
+						videoDurationMs={durationMs}
+						currentTimeMs={currentTimeMs}
+						onSeek={onSeek}
+						onAddChapter={onAddChapter}
+					/>
+
 					{hasWebcam && <WebcamSection />}
 
 					<EffectsSection onCropToggle={handleCropToggle} />

@@ -69,7 +69,6 @@ export default function VideoEditor() {
 		speedRegions,
 		annotationRegions,
 		chapters,
-		markers,
 		cropRegion,
 		wallpaper,
 		shadowIntensity,
@@ -91,7 +90,6 @@ export default function VideoEditor() {
 			speedRegions,
 			annotationRegions,
 			chapters,
-			markers,
 			cropRegion,
 			wallpaper,
 			shadowIntensity,
@@ -111,7 +109,6 @@ export default function VideoEditor() {
 			speedRegions,
 			annotationRegions,
 			chapters,
-			markers,
 			cropRegion,
 			wallpaper,
 			shadowIntensity,
@@ -207,27 +204,18 @@ export default function VideoEditor() {
 	const handleAddChapter = useCallback(() => {
 		const totalMs = Math.round(durationRef.current * 1000);
 		if (totalMs <= 0) return;
-		const startMs = Math.max(0, Math.min(Math.round(currentTimeRef.current * 1000), totalMs - 100));
+		const nowMs = Math.round(currentTimeRef.current * 1000);
 		const sorted = [...chapters].sort((a, b) => a.startMs - b.startMs);
-		const nextCh = sorted.find((ch) => ch.startMs > startMs);
-		const endMs = Math.max(startMs + 100, nextCh ? nextCh.startMs : totalMs);
-		const id = useEditorStore.getState().addChapter(startMs, endMs);
+		const prevCh = [...sorted].reverse().find((ch) => ch.startMs <= nowMs);
+		const startMs = prevCh ? Math.max(prevCh.startMs + 100, nowMs) : 0;
+		if (startMs >= totalMs) return;
+		if (prevCh) {
+			useEditorStore.getState().setChapterSpan(prevCh.id, { start: prevCh.startMs, end: startMs });
+		}
+		const id = useEditorStore.getState().addChapter(startMs, totalMs);
 		setEditingChapterId(id);
 		selectChapter(id);
 	}, [chapters, setEditingChapterId, selectChapter]);
-
-	const handleSelectChapter = useCallback(
-		(id: string | null) => {
-			selectChapter(id);
-			if (id) {
-				const ch = chapters.find((c) => c.id === id);
-				if (ch && videoPlaybackRef.current?.video) {
-					videoPlaybackRef.current.video.currentTime = ch.startMs / 1000;
-				}
-			}
-		},
-		[selectChapter, chapters],
-	);
 
 	const chaptersRef = useRef(chapters);
 	chaptersRef.current = chapters;
@@ -887,8 +875,6 @@ export default function VideoEditor() {
 									currentTime={currentTime}
 									onSeek={handleSeek}
 									cursorTelemetry={cursorTelemetry}
-									onAddChapter={handleAddChapter}
-									onSelectChapter={handleSelectChapter}
 									onTrimPlayFromStart={handleTrimPlayFromStart}
 									onTrimPlayFromEnd={handleTrimPlayFromEnd}
 									onTrimToggleLoop={handleTrimToggleLoop}
@@ -923,6 +909,8 @@ export default function VideoEditor() {
 						videoDuration={duration}
 						currentTimeMs={Math.round(currentTime * 1000)}
 						hasWebcam={Boolean(webcamVideoPath)}
+						onSeek={handleSeek}
+						onAddChapter={handleAddChapter}
 					/>
 				</div>
 			</div>

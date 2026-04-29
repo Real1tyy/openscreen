@@ -64,12 +64,6 @@ export interface ChapterMarker {
 	name: string;
 }
 
-export interface Marker {
-	id: string;
-	timeMs: number;
-	label?: string;
-}
-
 export type AnnotationType = "text" | "image" | "figure";
 
 export type ArrowDirection =

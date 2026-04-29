@@ -24,10 +24,7 @@
 		"goToNow": "Go to Playhead",
 		"followPlayhead": "Follow Playhead",
 		"goToTrimStart": "Go to Next Trim",
-		"goToPrevTrimStart": "Go to Previous Trim",
-		"addMarker": "Add Marker",
-		"goToNextMarker": "Go to Next Marker",
-		"goToPrevMarker": "Go to Previous Marker"
+		"goToPrevTrimStart": "Go to Previous Trim"
 	},
 	"fixedActions": {
 		"undo": "Deshacer",

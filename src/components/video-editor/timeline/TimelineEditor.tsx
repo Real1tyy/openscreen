@@ -1,13 +1,11 @@
 import type { Range, Span } from "dnd-timeline";
 import { useTimelineContext } from "dnd-timeline";
 import {
-	BookMarked,
 	Check,
 	ChevronDown,
 	Clock,
 	Copy,
 	Crosshair,
-	Flag,
 	Gauge,
 	LocateFixed,
 	MessageSquare,
@@ -43,7 +41,7 @@ import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/as
 import { formatShortcut } from "@/utils/platformUtils";
 import { formatMsCompact } from "@/utils/timeUtils";
 import { TutorialHelp } from "../TutorialHelp";
-import type { CursorTelemetryPoint, Marker, SpeedRegion, TrimRegion, ZoomRegion } from "../types";
+import type { CursorTelemetryPoint, SpeedRegion, TrimRegion, ZoomRegion } from "../types";
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import Row from "./Row";
@@ -63,7 +61,6 @@ const ZOOM_ROW_ID = "row-zoom";
 const TRIM_ROW_ID = "row-trim";
 const ANNOTATION_ROW_ID = "row-annotation";
 const SPEED_ROW_ID = "row-speed";
-const CHAPTER_ROW_ID = "row-chapter";
 const SUGGESTION_SPACING_MS = 1800;
 
 interface TimelineEditorProps {
@@ -73,10 +70,6 @@ interface TimelineEditorProps {
 	cursorTelemetry?: CursorTelemetryPoint[];
 	aspectRatio: AspectRatio;
 	onAspectRatioChange: (aspectRatio: AspectRatio) => void;
-	// Chapter add needs DOM refs (durationRef / currentTimeRef)
-	onAddChapter?: () => void;
-	// Chapter select needs DOM refs (seeks via videoPlaybackRef)
-	onSelectChapter?: (id: string | null) => void;
 	// Trim playback actions that need DOM refs
 	onTrimPlayFromStart?: (id: string) => void;
 	onTrimPlayFromEnd?: (id: string) => void;
@@ -92,8 +85,7 @@ interface TimelineRenderItem {
 	label: string;
 	zoomDepth?: number;
 	speedValue?: number;
-	chapterName?: string;
-	variant: "zoom" | "trim" | "annotation" | "speed" | "chapter";
+	variant: "zoom" | "trim" | "annotation" | "speed";
 }
 
 function PlaybackCursor({
@@ -633,106 +625,42 @@ function TrimMarkIndicator({
 	);
 }
 
-function MarkerIndicators({
-	markers,
-	videoDurationMs,
-	onSeek,
-	onDelete,
-}: {
-	markers: Marker[];
-	videoDurationMs: number;
-	onSeek?: (time: number) => void;
-	onDelete?: (id: string) => void;
-}) {
-	const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
-	const sideProperty = direction === "rtl" ? "right" : "left";
-
-	return (
-		<>
-			{markers
-				.filter((m) => videoDurationMs > 0 && m.timeMs >= range.start && m.timeMs <= range.end)
-				.map((m) => {
-					const offset = valueToPixels(m.timeMs - range.start);
-					return (
-						<div
-							key={m.id}
-							className="absolute top-0 bottom-0 z-40 cursor-pointer"
-							style={{
-								[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
-							}}
-							onClick={(e) => {
-								e.stopPropagation();
-								onSeek?.(m.timeMs / 1000);
-							}}
-							onContextMenu={(e) => {
-								e.preventDefault();
-								onDelete?.(m.id);
-							}}
-						>
-							<div
-								className="absolute top-0 bottom-0 w-[2px] bg-cyan-400/80 shadow-[0_0_8px_rgba(34,211,238,0.4)] hover:bg-cyan-300 transition-colors"
-								style={{ [sideProperty]: `${offset}px` }}
-							>
-								<div
-									className="absolute -top-1 left-1/2 -translate-x-1/2"
-									style={{ width: "12px", height: "12px" }}
-								>
-									<div className="w-2.5 h-2.5 mx-auto mt-[1px] bg-cyan-400 rotate-45 rounded-sm shadow-lg border border-white/20" />
-								</div>
-							</div>
-						</div>
-					);
-				})}
-		</>
-	);
-}
-
 function Timeline({
 	items,
 	videoDurationMs,
 	currentTimeMs,
 	onSeek,
 	onRangeChange,
-	onSelectChapter,
 	keyframes = [],
 	onTrimContextMenu,
 	onRegionContextMenu,
 	trimMarkStartMs,
 	loopingTrimId,
-	markers = [],
-	onDeleteMarker,
 }: {
 	items: TimelineRenderItem[];
 	videoDurationMs: number;
 	currentTimeMs: number;
 	onSeek?: (time: number) => void;
 	onRangeChange?: (updater: (previous: Range) => Range) => void;
-	onSelectChapter?: (id: string | null) => void;
 	keyframes?: { id: string; time: number }[];
 	onTrimContextMenu?: (id: string, event: React.MouseEvent) => void;
 	onRegionContextMenu?: (type: RegionType, id: string, event: React.MouseEvent) => void;
 	trimMarkStartMs?: number | null;
 	loopingTrimId?: string | null;
-	markers?: Marker[];
-	onDeleteMarker?: (id: string) => void;
 }) {
 	const t = useScopedT("timeline");
 	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
 
-	const editorStore = useEditorStore();
 	const {
 		selectedZoomId,
 		selectedTrimId,
 		selectedSpeedId,
 		selectedAnnotationId,
-		selectedChapterId,
-		editingChapterId,
 		selectZoom: onSelectZoom,
 		selectTrim: onSelectTrim,
 		selectSpeed: onSelectSpeed,
 		selectAnnotation: onSelectAnnotation,
-		setEditingChapterId: onEditChapter,
 	} = useEditorSelectionStore();
 
 	const setRefs = useCallback(
@@ -753,7 +681,6 @@ function Timeline({
 			onSelectTrim(null);
 			onSelectAnnotation(null);
 			onSelectSpeed(null);
-			onSelectChapter?.(null);
 
 			const rect = e.currentTarget.getBoundingClientRect();
 			const clickX = e.clientX - rect.left - sidebarWidth;
@@ -772,7 +699,6 @@ function Timeline({
 			onSelectTrim,
 			onSelectAnnotation,
 			onSelectSpeed,
-			onSelectChapter,
 			videoDurationMs,
 			sidebarWidth,
 			range.start,
@@ -824,7 +750,6 @@ function Timeline({
 	const trimItems = items.filter((item) => item.rowId === TRIM_ROW_ID);
 	const annotationItems = items.filter((item) => item.rowId === ANNOTATION_ROW_ID);
 	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
-	const chapterItems = items.filter((item) => item.rowId === CHAPTER_ROW_ID);
 
 	const renderRow = (
 		rowId: string,
@@ -893,38 +818,6 @@ function Timeline({
 		</Row>
 	);
 
-	const renderChapterRow = () => (
-		<Row id={CHAPTER_ROW_ID} isEmpty={chapterItems.length === 0} hint="Press C to add chapter">
-			{chapterItems.map((item) => (
-				<Item
-					id={item.id}
-					key={item.id}
-					rowId={item.rowId}
-					span={item.span}
-					isSelected={item.id === selectedChapterId}
-					onSelect={() => {
-						onSelectChapter?.(item.id);
-						if (onSeek) onSeek(item.span.start / 1000);
-					}}
-					onDoubleClick={() => onEditChapter(item.id)}
-					onContextMenu={(e) => {
-						e.preventDefault();
-						editorStore.deleteChapter(item.id);
-					}}
-					variant="chapter"
-					isEditing={editingChapterId === item.id}
-					onRenameCommit={(name) => {
-						editorStore.renameChapter(item.id, name);
-						onEditChapter(null);
-					}}
-					onRenameCancel={() => onEditChapter(null)}
-				>
-					{item.chapterName}
-				</Item>
-			))}
-		</Row>
-	);
-
 	return (
 		<div
 			ref={setRefs}
@@ -944,12 +837,6 @@ function Timeline({
 				keyframes={keyframes}
 			/>
 			<TrimMarkIndicator timeMs={trimMarkStartMs ?? null} videoDurationMs={videoDurationMs} />
-			<MarkerIndicators
-				markers={markers}
-				videoDurationMs={videoDurationMs}
-				onSeek={onSeek}
-				onDelete={onDeleteMarker}
-			/>
 
 			{renderRow(
 				ZOOM_ROW_ID,
@@ -960,7 +847,6 @@ function Timeline({
 				"zoom",
 			)}
 			{renderTrimRow()}
-			{renderChapterRow()}
 			{renderRow(
 				ANNOTATION_ROW_ID,
 				annotationItems,
@@ -988,8 +874,6 @@ export default function TimelineEditor({
 	cursorTelemetry = [],
 	aspectRatio,
 	onAspectRatioChange,
-	onAddChapter,
-	onSelectChapter,
 	onTrimPlayFromStart,
 	onTrimPlayFromEnd,
 	onTrimToggleLoop,
@@ -1020,15 +904,7 @@ export default function TimelineEditor({
 
 	// ── Read state & actions from stores ───────────────────────
 	const store = useEditorStore();
-	const {
-		zoomRegions,
-		trimRegions,
-		speedRegions,
-		annotationRegions,
-		chapters,
-		markers,
-		deleteMarker,
-	} = store;
+	const { zoomRegions, trimRegions, speedRegions, annotationRegions, chapters } = store;
 
 	const {
 		selectedZoomId,
@@ -1040,6 +916,7 @@ export default function TimelineEditor({
 		selectTrim: onSelectTrim,
 		selectSpeed: onSelectSpeed,
 		selectAnnotation: onSelectAnnotation,
+		selectChapter: onSelectChapter,
 	} = useEditorSelectionStore();
 
 	const ctxMenu = useContextMenuStore();
@@ -1191,7 +1068,7 @@ export default function TimelineEditor({
 	const deleteSelectedChapter = useCallback(() => {
 		if (!selectedChapterId) return;
 		store.deleteChapter(selectedChapterId);
-		onSelectChapter?.(null);
+		onSelectChapter(null);
 	}, [selectedChapterId, store, onSelectChapter]);
 
 	useEffect(() => {
@@ -1251,9 +1128,8 @@ export default function TimelineEditor({
 			const isTrimItem = trimRegions.some((r) => r.id === excludeId);
 			const isAnnotationItem = annotationRegions.some((r) => r.id === excludeId);
 			const isSpeedItem = speedRegions.some((r) => r.id === excludeId);
-			const isChapterItem = chapters.some((r) => r.id === excludeId);
 
-			if (isAnnotationItem || isChapterItem) {
+			if (isAnnotationItem) {
 				return false;
 			}
 
@@ -1281,7 +1157,7 @@ export default function TimelineEditor({
 
 			return false;
 		},
-		[zoomRegions, trimRegions, annotationRegions, speedRegions, chapters],
+		[zoomRegions, trimRegions, annotationRegions, speedRegions],
 	);
 
 	const clampDuration = useCallback(
@@ -1628,30 +1504,6 @@ export default function TimelineEditor({
 			if (matchesShortcut(e, keyShortcuts.goToPrevTrimStart, isMac)) {
 				handleGoToPrevTrimStart();
 			}
-			if (matchesShortcut(e, keyShortcuts.addMarker, isMac)) {
-				store.addMarker(currentTimeMs);
-			}
-			if (matchesShortcut(e, keyShortcuts.goToNextMarker, isMac)) {
-				if (markers.length > 0 && onSeek) {
-					const sorted = [...markers].sort((a, b) => a.timeMs - b.timeMs);
-					const next = sorted.find((m) => m.timeMs > currentTimeMs + 50);
-					if (next) {
-						onSeek(next.timeMs / 1000);
-						handleGoToNow();
-					}
-				}
-			}
-			if (matchesShortcut(e, keyShortcuts.goToPrevMarker, isMac)) {
-				if (markers.length > 0 && onSeek) {
-					const sorted = [...markers].sort((a, b) => b.timeMs - a.timeMs);
-					const prev = sorted.find((m) => m.timeMs < currentTimeMs - 50);
-					if (prev) {
-						onSeek(prev.timeMs / 1000);
-						handleGoToNow();
-					}
-				}
-			}
-
 			// Tab: Cycle through overlapping annotations at current time
 			if (e.key === "Tab" && annotationRegions.length > 0) {
 				const currentTimeMs = Math.round(currentTime * 1000);
@@ -1721,14 +1573,10 @@ export default function TimelineEditor({
 		selectedSpeedId,
 		selectedChapterId,
 		annotationRegions,
-		markers,
-		store,
 		currentTime,
 		onSelectAnnotation,
 		keyShortcuts,
 		isMac,
-		onSeek,
-		currentTimeMs,
 	]);
 
 	const clampedRange = useMemo<Range>(() => {
@@ -1791,19 +1639,8 @@ export default function TimelineEditor({
 			variant: "speed",
 		}));
 
-		const chapterItems: TimelineRenderItem[] = chapters
-			.filter((ch) => ch.endMs > ch.startMs)
-			.map((ch, index) => ({
-				id: ch.id,
-				rowId: CHAPTER_ROW_ID,
-				span: { start: ch.startMs, end: ch.endMs },
-				label: t("labels.chapterItem", { index: String(index + 1) }),
-				chapterName: ch.name,
-				variant: "chapter",
-			}));
-
-		return [...zooms, ...trims, ...annotations, ...speeds, ...chapterItems];
-	}, [zoomRegions, trimRegions, annotationRegions, speedRegions, chapters, t]);
+		return [...zooms, ...trims, ...annotations, ...speeds];
+	}, [zoomRegions, trimRegions, annotationRegions, speedRegions, t]);
 
 	// Flat list of all non-annotation region spans for neighbour-clamping during drag/resize
 	const allRegionSpans = useMemo(() => {
@@ -1823,11 +1660,9 @@ export default function TimelineEditor({
 				store.setSpeedSpan(id, span);
 			} else if (annotationRegions.some((r) => r.id === id)) {
 				store.setAnnotationSpan(id, span);
-			} else if (chapters.some((r) => r.id === id)) {
-				store.setChapterSpan(id, span);
 			}
 		},
-		[zoomRegions, trimRegions, speedRegions, annotationRegions, chapters, store],
+		[zoomRegions, trimRegions, speedRegions, annotationRegions, store],
 	);
 
 	if (!videoDuration || videoDuration === 0) {
@@ -1893,15 +1728,6 @@ export default function TimelineEditor({
 					>
 						<Gauge className="w-4 h-4" />
 					</Button>
-					<Button
-						onClick={onAddChapter}
-						variant="ghost"
-						size="icon"
-						className="h-7 w-7 text-slate-400 hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all"
-						title="Add chapter (C)"
-					>
-						<BookMarked className="w-4 h-4" />
-					</Button>
 				</div>
 				<div className="w-[1px] h-4 bg-white/10" />
 				<Button
@@ -1944,15 +1770,6 @@ export default function TimelineEditor({
 					title={followPlayhead ? "Stop following playhead (L)" : "Follow playhead (L)"}
 				>
 					<LocateFixed className="w-4 h-4" />
-				</Button>
-				<Button
-					onClick={() => store.addMarker(currentTimeMs)}
-					variant="ghost"
-					size="icon"
-					className="h-7 w-7 text-slate-400 hover:text-cyan-400 hover:bg-cyan-400/10 transition-all"
-					title="Add marker (M)"
-				>
-					<Flag className="w-4 h-4" />
 				</Button>
 
 				<div className="flex items-center gap-2">
@@ -2034,14 +1851,11 @@ export default function TimelineEditor({
 						currentTimeMs={currentTimeMs}
 						onSeek={onSeek}
 						onRangeChange={setRange}
-						onSelectChapter={onSelectChapter}
 						keyframes={keyframes}
 						onTrimContextMenu={handleTrimContextMenu}
 						onRegionContextMenu={handleRegionContextMenu}
 						trimMarkStartMs={trimMarkStartMs}
 						loopingTrimId={loopingTrimId}
-						markers={markers}
-						onDeleteMarker={deleteMarker}
 					/>
 				</TimelineWrapper>
 			</div>
