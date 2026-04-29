@@ -1,5 +1,17 @@
 import type { ChapterMarker, TrimRegion } from "./types";
 
+export function adjustMsForTrims(ms: number, sortedTrims: TrimRegion[]): number {
+	let adjusted = ms;
+	for (const trim of sortedTrims) {
+		if (trim.endMs <= ms) {
+			adjusted -= trim.endMs - trim.startMs;
+		} else if (trim.startMs < ms) {
+			adjusted -= ms - trim.startMs;
+		}
+	}
+	return Math.max(0, adjusted);
+}
+
 export function formatChaptersForExport(
 	chapters: ChapterMarker[],
 	trimRegions: TrimRegion[],
@@ -9,15 +21,7 @@ export function formatChaptersForExport(
 
 	return sorted
 		.map((ch) => {
-			let adjustedMs = ch.startMs;
-			for (const trim of sortedTrims) {
-				if (trim.endMs <= ch.startMs) {
-					adjustedMs -= trim.endMs - trim.startMs;
-				} else if (trim.startMs < ch.startMs) {
-					adjustedMs -= ch.startMs - trim.startMs;
-				}
-			}
-			adjustedMs = Math.max(0, adjustedMs);
+			const adjustedMs = adjustMsForTrims(ch.startMs, sortedTrims);
 			const totalSec = Math.floor(adjustedMs / 1000);
 			const hours = Math.floor(totalSec / 3600);
 			const min = Math.floor((totalSec % 3600) / 60);

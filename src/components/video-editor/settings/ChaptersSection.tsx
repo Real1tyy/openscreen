@@ -1,5 +1,5 @@
 import { BookMarked, Clock, Copy, Play, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { formatMsCompact } from "@/utils/timeUtils";
-import { formatChaptersForExport } from "../exportUtils";
+import { adjustMsForTrims, formatChaptersForExport } from "../exportUtils";
 
 interface ChaptersSectionProps {
 	videoDurationMs: number;
@@ -29,6 +29,10 @@ export function ChaptersSection({ currentTimeMs = 0, onSeek, onAddChapter }: Cha
 	const setEditingChapterId = useEditorSelectionStore((s) => s.setEditingChapterId);
 
 	const sorted = [...chapters].sort((a, b) => a.startMs - b.startMs);
+	const sortedTrims = useMemo(
+		() => [...trimRegions].sort((a, b) => a.startMs - b.startMs),
+		[trimRegions],
+	);
 
 	const handleCopyForYouTube = useCallback(() => {
 		const text = formatChaptersForExport(chapters, trimRegions);
@@ -80,6 +84,8 @@ export function ChaptersSection({ currentTimeMs = 0, onSeek, onAddChapter }: Cha
 							name={ch.name}
 							startMs={ch.startMs}
 							endMs={ch.endMs}
+							adjustedStartMs={adjustMsForTrims(ch.startMs, sortedTrims)}
+							adjustedEndMs={adjustMsForTrims(ch.endMs, sortedTrims)}
 							index={idx}
 							isSelected={ch.id === selectedChapterId}
 							isEditing={ch.id === editingChapterId}
@@ -130,6 +136,8 @@ function ChapterItem({
 	name,
 	startMs,
 	endMs,
+	adjustedStartMs,
+	adjustedEndMs,
 	index,
 	isSelected,
 	isEditing,
@@ -146,6 +154,8 @@ function ChapterItem({
 	name: string;
 	startMs: number;
 	endMs: number;
+	adjustedStartMs: number;
+	adjustedEndMs: number;
 	index: number;
 	isSelected: boolean;
 	isEditing: boolean;
@@ -234,7 +244,10 @@ function ChapterItem({
 					</div>
 				)}
 				<div className="text-[10px] text-slate-500 tabular-nums">
-					{formatMsCompact(startMs)} — {formatMsCompact(endMs)}
+					{formatMsCompact(adjustedStartMs)} — {formatMsCompact(adjustedEndMs)}
+					{(adjustedStartMs !== startMs || adjustedEndMs !== endMs) && (
+						<span className="text-slate-600 ml-1">({formatMsCompact(startMs)})</span>
+					)}
 				</div>
 			</div>
 
