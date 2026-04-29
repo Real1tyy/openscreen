@@ -182,7 +182,6 @@ describe("mergeWithDefaults", () => {
 		expect(result.addTrim).toEqual(DEFAULT_SHORTCUTS.addTrim);
 		expect(result.addSpeed).toEqual(DEFAULT_SHORTCUTS.addSpeed);
 		expect(result.addAnnotation).toEqual(DEFAULT_SHORTCUTS.addAnnotation);
-		expect(result.addKeyframe).toEqual(DEFAULT_SHORTCUTS.addKeyframe);
 		expect(result.deleteSelected).toEqual(DEFAULT_SHORTCUTS.deleteSelected);
 		expect(result.playPause).toEqual({ key: "p" });
 	});

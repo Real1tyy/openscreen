@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -43,7 +42,6 @@ import { formatMsCompact } from "@/utils/timeUtils";
 import { TutorialHelp } from "../TutorialHelp";
 import type { CursorTelemetryPoint, SpeedRegion, TrimRegion, ZoomRegion } from "../types";
 import Item from "./Item";
-import KeyframeMarkers from "./KeyframeMarkers";
 import Row from "./Row";
 import { computeNewRegionSpan, normalizeRegionSpan } from "./regionUtils";
 import TimelineWrapper from "./TimelineWrapper";
@@ -94,14 +92,12 @@ function PlaybackCursor({
 	onSeek,
 	onRangeChange,
 	timelineRef,
-	keyframes = [],
 }: {
 	currentTimeMs: number;
 	videoDurationMs: number;
 	onSeek?: (time: number) => void;
 	onRangeChange?: (updater: (previous: Range) => Range) => void;
 	timelineRef: React.RefObject<HTMLDivElement>;
-	keyframes?: { id: string; time: number }[];
 }) {
 	const { sidebarWidth, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
 	const sideProperty = direction === "rtl" ? "right" : "left";
@@ -120,20 +116,7 @@ function PlaybackCursor({
 
 			// Allow dragging outside to 0 or max, but clamp the value
 			const relativeMs = pixelsToValue(clickX);
-			let absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
-
-			// Snap to nearby keyframe if within threshold (150ms)
-			const snapThresholdMs = 150;
-			const nearbyKeyframe = keyframes.find(
-				(kf) =>
-					Math.abs(kf.time - absoluteMs) <= snapThresholdMs &&
-					kf.time >= range.start &&
-					kf.time <= range.end,
-			);
-
-			if (nearbyKeyframe) {
-				absoluteMs = nearbyKeyframe.time;
-			}
+			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
 
 			setDragPreviewTimeMs(absoluteMs);
 
@@ -202,7 +185,6 @@ function PlaybackCursor({
 		range.end,
 		videoDurationMs,
 		pixelsToValue,
-		keyframes,
 	]);
 
 	const displayTimeMs =
@@ -631,7 +613,6 @@ function Timeline({
 	currentTimeMs,
 	onSeek,
 	onRangeChange,
-	keyframes = [],
 	onTrimContextMenu,
 	onRegionContextMenu,
 	trimMarkStartMs,
@@ -642,7 +623,6 @@ function Timeline({
 	currentTimeMs: number;
 	onSeek?: (time: number) => void;
 	onRangeChange?: (updater: (previous: Range) => Range) => void;
-	keyframes?: { id: string; time: number }[];
 	onTrimContextMenu?: (id: string, event: React.MouseEvent) => void;
 	onRegionContextMenu?: (type: RegionType, id: string, event: React.MouseEvent) => void;
 	trimMarkStartMs?: number | null;
@@ -834,7 +814,6 @@ function Timeline({
 				onSeek={onSeek}
 				onRangeChange={onRangeChange}
 				timelineRef={localTimelineRef}
-				keyframes={keyframes}
 			/>
 			<TrimMarkIndicator timeMs={trimMarkStartMs ?? null} videoDurationMs={videoDurationMs} />
 
@@ -893,8 +872,6 @@ export default function TimelineEditor({
 	);
 
 	const [range, setRange] = useState<Range>(() => createInitialRange(totalMs));
-	const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
-	const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
 	const [scrollLabels, setScrollLabels] = useState({
 		pan: "Scroll",
 		zoom: "Ctrl + Scroll",
@@ -1010,33 +987,6 @@ export default function TimelineEditor({
 			else if (ctxMenu.regionType === "annotation") store.deleteAnnotation(id);
 		},
 		[ctxMenu.regionType, store],
-	);
-
-	// Add keyframe at current playhead position
-	const addKeyframe = useCallback(() => {
-		if (totalMs === 0) return;
-		const time = Math.max(0, Math.min(currentTimeMs, totalMs));
-		if (keyframes.some((kf) => Math.abs(kf.time - time) < 1)) return;
-		setKeyframes((prev) => [...prev, { id: uuidv4(), time }]);
-	}, [currentTimeMs, totalMs, keyframes]);
-
-	// Delete selected keyframe
-	const deleteSelectedKeyframe = useCallback(() => {
-		if (!selectedKeyframeId) return;
-		setKeyframes((prev) => prev.filter((kf) => kf.id !== selectedKeyframeId));
-		setSelectedKeyframeId(null);
-	}, [selectedKeyframeId]);
-
-	// Move keyframe to new time position
-	const handleKeyframeMove = useCallback(
-		(id: string, newTime: number) => {
-			setKeyframes((prev) =>
-				prev.map((kf) =>
-					kf.id === id ? { ...kf, time: Math.max(0, Math.min(newTime, totalMs)) } : kf,
-				),
-			);
-		},
-		[totalMs],
 	);
 
 	// Delete selected zoom item
@@ -1477,9 +1427,6 @@ export default function TimelineEditor({
 				return;
 			}
 
-			if (matchesShortcut(e, keyShortcuts.addKeyframe, isMac)) {
-				addKeyframe();
-			}
 			if (matchesShortcut(e, keyShortcuts.addZoom, isMac)) {
 				handleAddZoom();
 			}
@@ -1532,9 +1479,7 @@ export default function TimelineEditor({
 				e.key === "Backspace" ||
 				matchesShortcut(e, keyShortcuts.deleteSelected, isMac)
 			) {
-				if (selectedKeyframeId) {
-					deleteSelectedKeyframe();
-				} else if (selectedZoomId) {
+				if (selectedZoomId) {
 					deleteSelectedZoom();
 				} else if (selectedTrimId) {
 					deleteSelectedTrim();
@@ -1550,7 +1495,6 @@ export default function TimelineEditor({
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [
-		addKeyframe,
 		handleAddZoom,
 		handleAddTrim,
 		handleAddAnnotation,
@@ -1560,13 +1504,11 @@ export default function TimelineEditor({
 		handleGoToPrevTrimStart,
 		followPlayhead,
 		updatePrefs,
-		deleteSelectedKeyframe,
 		deleteSelectedZoom,
 		deleteSelectedTrim,
 		deleteSelectedAnnotation,
 		deleteSelectedSpeed,
 		deleteSelectedChapter,
-		selectedKeyframeId,
 		selectedZoomId,
 		selectedTrimId,
 		selectedAnnotationId,
@@ -1825,7 +1767,6 @@ export default function TimelineEditor({
 			<div
 				ref={timelineContainerRef}
 				className="flex-1 overflow-y-auto overflow-x-hidden bg-[#09090b] relative"
-				onClick={() => setSelectedKeyframeId(null)}
 			>
 				<TimelineWrapper
 					range={clampedRange}
@@ -1837,21 +1778,12 @@ export default function TimelineEditor({
 					onItemSpanChange={handleItemSpanChange}
 					allRegionSpans={allRegionSpans}
 				>
-					<KeyframeMarkers
-						keyframes={keyframes}
-						selectedKeyframeId={selectedKeyframeId}
-						setSelectedKeyframeId={setSelectedKeyframeId}
-						onKeyframeMove={handleKeyframeMove}
-						videoDurationMs={totalMs}
-						timelineRef={timelineContainerRef}
-					/>
 					<Timeline
 						items={timelineItems}
 						videoDurationMs={totalMs}
 						currentTimeMs={currentTimeMs}
 						onSeek={onSeek}
 						onRangeChange={setRange}
-						keyframes={keyframes}
 						onTrimContextMenu={handleTrimContextMenu}
 						onRegionContextMenu={handleRegionContextMenu}
 						trimMarkStartMs={trimMarkStartMs}
