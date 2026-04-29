@@ -447,8 +447,6 @@ export default function VideoEditor() {
 					setLastSavedSnapshot(
 						createProjectSnapshot({ screenVideoPath: sourcePath }, INITIAL_EDITOR_STATE),
 					);
-				} else {
-					setError("No video to load. Please record or select a video.");
 				}
 			} catch (err) {
 				setError("Error loading video: " + String(err));
@@ -800,13 +798,48 @@ export default function VideoEditor() {
 			<div className="flex items-center justify-center h-screen bg-background">
 				<div className="flex flex-col items-center gap-3">
 					<div className="text-destructive">{error}</div>
-					<button
-						type="button"
-						onClick={handleLoadProject}
-						className="px-3 py-1.5 rounded-md bg-[#34B27B] text-white text-sm hover:bg-[#34B27B]/90"
-					>
-						Load Project File
-					</button>
+					<div className="flex gap-2">
+						<button
+							type="button"
+							onClick={handleOpenVideo}
+							className="px-3 py-1.5 rounded-md bg-[#34B27B] text-white text-sm hover:bg-[#34B27B]/90"
+						>
+							Open Video
+						</button>
+						<button
+							type="button"
+							onClick={handleLoadProject}
+							className="px-3 py-1.5 rounded-md bg-white/10 text-slate-200 text-sm hover:bg-white/15 border border-white/10"
+						>
+							Open Project
+						</button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	if (!videoPath) {
+		return (
+			<div className="flex items-center justify-center h-screen bg-[#09090b]">
+				<div className="flex flex-col items-center gap-4">
+					<div className="text-slate-400 text-sm">No video loaded</div>
+					<div className="flex gap-2">
+						<button
+							type="button"
+							onClick={handleOpenVideo}
+							className="px-4 py-2 rounded-md bg-[#34B27B] text-white text-sm font-medium hover:bg-[#34B27B]/90"
+						>
+							Open Video
+						</button>
+						<button
+							type="button"
+							onClick={handleLoadProject}
+							className="px-4 py-2 rounded-md bg-white/10 text-slate-200 text-sm font-medium hover:bg-white/15 border border-white/10"
+						>
+							Open Project
+						</button>
+					</div>
 				</div>
 			</div>
 		);

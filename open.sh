@@ -1,8 +1,8 @@
 #!/bin/bash
-# Open a video in the OpenScreen editor with standard settings
-# Usage: ./open.sh /path/to/recording.mp4
+# Open the OpenScreen editor, optionally with a video file
+# Usage: ./open.sh                                  (empty project)
+#        ./open.sh [--debug] /path/to/recording.mp4
 #        ./open.sh --latest /path/to/directory
-#        ./open.sh --debug /path/to/recording.mp4  (opens devtools)
 
 set -e
 
@@ -42,9 +42,8 @@ else
 fi
 
 if [ -z "$INPUT" ]; then
-  echo "Usage: ./open.sh [--debug] /path/to/recording.mp4"
-  echo "       ./open.sh --latest /path/to/directory"
-  exit 1
+  "$OPENSCREEN" &
+  exit 0
 fi
 
 "$OPENSCREEN" "$INPUT" \
