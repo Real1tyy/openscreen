@@ -877,9 +877,7 @@ pub async fn load_project_file(
             match std::fs::read_to_string(&path_str) {
                 Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
                     Ok(project) => {
-                        let project_dir = Path::new(&path_str).parent().unwrap_or(Path::new("."));
-                        let rec_dir = recordings_dir(&app);
-                        let approved = extract_approved_media_paths(&project, project_dir, &rec_dir);
+                        let approved = extract_approved_media_paths(&project);
 
                         if let Some(media) = project.get("media") {
                             let mut app_state = state.lock().unwrap();
@@ -1140,24 +1138,16 @@ pub fn reveal_in_folder(file_path: String) -> GenericResult {
     }
 }
 
-fn extract_approved_media_paths(
-    project: &serde_json::Value,
-    project_dir: &Path,
-    rec_dir: &Path,
-) -> Vec<String> {
+fn extract_approved_media_paths(project: &serde_json::Value) -> Vec<String> {
     let mut approved = Vec::new();
     if let Some(media) = project.get("media") {
         if let Some(screen) = media.get("screenVideoPath").and_then(|v| v.as_str()) {
-            if is_path_within_dir(Path::new(screen), project_dir)
-                || is_path_within_dir(Path::new(screen), rec_dir)
-            {
+            if has_valid_video_extension(screen) {
                 approved.push(screen.to_string());
             }
         }
         if let Some(webcam) = media.get("webcamVideoPath").and_then(|v| v.as_str()) {
-            if is_path_within_dir(Path::new(webcam), project_dir)
-                || is_path_within_dir(Path::new(webcam), rec_dir)
-            {
+            if has_valid_video_extension(webcam) {
                 approved.push(webcam.to_string());
             }
         }
@@ -1411,59 +1401,32 @@ mod tests {
 
     #[test]
     fn test_extract_approved_media_paths_screen_only() {
-        let proj_dir = test_dir("extract_screen");
-        let rec_dir = test_dir("extract_screen_rec");
-        fs::create_dir_all(&proj_dir).unwrap();
-        fs::create_dir_all(&rec_dir).unwrap();
-
-        let screen_path = proj_dir.join("screen.webm");
-        fs::write(&screen_path, "fake").unwrap();
-
         let project = serde_json::json!({
             "media": {
-                "screenVideoPath": screen_path.to_string_lossy()
+                "screenVideoPath": "/home/user/videos/screen.webm"
             }
         });
 
-        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        let approved = extract_approved_media_paths(&project);
         assert_eq!(approved.len(), 1);
-        assert_eq!(approved[0], screen_path.to_string_lossy());
-        cleanup(&proj_dir);
-        cleanup(&rec_dir);
+        assert_eq!(approved[0], "/home/user/videos/screen.webm");
     }
 
     #[test]
     fn test_extract_approved_media_paths_screen_and_webcam() {
-        let proj_dir = test_dir("extract_both");
-        let rec_dir = test_dir("extract_both_rec");
-        fs::create_dir_all(&proj_dir).unwrap();
-        fs::create_dir_all(&rec_dir).unwrap();
-
-        let screen_path = proj_dir.join("screen.webm");
-        let webcam_path = proj_dir.join("webcam.webm");
-        fs::write(&screen_path, "fake").unwrap();
-        fs::write(&webcam_path, "fake").unwrap();
-
         let project = serde_json::json!({
             "media": {
-                "screenVideoPath": screen_path.to_string_lossy(),
-                "webcamVideoPath": webcam_path.to_string_lossy()
+                "screenVideoPath": "/home/user/videos/screen.webm",
+                "webcamVideoPath": "/home/user/videos/webcam.webm"
             }
         });
 
-        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        let approved = extract_approved_media_paths(&project);
         assert_eq!(approved.len(), 2);
-        cleanup(&proj_dir);
-        cleanup(&rec_dir);
     }
 
     #[test]
-    fn test_extract_approved_media_paths_rejects_outside_paths() {
-        let proj_dir = test_dir("extract_reject");
-        let rec_dir = test_dir("extract_reject_rec");
-        fs::create_dir_all(&proj_dir).unwrap();
-        fs::create_dir_all(&rec_dir).unwrap();
-
+    fn test_extract_approved_media_paths_rejects_non_video_extensions() {
         let project = serde_json::json!({
             "media": {
                 "screenVideoPath": "/etc/shadow",
@@ -1471,40 +1434,26 @@ mod tests {
             }
         });
 
-        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
-        assert!(approved.is_empty(), "paths outside project and recordings dirs must be rejected");
-        cleanup(&proj_dir);
-        cleanup(&rec_dir);
+        let approved = extract_approved_media_paths(&project);
+        assert!(approved.is_empty(), "paths without video extensions must be rejected");
     }
 
     #[test]
-    fn test_extract_approved_media_paths_in_recordings_dir() {
-        let proj_dir = test_dir("extract_inrec");
-        let rec_dir = test_dir("extract_inrec_rec");
-        fs::create_dir_all(&proj_dir).unwrap();
-        fs::create_dir_all(&rec_dir).unwrap();
-
-        let screen_path = rec_dir.join("recording-001.webm");
-        fs::write(&screen_path, "fake").unwrap();
-
+    fn test_extract_approved_media_paths_approves_outside_dirs() {
         let project = serde_json::json!({
             "media": {
-                "screenVideoPath": screen_path.to_string_lossy()
+                "screenVideoPath": "/home/user/Documents/OBS-Recordings/recording.mp4"
             }
         });
 
-        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
-        assert_eq!(approved.len(), 1);
-        cleanup(&proj_dir);
-        cleanup(&rec_dir);
+        let approved = extract_approved_media_paths(&project);
+        assert_eq!(approved.len(), 1, "video paths outside project/rec dirs should be approved");
     }
 
     #[test]
     fn test_extract_approved_media_paths_no_media_key() {
-        let proj_dir = test_dir("extract_nomedia");
-        let rec_dir = test_dir("extract_nomedia_rec");
         let project = serde_json::json!({"settings": {}});
-        let approved = extract_approved_media_paths(&project, &proj_dir, &rec_dir);
+        let approved = extract_approved_media_paths(&project);
         assert!(approved.is_empty());
     }
 
