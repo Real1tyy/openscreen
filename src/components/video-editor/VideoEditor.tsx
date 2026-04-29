@@ -945,6 +945,7 @@ export default function VideoEditor() {
 											onPreviewSpeedChange={setPreviewSpeed}
 											isLooping={loopingTrimId != null}
 											onStopLoop={clearLoop}
+											trimMarkStartMs={trimMarkStartMs}
 										/>
 									</div>
 									<div className="flex items-center gap-2 shrink-0">

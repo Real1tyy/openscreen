@@ -19,6 +19,8 @@
 	"playback": {
 		"play": "播放",
 		"pause": "暂停",
+		"rewindToStart": "回到开头",
+		"goToTrimMark": "跳转到剪辑标记",
 		"fullscreen": "全屏",
 		"exitFullscreen": "退出全屏"
 	},

@@ -1,4 +1,4 @@
-import { Maximize, Minimize, Pause, Play, Repeat } from "lucide-react";
+import { Maximize, Minimize, Pause, Play, Repeat, SkipBack } from "lucide-react";
 import { useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ interface PlaybackControlsProps {
 	onPreviewSpeedChange?: (speed: number) => void;
 	isLooping?: boolean;
 	onStopLoop?: () => void;
+	trimMarkStartMs?: number | null;
 }
 
 const PREVIEW_SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];
@@ -33,6 +34,7 @@ export default function PlaybackControls({
 	onPreviewSpeedChange,
 	isLooping = false,
 	onStopLoop,
+	trimMarkStartMs,
 }: PlaybackControlsProps) {
 	const t = useScopedT("common");
 	const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -46,6 +48,28 @@ export default function PlaybackControls({
 
 	return (
 		<div className="flex items-center gap-2 px-1 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 shadow-xl transition-all duration-300 hover:bg-black/70 hover:border-white/20">
+			<Button
+				onClick={() => onSeek(0)}
+				size="icon"
+				className="w-7 h-7 rounded-full bg-white/5 text-slate-400 hover:bg-white/15 hover:text-white border border-white/10 transition-all duration-200"
+				aria-label={t("playback.rewindToStart")}
+				title={t("playback.rewindToStart")}
+			>
+				<SkipBack className="w-3 h-3 fill-current" />
+			</Button>
+
+			{trimMarkStartMs != null && (
+				<Button
+					onClick={() => onSeek(trimMarkStartMs / 1000)}
+					size="icon"
+					className="w-7 h-7 rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 hover:text-red-300 border border-red-500/20 transition-all duration-200"
+					aria-label={t("playback.goToTrimMark")}
+					title={`${t("playback.goToTrimMark")} (${formatTimePlayback(trimMarkStartMs / 1000)})`}
+				>
+					<span className="text-[9px] font-bold">I</span>
+				</Button>
+			)}
+
 			<Button
 				onClick={onTogglePlayPause}
 				size="icon"
@@ -142,9 +166,7 @@ export default function PlaybackControls({
 										}}
 										className={cn(
 											"w-full px-3 py-1 text-[11px] text-left hover:bg-white/10 transition-colors tabular-nums",
-											s === previewSpeed
-												? "text-amber-300 font-semibold"
-												: "text-slate-300",
+											s === previewSpeed ? "text-amber-300 font-semibold" : "text-slate-300",
 										)}
 									>
 										{s}×

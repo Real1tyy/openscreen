@@ -19,6 +19,8 @@
 	"playback": {
 		"play": "Play",
 		"pause": "Pause",
+		"rewindToStart": "Rewind to Start",
+		"goToTrimMark": "Go to Trim Mark",
 		"fullscreen": "Fullscreen",
 		"exitFullscreen": "Exit Fullscreen"
 	},

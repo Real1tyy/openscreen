@@ -19,6 +19,8 @@
 	"playback": {
 		"play": "Reproducir",
 		"pause": "Pausar",
+		"rewindToStart": "Rebobinar al inicio",
+		"goToTrimMark": "Ir a la marca de corte",
 		"fullscreen": "Pantalla completa",
 		"exitFullscreen": "Salir de pantalla completa"
 	},

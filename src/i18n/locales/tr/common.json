@@ -19,6 +19,8 @@
 	"playback": {
 		"play": "Oynat",
 		"pause": "Duraklat",
+		"rewindToStart": "Başa Sar",
+		"goToTrimMark": "Kesme İşaretine Git",
 		"fullscreen": "Tam Ekran",
 		"exitFullscreen": "Tam Ekrandan Çık"
 	},
