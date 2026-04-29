@@ -129,8 +129,8 @@ export const DEFAULT_SHORTCUTS: ShortcutsConfig = {
 	playPause: { key: " " },
 	goToNow: { key: "g" },
 	followPlayhead: { key: "l" },
-	goToTrimStart: { key: "i" },
-	goToPrevTrimStart: { key: "i", shift: true },
+	goToTrimStart: { key: "n" },
+	goToPrevTrimStart: { key: "n", shift: true },
 };
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
