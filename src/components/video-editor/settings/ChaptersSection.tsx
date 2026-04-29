@@ -1,5 +1,5 @@
 import { BookMarked, Clock, Copy, Play, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import { useEditorStore } from "@/stores/useEditorStore";
 import { formatMsCompact } from "@/utils/timeUtils";
-import { adjustMsForTrims, formatChaptersForExport } from "../exportUtils";
+import { computeEffectiveMs, formatChaptersForExport } from "../exportUtils";
 
 interface ChaptersSectionProps {
 	videoDurationMs: number;
@@ -19,6 +19,7 @@ interface ChaptersSectionProps {
 export function ChaptersSection({ currentTimeMs = 0, onSeek, onAddChapter }: ChaptersSectionProps) {
 	const chapters = useEditorStore((s) => s.chapters);
 	const trimRegions = useEditorStore((s) => s.trimRegions);
+	const speedRegions = useEditorStore((s) => s.speedRegions);
 	const renameChapter = useEditorStore((s) => s.renameChapter);
 	const deleteChapter = useEditorStore((s) => s.deleteChapter);
 	const setChapterSpan = useEditorStore((s) => s.setChapterSpan);
@@ -29,16 +30,12 @@ export function ChaptersSection({ currentTimeMs = 0, onSeek, onAddChapter }: Cha
 	const setEditingChapterId = useEditorSelectionStore((s) => s.setEditingChapterId);
 
 	const sorted = [...chapters].sort((a, b) => a.startMs - b.startMs);
-	const sortedTrims = useMemo(
-		() => [...trimRegions].sort((a, b) => a.startMs - b.startMs),
-		[trimRegions],
-	);
 
 	const handleCopyForYouTube = useCallback(() => {
-		const text = formatChaptersForExport(chapters, trimRegions);
+		const text = formatChaptersForExport(chapters, trimRegions, speedRegions);
 		navigator.clipboard.writeText(text);
 		toast.success("Chapters copied for YouTube");
-	}, [chapters, trimRegions]);
+	}, [chapters, trimRegions, speedRegions]);
 
 	const handleSetStartToNow = useCallback(
 		(id: string) => {
@@ -84,8 +81,8 @@ export function ChaptersSection({ currentTimeMs = 0, onSeek, onAddChapter }: Cha
 							name={ch.name}
 							startMs={ch.startMs}
 							endMs={ch.endMs}
-							adjustedStartMs={adjustMsForTrims(ch.startMs, sortedTrims)}
-							adjustedEndMs={adjustMsForTrims(ch.endMs, sortedTrims)}
+							adjustedStartMs={computeEffectiveMs(ch.startMs, trimRegions, speedRegions)}
+							adjustedEndMs={computeEffectiveMs(ch.endMs, trimRegions, speedRegions)}
 							index={idx}
 							isSelected={ch.id === selectedChapterId}
 							isEditing={ch.id === editingChapterId}

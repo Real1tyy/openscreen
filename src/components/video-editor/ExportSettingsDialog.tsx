@@ -1,8 +1,9 @@
-import { Download, X } from "lucide-react";
+import { Clock, Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import { cn } from "@/lib/utils";
+import { formatMsCompact } from "@/utils/timeUtils";
 import { FormatSelector } from "./FormatSelector";
 import { GifOptionsPanel } from "./GifOptionsPanel";
 
@@ -27,6 +28,7 @@ interface ExportSettingsDialogProps {
 		format: string;
 	} | null;
 	onSaveUnsavedExport?: () => void;
+	effectiveDurationMs?: number;
 }
 
 export function ExportSettingsDialog({
@@ -46,6 +48,7 @@ export function ExportSettingsDialog({
 	onExport,
 	unsavedExport,
 	onSaveUnsavedExport,
+	effectiveDurationMs,
 }: ExportSettingsDialogProps) {
 	const t = useScopedT("settings");
 
@@ -113,6 +116,16 @@ export function ExportSettingsDialog({
 							onSizePresetChange={onGifSizePresetChange}
 							outputDimensions={gifOutputDimensions}
 						/>
+					</div>
+				)}
+
+				{effectiveDurationMs != null && effectiveDurationMs > 0 && (
+					<div className="mt-5 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/5">
+						<Clock className="w-3.5 h-3.5 text-slate-400" />
+						<span className="text-xs text-slate-400">Duration</span>
+						<span className="text-xs font-medium text-slate-200 tabular-nums ml-auto">
+							{formatMsCompact(effectiveDurationMs)}
+						</span>
 					</div>
 				)}
 

@@ -1,8 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { EditorState } from "@/stores/useEditorStore";
 import { getAssetPath } from "@/lib/assetPath";
-import { getAPI, isTauri } from "@/lib/tauriBridge";
 import {
 	calculateOutputDimensions,
 	type ExportFormat,
@@ -16,10 +14,9 @@ import {
 	VideoExporter,
 } from "@/lib/exporter";
 import { computeExportDimensions } from "@/lib/exporter/exportDimensions";
-import {
-	getAspectRatioValue,
-	getNativeAspectRatioValue,
-} from "@/utils/aspectRatioUtils";
+import { getAPI, isTauri } from "@/lib/tauriBridge";
+import type { EditorState } from "@/stores/useEditorStore";
+import { getAspectRatioValue, getNativeAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { formatChaptersForExport } from "../exportUtils";
 import type { ChapterMarker, CursorTelemetryPoint } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
@@ -55,6 +52,7 @@ async function saveExportResult(
 	onError: (msg: string) => void,
 	chapters?: ChapterMarker[],
 	trimRegions?: EditorState["trimRegions"],
+	speedRegions?: EditorState["speedRegions"],
 ) {
 	const arrayBuffer = await blob.arrayBuffer();
 	const fileName = `export-${Date.now()}.${extension}`;
@@ -66,9 +64,11 @@ async function saveExportResult(
 	} else if (saveResult.success && saveResult.path) {
 		onSaved(formatLabel, saveResult.path);
 		if (extension === "mp4" && chapters && chapters.length > 0 && trimRegions) {
-			const chaptersText = formatChaptersForExport(chapters, trimRegions);
+			const chaptersText = formatChaptersForExport(chapters, trimRegions, speedRegions ?? []);
 			const chaptersPath = saveResult.path.replace(/\.mp4$/i, "-chapters.txt");
-			getAPI().writeTextFile(chaptersPath, chaptersText).catch(() => {});
+			getAPI()
+				.writeTextFile(chaptersPath, chaptersText)
+				.catch(() => {});
 		}
 	} else {
 		const msg = saveResult.message || `Failed to save ${formatLabel}`;
@@ -104,9 +104,22 @@ export function useExport({
 	const exporterRef = useRef<VideoExporter | null>(null);
 
 	const {
-		wallpaper, zoomRegions, trimRegions, speedRegions, annotationRegions,
-		shadowIntensity, showBlur, motionBlurAmount, borderRadius, padding,
-		cropRegion, aspectRatio, webcamLayoutPreset, webcamMaskShape, webcamSizePreset, webcamPosition,
+		wallpaper,
+		zoomRegions,
+		trimRegions,
+		speedRegions,
+		annotationRegions,
+		shadowIntensity,
+		showBlur,
+		motionBlurAmount,
+		borderRadius,
+		padding,
+		cropRegion,
+		aspectRatio,
+		webcamLayoutPreset,
+		webcamMaskShape,
+		webcamSizePreset,
+		webcamPosition,
 	} = editorState;
 
 	const handleShowExportedFile = useCallback(async (filePath: string) => {
@@ -161,9 +174,15 @@ export function useExport({
 
 	const handleExport = useCallback(
 		async (settings: ExportSettings) => {
-			if (!videoPath) { toast.error("No video loaded"); return; }
+			if (!videoPath) {
+				toast.error("No video loaded");
+				return;
+			}
 			const video = videoPlaybackRef.current?.video;
-			if (!video) { toast.error("Video not ready"); return; }
+			if (!video) {
+				toast.error("Video not ready");
+				return;
+			}
 
 			setIsExporting(true);
 			setExportProgress(null);
@@ -192,12 +211,24 @@ export function useExport({
 					videoUrl: videoPath,
 					webcamVideoUrl: webcamVideoPath || undefined,
 					wallpaper: resolvedWallpaper,
-					zoomRegions, trimRegions, speedRegions,
+					zoomRegions,
+					trimRegions,
+					speedRegions,
 					showShadow: shadowIntensity > 0,
-					shadowIntensity, showBlur, motionBlurAmount, borderRadius, padding,
-					cropRegion, annotationRegions,
-					webcamLayoutPreset, webcamMaskShape, webcamSizePreset, webcamPosition,
-					previewWidth, previewHeight, cursorTelemetry,
+					shadowIntensity,
+					showBlur,
+					motionBlurAmount,
+					borderRadius,
+					padding,
+					cropRegion,
+					annotationRegions,
+					webcamLayoutPreset,
+					webcamMaskShape,
+					webcamSizePreset,
+					webcamPosition,
+					previewWidth,
+					previewHeight,
+					cursorTelemetry,
 					onProgress: (progress: ExportProgress) => setExportProgress(progress),
 				};
 
@@ -217,7 +248,10 @@ export function useExport({
 
 					if (result.success && result.blob) {
 						await saveExportResult(
-							result.blob, "gif", "GIF", handleExportSaved,
+							result.blob,
+							"gif",
+							"GIF",
+							handleExportSaved,
 							(data) => setUnsavedExport(data),
 							(msg) => setExportError(msg),
 						);
@@ -227,7 +261,12 @@ export function useExport({
 					}
 				} else {
 					const quality = settings.quality || exportQuality;
-					const dims = computeExportDimensions(sourceWidth, sourceHeight, aspectRatioValue, quality);
+					const dims = computeExportDimensions(
+						sourceWidth,
+						sourceHeight,
+						aspectRatioValue,
+						quality,
+					);
 
 					// Try NVENC hardware encoding in Tauri, fall back to WebCodecs
 					let exported = false;
@@ -273,8 +312,12 @@ export function useExport({
 								console.warn("[Export] NVENC export failed, falling back:", nvencFailReason);
 							}
 						} catch (nvencError) {
-							nvencFailReason = nvencError instanceof Error ? nvencError.message : String(nvencError);
-							console.warn("[Export] NVENC path failed, falling back to WebCodecs:", nvencFailReason);
+							nvencFailReason =
+								nvencError instanceof Error ? nvencError.message : String(nvencError);
+							console.warn(
+								"[Export] NVENC path failed, falling back to WebCodecs:",
+								nvencFailReason,
+							);
 						}
 					}
 
@@ -293,10 +336,15 @@ export function useExport({
 
 						if (result.success && result.blob) {
 							await saveExportResult(
-								result.blob, "mp4", "Video", handleExportSaved,
+								result.blob,
+								"mp4",
+								"Video",
+								handleExportSaved,
 								(data) => setUnsavedExport(data),
 								(msg) => setExportError(msg),
-								chapters, trimRegions,
+								chapters,
+								trimRegions,
+								speedRegions,
 							);
 						} else {
 							const baseError = result.error || "Export failed";
@@ -323,18 +371,43 @@ export function useExport({
 			}
 		},
 		[
-			videoPath, webcamVideoPath, wallpaper, zoomRegions, trimRegions, speedRegions,
-			shadowIntensity, showBlur, motionBlurAmount, borderRadius, padding,
-			cropRegion, annotationRegions, isPlaying, aspectRatio,
-			webcamLayoutPreset, webcamMaskShape, webcamSizePreset, webcamPosition,
-			exportQuality, handleExportSaved, cursorTelemetry, chapters, videoPlaybackRef,
+			videoPath,
+			webcamVideoPath,
+			wallpaper,
+			zoomRegions,
+			trimRegions,
+			speedRegions,
+			shadowIntensity,
+			showBlur,
+			motionBlurAmount,
+			borderRadius,
+			padding,
+			cropRegion,
+			annotationRegions,
+			isPlaying,
+			aspectRatio,
+			webcamLayoutPreset,
+			webcamMaskShape,
+			webcamSizePreset,
+			webcamPosition,
+			exportQuality,
+			handleExportSaved,
+			cursorTelemetry,
+			chapters,
+			videoPlaybackRef,
 		],
 	);
 
 	const handleOpenExportDialog = useCallback(() => {
-		if (!videoPath) { toast.error("No video loaded"); return; }
+		if (!videoPath) {
+			toast.error("No video loaded");
+			return;
+		}
 		const video = videoPlaybackRef.current?.video;
-		if (!video) { toast.error("Video not ready"); return; }
+		if (!video) {
+			toast.error("Video not ready");
+			return;
+		}
 
 		const sourceWidth = video.videoWidth || 1920;
 		const sourceHeight = video.videoHeight || 1080;
@@ -343,25 +416,44 @@ export function useExport({
 				? getNativeAspectRatioValue(sourceWidth, sourceHeight, cropRegion)
 				: getAspectRatioValue(aspectRatio);
 		const gifDimensions = calculateOutputDimensions(
-			sourceWidth, sourceHeight, gifSizePreset, GIF_SIZE_PRESETS, aspectRatioValue,
+			sourceWidth,
+			sourceHeight,
+			gifSizePreset,
+			GIF_SIZE_PRESETS,
+			aspectRatioValue,
 		);
 
 		const settings: ExportSettings = {
 			format: exportFormat,
 			quality: exportFormat === "mp4" ? exportQuality : undefined,
-			gifConfig: exportFormat === "gif"
-				? {
-					frameRate: gifFrameRate, loop: gifLoop, sizePreset: gifSizePreset,
-					width: gifDimensions.width, height: gifDimensions.height,
-				}
-				: undefined,
+			gifConfig:
+				exportFormat === "gif"
+					? {
+							frameRate: gifFrameRate,
+							loop: gifLoop,
+							sizePreset: gifSizePreset,
+							width: gifDimensions.width,
+							height: gifDimensions.height,
+						}
+					: undefined,
 		};
 
 		setShowExportDialog(true);
 		setExportError(null);
 		setExportedFilePath(null);
 		handleExport(settings);
-	}, [videoPath, exportFormat, exportQuality, gifFrameRate, gifLoop, gifSizePreset, aspectRatio, cropRegion, handleExport, videoPlaybackRef]);
+	}, [
+		videoPath,
+		exportFormat,
+		exportQuality,
+		gifFrameRate,
+		gifLoop,
+		gifSizePreset,
+		aspectRatio,
+		cropRegion,
+		handleExport,
+		videoPlaybackRef,
+	]);
 
 	const handleCancelExport = useCallback(() => {
 		if (exporterRef.current) {

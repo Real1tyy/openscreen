@@ -32,6 +32,7 @@ import {
 import { formatMsCompact } from "@/utils/timeUtils";
 import { ExportDialog } from "./ExportDialog";
 import { ExportSettingsDialog } from "./ExportSettingsDialog";
+import { computeEffectiveMs } from "./exportUtils";
 import { useEditorKeyboard } from "./hooks/useEditorKeyboard";
 import { useExport } from "./hooks/useExport";
 import { useTrimPlayback } from "./hooks/useTrimPlayback";
@@ -265,6 +266,11 @@ export default function VideoEditor() {
 		cursorTelemetry,
 		chapters,
 	});
+
+	const effectiveDurationMs = useMemo(
+		() => computeEffectiveMs(Math.round(duration * 1000), trimRegions, speedRegions),
+		[duration, trimRegions, speedRegions],
+	);
 
 	const currentProjectMedia = useMemo<ProjectMedia | null>(() => {
 		const screenVideoPath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
@@ -570,12 +576,15 @@ export default function VideoEditor() {
 		getAPI().setHasUnsavedChanges(hasUnsavedChanges);
 	}, [hasUnsavedChanges]);
 
+	const saveProjectRef = useRef(saveProject);
+	saveProjectRef.current = saveProject;
+
 	useEffect(() => {
 		const cleanup = getAPI().onRequestSaveBeforeClose(async () => {
-			return saveProject(false);
+			return saveProjectRef.current(false);
 		});
 		return () => cleanup();
-	}, [saveProject]);
+	}, []);
 
 	const handleSaveProject = useCallback(async () => {
 		await saveProject(false);
@@ -606,10 +615,19 @@ export default function VideoEditor() {
 		toast.success(`Project loaded from ${result.path}`);
 	}, [applyLoadedProject]);
 
+	const handleLoadProjectRef = useRef(handleLoadProject);
+	handleLoadProjectRef.current = handleLoadProject;
+	const handleSaveProjectRef = useRef(handleSaveProject);
+	handleSaveProjectRef.current = handleSaveProject;
+	const handleSaveProjectAsRef = useRef(handleSaveProjectAs);
+	handleSaveProjectAsRef.current = handleSaveProjectAs;
+
 	useEffect(() => {
-		const removeLoadListener = getAPI().onMenuLoadProject(handleLoadProject);
-		const removeSaveListener = getAPI().onMenuSaveProject(handleSaveProject);
-		const removeSaveAsListener = getAPI().onMenuSaveProjectAs(handleSaveProjectAs);
+		const removeLoadListener = getAPI().onMenuLoadProject(() => handleLoadProjectRef.current());
+		const removeSaveListener = getAPI().onMenuSaveProject(() => handleSaveProjectRef.current());
+		const removeSaveAsListener = getAPI().onMenuSaveProjectAs(() =>
+			handleSaveProjectAsRef.current(),
+		);
 		const removePrefsListener = getAPI().onMenuPreferences(() => setShowPreferences(true));
 
 		return () => {
@@ -618,7 +636,7 @@ export default function VideoEditor() {
 			removeSaveAsListener?.();
 			removePrefsListener?.();
 		};
-	}, [handleLoadProject, handleSaveProject, handleSaveProjectAs]);
+	}, []);
 
 	useEffect(() => {
 		let mounted = true;
@@ -853,14 +871,21 @@ export default function VideoEditor() {
 											onStopLoop={clearLoop}
 										/>
 									</div>
-									<button
-										type="button"
-										onClick={() => setShowExportSettings(true)}
-										className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#34B27B] text-white text-xs font-semibold shadow-lg shadow-[#34B27B]/20 hover:bg-[#34B27B]/90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shrink-0"
-									>
-										<Download className="w-3.5 h-3.5" />
-										Export
-									</button>
+									<div className="flex items-center gap-2 shrink-0">
+										{effectiveDurationMs !== Math.round(duration * 1000) && (
+											<span className="text-[10px] text-slate-500 tabular-nums">
+												{formatMsCompact(effectiveDurationMs)}
+											</span>
+										)}
+										<button
+											type="button"
+											onClick={() => setShowExportSettings(true)}
+											className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#34B27B] text-white text-xs font-semibold shadow-lg shadow-[#34B27B]/20 hover:bg-[#34B27B]/90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 shrink-0"
+										>
+											<Download className="w-3.5 h-3.5" />
+											Export
+										</button>
+									</div>
 								</div>
 							</div>
 						</Panel>
@@ -946,6 +971,7 @@ export default function VideoEditor() {
 				onExport={handleOpenExportDialog}
 				unsavedExport={unsavedExport}
 				onSaveUnsavedExport={handleSaveUnsavedExport}
+				effectiveDurationMs={effectiveDurationMs}
 			/>
 
 			<ExportDialog
