@@ -5,6 +5,45 @@ import { cn } from "@/lib/utils";
 import { formatTimePlayback } from "@/utils/timeUtils";
 import { Button } from "../ui/button";
 
+function CustomSpeedEntry({
+	onApply,
+	onClose,
+}: {
+	onApply: (speed: number) => void;
+	onClose: () => void;
+}) {
+	const [value, setValue] = useState("");
+	const inputRef = useRef<HTMLInputElement>(null);
+
+	function handleSubmit() {
+		const num = Number.parseFloat(value);
+		if (!Number.isNaN(num) && num >= 0.1 && num <= 16) {
+			onApply(Math.round(num * 100) / 100);
+			onClose();
+		}
+	}
+
+	return (
+		<div className="px-2 py-1.5 border-t border-white/10">
+			<input
+				ref={inputRef}
+				autoFocus
+				type="text"
+				inputMode="decimal"
+				placeholder="e.g. 1.13"
+				value={value}
+				onChange={(e) => setValue(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") handleSubmit();
+					if (e.key === "Escape") onClose();
+					e.stopPropagation();
+				}}
+				className="w-full px-2 py-1 rounded bg-white/5 border border-white/10 text-[11px] text-white placeholder-slate-500 outline-none focus:border-amber-500/50"
+			/>
+		</div>
+	);
+}
+
 interface PlaybackControlsProps {
 	isPlaying: boolean;
 	currentTime: number;
@@ -20,7 +59,7 @@ interface PlaybackControlsProps {
 	trimMarkStartMs?: number | null;
 }
 
-const PREVIEW_SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];
+const PREVIEW_SPEED_PRESETS = [0.25, 0.5, 0.75, 1, 1.13, 1.25, 1.38, 1.5, 1.75, 2, 3, 5];
 
 export default function PlaybackControls({
 	isPlaying,
@@ -38,6 +77,7 @@ export default function PlaybackControls({
 }: PlaybackControlsProps) {
 	const t = useScopedT("common");
 	const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+	const [showCustomInput, setShowCustomInput] = useState(false);
 	const speedBtnRef = useRef<HTMLButtonElement>(null);
 
 	function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -154,7 +194,13 @@ export default function PlaybackControls({
 					</button>
 					{showSpeedMenu && (
 						<>
-							<div className="fixed inset-0 z-[100]" onClick={() => setShowSpeedMenu(false)} />
+							<div
+								className="fixed inset-0 z-[100]"
+								onClick={() => {
+									setShowSpeedMenu(false);
+									setShowCustomInput(false);
+								}}
+							/>
 							<div className="absolute bottom-full mb-2 right-0 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-xl z-[101] py-1 min-w-[80px]">
 								{PREVIEW_SPEED_PRESETS.map((s) => (
 									<button
@@ -163,6 +209,7 @@ export default function PlaybackControls({
 										onClick={() => {
 											onPreviewSpeedChange(s);
 											setShowSpeedMenu(false);
+											setShowCustomInput(false);
 										}}
 										className={cn(
 											"w-full px-3 py-1 text-[11px] text-left hover:bg-white/10 transition-colors tabular-nums",
@@ -172,6 +219,24 @@ export default function PlaybackControls({
 										{s}×
 									</button>
 								))}
+								{showCustomInput ? (
+									<CustomSpeedEntry
+										onApply={(s) => {
+											onPreviewSpeedChange(s);
+											setShowSpeedMenu(false);
+											setShowCustomInput(false);
+										}}
+										onClose={() => setShowCustomInput(false)}
+									/>
+								) : (
+									<button
+										type="button"
+										onClick={() => setShowCustomInput(true)}
+										className="w-full px-3 py-1 text-[11px] text-left hover:bg-white/10 transition-colors text-slate-400 border-t border-white/10"
+									>
+										Custom...
+									</button>
+								)}
 							</div>
 						</>
 					)}
