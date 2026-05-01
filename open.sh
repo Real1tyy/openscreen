@@ -18,8 +18,8 @@ else
   OPENSCREEN="$ELECTRON_APPIMAGE"
 fi
 
-# Enable WebKit inspector on port 9222 (connect via browser at http://127.0.0.1:9222)
-export WEBKIT_INSPECTOR_SERVER=127.0.0.1:9222
+# WebKit inspector port is auto-selected by the app on Linux.
+# Set WEBKIT_INSPECTOR_SERVER manually to override (e.g. 127.0.0.1:9222).
 
 # Check for --debug flag
 if [ "$1" = "--debug" ]; then

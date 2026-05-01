@@ -8,8 +8,24 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, WindowEvent};
 
+fn find_free_inspector_port() -> Option<u16> {
+    for port in 9222..9322 {
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return Some(port);
+        }
+    }
+    None
+}
+
 fn main() {
     env_logger::init();
+
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_INSPECTOR_SERVER").is_none() {
+        if let Some(port) = find_free_inspector_port() {
+            unsafe { std::env::set_var("WEBKIT_INSPECTOR_SERVER", format!("127.0.0.1:{}", port)); }
+        }
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
