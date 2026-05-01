@@ -31,7 +31,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
-import { detectDeadZones } from "@/lib/deadZoneDetection";
+import {
+	type DetectionProgress,
+	detectDeadZones,
+	listenDeadZoneProgress,
+} from "@/lib/deadZoneDetection";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauriBridge";
 import { cn } from "@/lib/utils";
@@ -880,6 +884,7 @@ export default function TimelineEditor({
 		zoom: "Ctrl + Scroll",
 	});
 	const [isDetectingDeadZones, setIsDetectingDeadZones] = useState(false);
+	const [detectionProgress, setDetectionProgress] = useState<DetectionProgress | null>(null);
 	const [detectionElapsed, setDetectionElapsed] = useState(0);
 	const timelineContainerRef = useRef<HTMLDivElement>(null);
 	const { shortcuts: keyShortcuts, isMac } = useShortcuts();
@@ -1289,7 +1294,12 @@ export default function TimelineEditor({
 		if (isDetectingDeadZones) return;
 
 		setIsDetectingDeadZones(true);
+		setDetectionProgress(null);
+
+		let unlisten: (() => void) | null = null;
 		try {
+			unlisten = await listenDeadZoneProgress((p) => setDetectionProgress(p));
+
 			const result = await detectDeadZones();
 			if (result.deadZones.length === 0) {
 				toast.info(t("deadZone.noDeadZones"), {
@@ -1324,7 +1334,9 @@ export default function TimelineEditor({
 				description: String(err),
 			});
 		} finally {
+			unlisten?.();
 			setIsDetectingDeadZones(false);
+			setDetectionProgress(null);
 		}
 	}, [videoDuration, totalMs, isDetectingDeadZones, trimRegions, store, t]);
 
@@ -1729,12 +1741,24 @@ export default function TimelineEditor({
 					{isDetectingDeadZones && (
 						<div className="flex items-center gap-1.5 px-2 h-7">
 							<ScanSearch className="w-3.5 h-3.5 text-[#ef4444] animate-pulse" />
-							<div className="w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
-								<div className="h-full w-1/3 rounded-full bg-[#ef4444]/80 animate-indeterminate" />
+							<div className="w-24 h-1.5 rounded-full bg-white/10 overflow-hidden">
+								{detectionProgress ? (
+									<div
+										className="h-full rounded-full bg-[#ef4444]/80 transition-all duration-300"
+										style={{ width: `${Math.round(detectionProgress.percent * 100)}%` }}
+									/>
+								) : (
+									<div className="h-full w-1/3 rounded-full bg-[#ef4444]/80 animate-indeterminate" />
+								)}
 							</div>
-							<span className="text-[10px] tabular-nums text-slate-400">
-								{(detectionElapsed / 1000).toFixed(1)}s
+							<span className="text-[10px] tabular-nums text-slate-400 min-w-[4ch]">
+								{detectionProgress
+									? `${Math.round(detectionProgress.percent * 100)}%`
+									: `${(detectionElapsed / 1000).toFixed(1)}s`}
 							</span>
+							{detectionProgress && (
+								<span className="text-[10px] text-slate-500">{detectionProgress.phase}</span>
+							)}
 						</div>
 					)}
 					<Button

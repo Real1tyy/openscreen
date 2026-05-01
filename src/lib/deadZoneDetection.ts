@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { z } from "zod";
 import { isTauri } from "./tauriBridge";
 
@@ -39,6 +40,21 @@ const DetectionResultSchema = z.object({
 });
 
 export type DetectionResult = z.infer<typeof DetectionResultSchema>;
+
+const DetectionProgressSchema = z.object({
+	phase: z.enum(["audio", "video"]),
+	percent: z.number(),
+});
+
+export type DetectionProgress = z.infer<typeof DetectionProgressSchema>;
+
+export async function listenDeadZoneProgress(
+	callback: (progress: DetectionProgress) => void,
+): Promise<() => void> {
+	return listen<DetectionProgress>("dead-zone-progress", (event) => {
+		callback(event.payload);
+	});
+}
 
 export async function detectDeadZones(
 	videoPath?: string,

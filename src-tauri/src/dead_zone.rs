@@ -328,7 +328,13 @@ fn samples_from_audio_frame(decoded: &frame::Audio) -> Vec<f32> {
 
 // ── Audio analysis ─────────────────────────────────────────────────
 
-pub fn detect_silence(path: &str, threshold_db: f64, min_duration_ms: f64) -> Result<(Vec<Interval>, f64, Option<f64>), String> {
+pub fn detect_silence(
+    path: &str,
+    threshold_db: f64,
+    min_duration_ms: f64,
+    duration_ms: f64,
+    on_progress: &(dyn Fn(f64) + Sync),
+) -> Result<(Vec<Interval>, f64, Option<f64>), String> {
     ffmpeg::init().map_err(|e| format!("FFmpeg init failed: {}", e))?;
 
     let mut input = format::input(path)
@@ -356,6 +362,7 @@ pub fn detect_silence(path: &str, threshold_db: f64, min_duration_ms: f64) -> Re
     let mut buffer: VecDeque<f32> = VecDeque::with_capacity(window_samples * 4);
     let mut total_samples_processed: u64 = 0;
     let mut windows: Vec<AudioWindow> = Vec::new();
+    let total_samples_est = (sample_rate * duration_ms / 1000.0) as u64;
 
     for (stream, packet) in input.packets() {
         if stream.index() != stream_index {
@@ -387,9 +394,15 @@ pub fn detect_silence(path: &str, threshold_db: f64, min_duration_ms: f64) -> Re
                     rms_db: rms_to_db(rms),
                 });
                 total_samples_processed += window_samples as u64;
+
+                if total_samples_est > 0 && total_samples_processed % (window_samples as u64 * 50) == 0 {
+                    let pct = (total_samples_processed as f64 / total_samples_est as f64).min(1.0);
+                    on_progress(pct);
+                }
             }
         }
     }
+    on_progress(1.0);
 
     let (effective_threshold, noise_floor) = auto_calibrate_threshold(&windows, threshold_db);
     let raw_intervals = classify_with_hysteresis(&windows, effective_threshold, AUDIO_WINDOW_MS);
@@ -446,6 +459,8 @@ pub fn detect_freeze(
     path: &str,
     noise_threshold: f64,
     min_duration_ms: f64,
+    duration_ms: f64,
+    on_progress: &(dyn Fn(f64) + Sync),
 ) -> Result<Vec<Interval>, String> {
     ffmpeg::init().map_err(|e| format!("FFmpeg init failed: {}", e))?;
 
@@ -492,6 +507,8 @@ pub fn detect_freeze(
     let mut frozen_windows: Vec<Interval> = Vec::new();
     let mut last_analyzed_ms: f64 = -1000.0;
     let mut smoothed_mad: Option<f64> = None;
+    let mut frame_count: u64 = 0;
+    let report_interval = 30u64;
 
     for (stream, packet) in input.packets() {
         if stream.index() != stream_index {
@@ -542,8 +559,15 @@ pub fn detect_freeze(
             has_prev = true;
             prev_time_ms = time_ms;
             std::mem::swap(&mut buf_a, &mut buf_b);
+
+            frame_count += 1;
+            if duration_ms > 0.0 && frame_count % report_interval == 0 {
+                let pct = (time_ms / duration_ms).min(1.0);
+                on_progress(pct);
+            }
         }
     }
+    on_progress(1.0);
 
     let merged = merge_intervals(&frozen_windows, analysis_interval_ms * 1.5);
     Ok(filter_by_min_duration(&merged, min_duration_ms))
@@ -580,7 +604,11 @@ fn has_audio_stream(path: &str) -> bool {
     }
 }
 
-pub fn detect(path: &str, config: &DetectionConfig) -> Result<DetectionResult, String> {
+pub fn detect(
+    path: &str,
+    config: &DetectionConfig,
+    on_progress: impl Fn(&str, f64) + Send + Sync,
+) -> Result<DetectionResult, String> {
     ffmpeg::init().map_err(|e| format!("FFmpeg init failed: {}", e))?;
 
     let started = Instant::now();
@@ -593,9 +621,17 @@ pub fn detect(path: &str, config: &DetectionConfig) -> Result<DetectionResult, S
     );
 
     let (silence_result, freeze_result) = std::thread::scope(|s| {
+        let on_progress = &on_progress;
+
         let audio_handle = if has_audio {
             Some(s.spawn(|| {
-                detect_silence(path, config.silence_threshold_db, config.silence_min_duration_ms)
+                detect_silence(
+                    path,
+                    config.silence_threshold_db,
+                    config.silence_min_duration_ms,
+                    duration_ms,
+                    &|pct| on_progress("audio", pct),
+                )
             }))
         } else {
             None
@@ -605,6 +641,8 @@ pub fn detect(path: &str, config: &DetectionConfig) -> Result<DetectionResult, S
             path,
             config.freeze_noise_threshold,
             config.freeze_min_duration_ms,
+            duration_ms,
+            &|pct| on_progress("video", pct),
         );
 
         let audio = match audio_handle {
@@ -1021,13 +1059,15 @@ mod tests {
 
     #[test]
     fn detect_silence_nonexistent_file() {
-        let result = detect_silence("/nonexistent/file.mp4", -30.0, 500.0);
+        let noop = |_: f64| {};
+        let result = detect_silence("/nonexistent/file.mp4", -30.0, 500.0, 10000.0, &noop);
         assert!(result.is_err());
     }
 
     #[test]
     fn detect_freeze_nonexistent_file() {
-        let result = detect_freeze("/nonexistent/file.mp4", 0.003, 500.0);
+        let noop = |_: f64| {};
+        let result = detect_freeze("/nonexistent/file.mp4", 0.003, 500.0, 10000.0, &noop);
         assert!(result.is_err());
     }
 
