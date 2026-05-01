@@ -15,6 +15,8 @@ describe("deadZoneDetection", () => {
 			expect(DEFAULT_DETECTION_CONFIG.freezeNoiseThreshold).toBe(0.003);
 			expect(DEFAULT_DETECTION_CONFIG.freezeMinDurationMs).toBe(500);
 			expect(DEFAULT_DETECTION_CONFIG.minDeadZoneMs).toBe(1000);
+			expect(DEFAULT_DETECTION_CONFIG.paddingStartMs).toBe(150);
+			expect(DEFAULT_DETECTION_CONFIG.paddingEndMs).toBe(100);
 		});
 
 		it("allows partial overrides", () => {

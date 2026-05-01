@@ -53,6 +53,12 @@ Detected dead zones are returned as time intervals and mapped directly to trim r
           │   dead zone ms  │
           └────────┬────────┘
                    │
+          ┌────────▼────────┐
+          │  apply_padding  │
+          │  (adaptive,     │
+          │   asymmetric)   │
+          └────────┬────────┘
+                   │
               Vec<DeadZone>
 ```
 
@@ -171,6 +177,69 @@ The analysis resolution is a deliberate tradeoff:
 - **Too large** (e.g., 640x360): wastes CPU on pixel diffs that don't improve detection
 - **160x90**: preserves enough spatial detail to catch mouse movements and typing, while reducing pixel count by 99.3% vs 1080p. The MAD computation is O(W*H), so this directly translates to performance.
 
+## Speech Padding
+
+Raw silence detection finds the exact boundary where speech stops and starts. Cutting at these boundaries sounds robotic — consonant attacks get clipped and word tails disappear. Industry tools solve this with asymmetric padding that preserves natural speech rhythm.
+
+### How it works
+
+Each dead zone is shrunk inward from both edges:
+
+```
+Before padding:
+[ speech ]|← dead zone →|[ speech ]
+          ^ exact        ^ exact
+            boundary       boundary
+
+After padding:
+[ speech   ]|← cut →|[   speech ]
+            ^ padded    ^ padded
+              start       end
+```
+
+- **Start padding** (after previous speech) — preserves the tail of the last word: vowel decay, consonant releases, room reverb
+- **End padding** (before next speech) — preserves the lead-in: breath before speaking, natural onset
+
+### Adaptive scaling
+
+Fixed padding works poorly across different zone lengths. A 1.5s dead zone needs less padding than a 30s dead zone. The padding scales proportionally to zone length, clamped to sensible bounds:
+
+```
+start_pad = (zone_length * 0.10).clamp(config.paddingStart * 0.5, config.paddingStart * 1.5)
+end_pad   = (zone_length * 0.07).clamp(config.paddingEnd   * 0.5, config.paddingEnd   * 1.2)
+```
+
+With default config (`paddingStartMs=150`, `paddingEndMs=100`):
+
+| Zone length | Start pad | End pad | Total pad | Remaining |
+|------------|-----------|---------|-----------|-----------|
+| 500ms | 75ms | 50ms | 125ms | 375ms |
+| 1500ms | 150ms | 105ms | 255ms | 1245ms |
+| 5000ms | 225ms | 120ms | 345ms | 4655ms |
+| 20000ms | 225ms | 120ms | 345ms | 19655ms |
+
+The asymmetry is intentional: `0.10` vs `0.07` (and the higher clamp for start) preserves more of the speech tail than the lead-in, because trailing audio (reverberation, vowel decay) is perceptually more important than leading silence.
+
+### Pipeline order
+
+Padding is applied **after** the minimum duration filter, not before. This prevents valid zones from being shrunk below the minimum and dropped:
+
+```
+Correct:   intersect → filter(min=1000ms) → pad     ← 1200ms zone survives
+Wrong:     intersect → pad → filter(min=1000ms)      ← 1200ms zone shrunk to ~996ms, dropped
+```
+
+### Industry comparison
+
+| Tool | Before speech | After speech |
+|------|--------------|--------------|
+| TimeBolt | 90ms | 150ms |
+| FireCut | 250ms | 250ms |
+| AutoCut | 100ms | 100ms |
+| **OpenScreen** | **50-120ms** (adaptive) | **75-225ms** (adaptive) |
+
+OpenScreen's adaptive approach is unique — most tools use fixed values. The adaptive scaling means short zones get gentler padding (avoiding over-trimming), while long zones get more generous breathing room.
+
 ## Configuration
 
 | Parameter | Default | Description |
@@ -180,6 +249,8 @@ The analysis resolution is a deliberate tradeoff:
 | `freezeNoiseThreshold` | 0.003 | MAD threshold below which frames are "frozen" |
 | `freezeMinDurationMs` | 500 | Minimum freeze duration to consider |
 | `minDeadZoneMs` | 1000 | Minimum duration for the final dead zone (after intersection) |
+| `paddingStartMs` | 150 | Base padding after previous speech (tail preservation) |
+| `paddingEndMs` | 100 | Base padding before next speech (lead-in preservation) |
 
 ### Internal constants (not user-configurable)
 
@@ -255,9 +326,10 @@ The detection result includes a `metrics` object for transparency and debugging:
 
 ## Future improvements
 
+- **VAD integration** — replace or augment RMS with Voice Activity Detection (WebRTC VAD or neural VAD) for more semantically accurate speech boundary detection
+- **Context-aware merging** — keep rhythm of speech by detecting conversational patterns and preserving natural pacing
+- **Non-linear padding** — use speech onset/offset slope analysis instead of time-proportional padding
 - **Confidence scoring** — return a score per dead zone instead of binary classification, letting the UI rank by confidence
-- **Lookahead buffering** — buffer 1-2s of windows before classifying, enabling forward-looking heuristics
 - **Multi-pass refinement** — rough detection pass, then refine edges with finer analysis
 - **SSIM upgrade** — for sources with high compression artifacts where MAD struggles
 - **GPU-accelerated frame diff** — for 4K sources where CPU pixel diff becomes the bottleneck
-- **Waveform pre-analysis** — detect speech segments via VAD (Voice Activity Detection) for more accurate silence classification than raw RMS

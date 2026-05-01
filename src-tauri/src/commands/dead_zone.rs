@@ -60,9 +60,13 @@ mod tests {
             "silenceMinDurationMs": 500.0,
             "freezeNoiseThreshold": 0.003,
             "freezeMinDurationMs": 500.0,
-            "minDeadZoneMs": 1000.0
+            "minDeadZoneMs": 1000.0,
+            "paddingStartMs": 150.0,
+            "paddingEndMs": 100.0
         }"#;
 		let config: DetectionConfig = serde_json::from_str(json).unwrap();
 		assert_eq!(config.silence_threshold_db, -30.0);
+		assert_eq!(config.padding_start_ms, 150.0);
+		assert_eq!(config.padding_end_ms, 100.0);
 	}
 }

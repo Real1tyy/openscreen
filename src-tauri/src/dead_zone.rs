@@ -21,6 +21,9 @@ pub struct DeadZone {
     pub end_ms: f64,
 }
 
+fn default_padding_start() -> f64 { 150.0 }
+fn default_padding_end() -> f64 { 100.0 }
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct DetectionConfig {
     #[serde(rename = "silenceThresholdDb")]
@@ -33,6 +36,10 @@ pub struct DetectionConfig {
     pub freeze_min_duration_ms: f64,
     #[serde(rename = "minDeadZoneMs")]
     pub min_dead_zone_ms: f64,
+    #[serde(rename = "paddingStartMs", default = "default_padding_start")]
+    pub padding_start_ms: f64,
+    #[serde(rename = "paddingEndMs", default = "default_padding_end")]
+    pub padding_end_ms: f64,
 }
 
 impl Default for DetectionConfig {
@@ -43,6 +50,8 @@ impl Default for DetectionConfig {
             freeze_noise_threshold: 0.003,
             freeze_min_duration_ms: 500.0,
             min_dead_zone_ms: 1000.0,
+            padding_start_ms: 150.0,
+            padding_end_ms: 100.0,
         }
     }
 }
@@ -109,6 +118,27 @@ pub fn filter_by_min_duration(intervals: &[Interval], min_duration_ms: f64) -> V
         .iter()
         .filter(|iv| (iv.end_ms - iv.start_ms) >= min_duration_ms)
         .cloned()
+        .collect()
+}
+
+pub fn apply_padding(intervals: &[Interval], padding_start_ms: f64, padding_end_ms: f64) -> Vec<Interval> {
+    intervals
+        .iter()
+        .filter_map(|iv| {
+            let len = iv.end_ms - iv.start_ms;
+            let start_pad = (len * 0.10).clamp(padding_start_ms * 0.5, padding_start_ms * 1.5);
+            let end_pad = (len * 0.07).clamp(padding_end_ms * 0.5, padding_end_ms * 1.2);
+            let padded_start = iv.start_ms + start_pad;
+            let padded_end = iv.end_ms - end_pad;
+            if padded_start < padded_end {
+                Some(Interval {
+                    start_ms: padded_start,
+                    end_ms: padded_end,
+                })
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
@@ -664,12 +694,13 @@ pub fn detect(
         noise_floor.unwrap_or(-100.0),
     );
 
-    let dead_zones = if has_audio {
-        let intersected = intersect_intervals(&silence_intervals, &freeze_intervals);
-        filter_by_min_duration(&intersected, config.min_dead_zone_ms)
+    let raw_dead_zones = if has_audio {
+        intersect_intervals(&silence_intervals, &freeze_intervals)
     } else {
-        filter_by_min_duration(&freeze_intervals, config.min_dead_zone_ms)
+        freeze_intervals.clone()
     };
+    let filtered = filter_by_min_duration(&raw_dead_zones, config.min_dead_zone_ms);
+    let dead_zones = apply_padding(&filtered, config.padding_start_ms, config.padding_end_ms);
 
     let elapsed = started.elapsed().as_secs_f64() * 1000.0;
     eprintln!(
@@ -874,6 +905,170 @@ mod tests {
         let a = vec![Interval { start_ms: 0.0, end_ms: 100.0 }];
         let b = vec![Interval { start_ms: 100.0, end_ms: 200.0 }];
         assert!(intersect_intervals(&a, &b).is_empty());
+    }
+
+    // ── Padding ───────────────────────────────────────────────
+
+    #[test]
+    fn padding_shrinks_interval_adaptively() {
+        // 4000ms zone: start_pad = (400).clamp(75,225) = 225, end_pad = (280).clamp(50,120) = 120
+        let intervals = vec![Interval { start_ms: 1000.0, end_ms: 5000.0 }];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert_eq!(padded.len(), 1);
+        assert_eq!(padded[0].start_ms, 1225.0);
+        assert_eq!(padded[0].end_ms, 4880.0);
+    }
+
+    #[test]
+    fn padding_drops_too_small_interval() {
+        // 100ms zone: start_pad=75 + end_pad=50 = 125 > 100 → dropped
+        let intervals = vec![Interval { start_ms: 1000.0, end_ms: 1100.0 }];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert!(padded.is_empty());
+    }
+
+    #[test]
+    fn padding_zero_is_noop() {
+        let intervals = vec![Interval { start_ms: 500.0, end_ms: 3000.0 }];
+        let padded = apply_padding(&intervals, 0.0, 0.0);
+        assert_eq!(padded.len(), 1);
+        assert_eq!(padded[0].start_ms, 500.0);
+        assert_eq!(padded[0].end_ms, 3000.0);
+    }
+
+    #[test]
+    fn padding_scales_with_zone_length() {
+        // Short zone (1500ms): start_pad = (150).clamp(75,225) = 150, end_pad = (105).clamp(50,120) = 105
+        let short = vec![Interval { start_ms: 0.0, end_ms: 1500.0 }];
+        let padded_short = apply_padding(&short, 150.0, 100.0);
+        // Long zone (10000ms): start_pad = (1000).clamp(75,225) = 225, end_pad = (700).clamp(50,120) = 120
+        let long = vec![Interval { start_ms: 0.0, end_ms: 10000.0 }];
+        let padded_long = apply_padding(&long, 150.0, 100.0);
+        // Longer zones get more padding
+        let short_total = padded_short[0].start_ms + (1500.0 - padded_short[0].end_ms);
+        let long_total = padded_long[0].start_ms + (10000.0 - padded_long[0].end_ms);
+        assert!(long_total > short_total);
+    }
+
+    #[test]
+    fn padding_clamps_to_upper_bound() {
+        // 20000ms zone: start_pad = (2000).clamp(75,225) = 225 (clamped)
+        let intervals = vec![Interval { start_ms: 0.0, end_ms: 20000.0 }];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert_eq!(padded[0].start_ms, 225.0);
+        assert_eq!(padded[0].end_ms, 20000.0 - 120.0);
+    }
+
+    #[test]
+    fn padding_clamps_to_lower_bound() {
+        // 500ms zone: start_pad = (50).clamp(75,225) = 75 (clamped up)
+        // end_pad = (35).clamp(50,120) = 50 (clamped up)
+        let intervals = vec![Interval { start_ms: 0.0, end_ms: 500.0 }];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert_eq!(padded.len(), 1);
+        assert_eq!(padded[0].start_ms, 75.0);
+        assert_eq!(padded[0].end_ms, 450.0);
+    }
+
+    #[test]
+    fn padding_proportional_in_midrange() {
+        // 1500ms zone: start_pad = (150).clamp(75,225) = 150 (within range, proportional wins)
+        // end_pad = (105).clamp(50,120) = 105 (within range, proportional wins)
+        let intervals = vec![Interval { start_ms: 0.0, end_ms: 1500.0 }];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert_eq!(padded[0].start_ms, 150.0);
+        assert_eq!(padded[0].end_ms, 1395.0);
+    }
+
+    #[test]
+    fn padding_empty_input() {
+        let padded = apply_padding(&[], 150.0, 100.0);
+        assert!(padded.is_empty());
+    }
+
+    #[test]
+    fn padding_multiple_zones_mixed() {
+        let intervals = vec![
+            Interval { start_ms: 0.0, end_ms: 50.0 },      // too small (50 < 125 padding), dropped
+            Interval { start_ms: 1000.0, end_ms: 3000.0 },  // survives
+            Interval { start_ms: 5000.0, end_ms: 5080.0 },  // too small (80 < 125), dropped
+            Interval { start_ms: 8000.0, end_ms: 18000.0 }, // survives (large)
+        ];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert_eq!(padded.len(), 2);
+        assert!(padded[0].start_ms > 1000.0);
+        assert!(padded[0].end_ms < 3000.0);
+        assert!(padded[1].start_ms > 8000.0);
+        assert!(padded[1].end_ms < 18000.0);
+    }
+
+    #[test]
+    fn padding_exactly_equals_zone_length() {
+        // Zone exactly equals min padding: 125ms. Clamps: start=75, end=50 = 125. Zone = 125. Dropped (not <).
+        let intervals = vec![Interval { start_ms: 0.0, end_ms: 125.0 }];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert!(padded.is_empty());
+    }
+
+    #[test]
+    fn padding_just_above_minimum_survives() {
+        // 126ms zone: start=75 + end=50 = 125 < 126 → survives with 1ms
+        let intervals = vec![Interval { start_ms: 0.0, end_ms: 126.0 }];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert_eq!(padded.len(), 1);
+        assert!((padded[0].end_ms - padded[0].start_ms - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn padding_preserves_zone_ordering() {
+        let intervals = vec![
+            Interval { start_ms: 0.0, end_ms: 5000.0 },
+            Interval { start_ms: 10000.0, end_ms: 15000.0 },
+            Interval { start_ms: 20000.0, end_ms: 25000.0 },
+        ];
+        let padded = apply_padding(&intervals, 150.0, 100.0);
+        assert_eq!(padded.len(), 3);
+        for i in 1..padded.len() {
+            assert!(padded[i].start_ms > padded[i - 1].end_ms);
+        }
+    }
+
+    #[test]
+    fn padding_start_always_less_than_end() {
+        // Verify invariant across many zone sizes
+        for size_ms in [200, 500, 1000, 2000, 5000, 10000, 30000] {
+            let intervals = vec![Interval { start_ms: 0.0, end_ms: size_ms as f64 }];
+            let padded = apply_padding(&intervals, 150.0, 100.0);
+            for iv in &padded {
+                assert!(iv.start_ms < iv.end_ms, "broken for size {}ms", size_ms);
+            }
+        }
+    }
+
+    #[test]
+    fn pipeline_order_filter_then_pad() {
+        // A 1200ms zone should survive min_duration=1000, then get padded
+        let zones = vec![Interval { start_ms: 0.0, end_ms: 1200.0 }];
+        let filtered = filter_by_min_duration(&zones, 1000.0);
+        assert_eq!(filtered.len(), 1); // survives filter
+        let padded = apply_padding(&filtered, 150.0, 100.0);
+        assert_eq!(padded.len(), 1); // survives padding too
+        assert!(padded[0].start_ms > 0.0);
+        assert!(padded[0].end_ms < 1200.0);
+    }
+
+    #[test]
+    fn pipeline_order_pad_then_filter_would_drop() {
+        // Same 1200ms zone: if we padded first, then filtered at 1000ms, it might drop
+        // This proves why filter-first is better
+        let zones = vec![Interval { start_ms: 0.0, end_ms: 1200.0 }];
+        let padded_first = apply_padding(&zones, 150.0, 100.0);
+        assert_eq!(padded_first.len(), 1);
+        let remaining = padded_first[0].end_ms - padded_first[0].start_ms;
+        // After adaptive padding on a 1200ms zone:
+        // start_pad = (120).clamp(75,225) = 120, end_pad = (84).clamp(50,120) = 84
+        // remaining = 1200 - 120 - 84 = 996 < 1000 → would be dropped!
+        assert!(remaining < 1000.0, "proves pad-then-filter would drop valid zone");
     }
 
     // ── Audio helpers ──────────────────────────────────────────

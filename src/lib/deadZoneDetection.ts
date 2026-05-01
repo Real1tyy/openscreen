@@ -16,6 +16,8 @@ export const DetectionConfigSchema = z.object({
 	freezeNoiseThreshold: z.number().min(0).catch(0.003).default(0.003),
 	freezeMinDurationMs: z.number().min(0).catch(500).default(500),
 	minDeadZoneMs: z.number().min(0).catch(1000).default(1000),
+	paddingStartMs: z.number().min(0).catch(150).default(150),
+	paddingEndMs: z.number().min(0).catch(100).default(100),
 });
 
 export type DetectionConfig = z.infer<typeof DetectionConfigSchema>;
