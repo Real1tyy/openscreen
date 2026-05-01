@@ -880,8 +880,19 @@ export default function TimelineEditor({
 		zoom: "Ctrl + Scroll",
 	});
 	const [isDetectingDeadZones, setIsDetectingDeadZones] = useState(false);
+	const [detectionElapsed, setDetectionElapsed] = useState(0);
 	const timelineContainerRef = useRef<HTMLDivElement>(null);
 	const { shortcuts: keyShortcuts, isMac } = useShortcuts();
+
+	useEffect(() => {
+		if (!isDetectingDeadZones) {
+			setDetectionElapsed(0);
+			return;
+		}
+		const start = Date.now();
+		const id = setInterval(() => setDetectionElapsed(Date.now() - start), 100);
+		return () => clearInterval(id);
+	}, [isDetectingDeadZones]);
 
 	// ── Read state & actions from stores ───────────────────────
 	const store = useEditorStore();
@@ -1704,17 +1715,27 @@ export default function TimelineEditor({
 					>
 						<Scissors className="w-4 h-4" />
 					</Button>
-					{isTauri() && (
+					{isTauri() && !isDetectingDeadZones && (
 						<Button
 							onClick={handleDetectDeadZones}
 							variant="ghost"
 							size="icon"
 							className="h-7 w-7 text-slate-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-all"
-							disabled={isDetectingDeadZones}
 							title={t("buttons.detectDeadZones")}
 						>
-							<ScanSearch className={cn("w-4 h-4", isDetectingDeadZones && "animate-pulse")} />
+							<ScanSearch className="w-4 h-4" />
 						</Button>
+					)}
+					{isDetectingDeadZones && (
+						<div className="flex items-center gap-1.5 px-2 h-7">
+							<ScanSearch className="w-3.5 h-3.5 text-[#ef4444] animate-pulse" />
+							<div className="w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
+								<div className="h-full w-1/3 rounded-full bg-[#ef4444]/80 animate-indeterminate" />
+							</div>
+							<span className="text-[10px] tabular-nums text-slate-400">
+								{(detectionElapsed / 1000).toFixed(1)}s
+							</span>
+						</div>
 					)}
 					<Button
 						onClick={handleAddAnnotation}
