@@ -13,6 +13,7 @@ import {
 	type GifSizePreset,
 } from "@/lib/exporter";
 import { getAPI, isTauri, readFileAsBlobUrl } from "@/lib/tauriBridge";
+import { useThrottledCallback } from "@/lib/useThrottledCallback";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
 import { useEditorSelectionStore } from "@/stores/useEditorSelectionStore";
 import {
@@ -138,11 +139,19 @@ export default function VideoEditor() {
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [currentTime, setCurrentTime] = useState(0);
 	const [duration, setDuration] = useState(0);
-	const currentTimeRef = useRef(currentTime);
-	currentTimeRef.current = currentTime;
+	const currentTimeRef = useRef(0);
 	const durationRef = useRef(duration);
 	durationRef.current = duration;
 	const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
+
+	const handleTimeUpdate = useThrottledCallback(
+		(time: number) => {
+			currentTimeRef.current = time;
+			setCurrentTime(time);
+		},
+		100,
+		isPlaying,
+	);
 
 	const {
 		selectedZoomId,
@@ -305,6 +314,7 @@ export default function VideoEditor() {
 			// no-op
 		}
 		setIsPlaying(false);
+		currentTimeRef.current = 0;
 		setCurrentTime(0);
 		setDuration(0);
 
@@ -610,6 +620,7 @@ export default function VideoEditor() {
 			// no-op
 		}
 		setIsPlaying(false);
+		currentTimeRef.current = 0;
 		setCurrentTime(0);
 		setDuration(0);
 
@@ -900,7 +911,7 @@ export default function VideoEditor() {
 											}}
 											onWebcamPositionDragEnd={commitState}
 											onDurationChange={setDuration}
-											onTimeUpdate={setCurrentTime}
+											onTimeUpdate={handleTimeUpdate}
 											currentTime={currentTime}
 											onPlayStateChange={setIsPlaying}
 											onError={setError}

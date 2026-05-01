@@ -1206,6 +1206,75 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					background: resolvedWallpaper || "",
 				};
 
+		// ── Annotation rendering (memoized to avoid 60fps recomputation) ──
+
+		const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
+
+		useEffect(() => {
+			const el = overlayRef.current;
+			if (!el) return;
+			const ro = new ResizeObserver((entries) => {
+				const { width, height } = entries[0].contentRect;
+				if (width > 0 && height > 0) {
+					setContainerSize((prev) =>
+						prev.width === width && prev.height === height ? prev : { width, height },
+					);
+				}
+			});
+			ro.observe(el);
+			return () => ro.disconnect();
+		}, []);
+
+		const visibleAnnotations = useMemo(() => {
+			const filtered = (annotationRegions || []).filter((annotation) => {
+				if (typeof annotation.startMs !== "number" || typeof annotation.endMs !== "number")
+					return false;
+				if (annotation.id === selectedAnnotationId) return true;
+				const timeMs = Math.round(currentTime * 1000);
+				return timeMs >= annotation.startMs && timeMs <= annotation.endMs;
+			});
+			return [...filtered].sort((a, b) => a.zIndex - b.zIndex);
+		}, [annotationRegions, currentTime, selectedAnnotationId]);
+
+		const onSelectAnnotationRef = useRef(onSelectAnnotation);
+		onSelectAnnotationRef.current = onSelectAnnotation;
+		const visibleAnnotationsRef = useRef(visibleAnnotations);
+		visibleAnnotationsRef.current = visibleAnnotations;
+		const selectedAnnotationIdRef = useRef(selectedAnnotationId);
+		selectedAnnotationIdRef.current = selectedAnnotationId;
+		const onAnnotationPositionChangeRef = useRef(onAnnotationPositionChange);
+		onAnnotationPositionChangeRef.current = onAnnotationPositionChange;
+		const onAnnotationSizeChangeRef = useRef(onAnnotationSizeChange);
+		onAnnotationSizeChangeRef.current = onAnnotationSizeChange;
+
+		const handleAnnotationClick = useCallback((clickedId: string) => {
+			const selectFn = onSelectAnnotationRef.current;
+			if (!selectFn) return;
+			const sorted = visibleAnnotationsRef.current;
+			const selId = selectedAnnotationIdRef.current;
+			if (clickedId === selId && sorted.length > 1) {
+				const currentIndex = sorted.findIndex((a) => a.id === clickedId);
+				const nextIndex = (currentIndex + 1) % sorted.length;
+				selectFn(sorted[nextIndex].id);
+			} else {
+				selectFn(clickedId);
+			}
+		}, []);
+
+		const handleAnnotationPositionChange = useCallback(
+			(id: string, position: { x: number; y: number }) => {
+				onAnnotationPositionChangeRef.current?.(id, position);
+			},
+			[],
+		);
+
+		const handleAnnotationSizeChange = useCallback(
+			(id: string, size: { width: number; height: number }) => {
+				onAnnotationSizeChangeRef.current?.(id, size);
+			},
+			[],
+		);
+
 		return (
 			<div
 				className="relative rounded-sm overflow-hidden"
@@ -1298,51 +1367,20 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							className="absolute rounded-md border border-[#34B27B]/80 bg-[#34B27B]/20 shadow-[0_0_0_1px_rgba(52,178,123,0.35)]"
 							style={{ display: "none", pointerEvents: "none" }}
 						/>
-						{(() => {
-							const filtered = (annotationRegions || []).filter((annotation) => {
-								if (typeof annotation.startMs !== "number" || typeof annotation.endMs !== "number")
-									return false;
-
-								if (annotation.id === selectedAnnotationId) return true;
-
-								const timeMs = Math.round(currentTime * 1000);
-								return timeMs >= annotation.startMs && timeMs <= annotation.endMs;
-							});
-
-							// Sort by z-index (lowest to highest) so higher z-index renders on top
-							const sorted = [...filtered].sort((a, b) => a.zIndex - b.zIndex);
-
-							// Handle click-through cycling: when clicking same annotation, cycle to next
-							const handleAnnotationClick = (clickedId: string) => {
-								if (!onSelectAnnotation) return;
-
-								// If clicking on already selected annotation and there are multiple overlapping
-								if (clickedId === selectedAnnotationId && sorted.length > 1) {
-									// Find current index and cycle to next
-									const currentIndex = sorted.findIndex((a) => a.id === clickedId);
-									const nextIndex = (currentIndex + 1) % sorted.length;
-									onSelectAnnotation(sorted[nextIndex].id);
-								} else {
-									// First click or clicking different annotation
-									onSelectAnnotation(clickedId);
-								}
-							};
-
-							return sorted.map((annotation) => (
-								<AnnotationOverlay
-									key={annotation.id}
-									annotation={annotation}
-									isSelected={annotation.id === selectedAnnotationId}
-									containerWidth={overlayRef.current?.clientWidth || 800}
-									containerHeight={overlayRef.current?.clientHeight || 600}
-									onPositionChange={(id, position) => onAnnotationPositionChange?.(id, position)}
-									onSizeChange={(id, size) => onAnnotationSizeChange?.(id, size)}
-									onClick={handleAnnotationClick}
-									zIndex={annotation.zIndex}
-									isSelectedBoost={annotation.id === selectedAnnotationId}
-								/>
-							));
-						})()}
+						{visibleAnnotations.map((annotation) => (
+							<AnnotationOverlay
+								key={annotation.id}
+								annotation={annotation}
+								isSelected={annotation.id === selectedAnnotationId}
+								containerWidth={containerSize.width}
+								containerHeight={containerSize.height}
+								onPositionChange={handleAnnotationPositionChange}
+								onSizeChange={handleAnnotationSizeChange}
+								onClick={handleAnnotationClick}
+								zIndex={annotation.zIndex}
+								isSelectedBoost={annotation.id === selectedAnnotationId}
+							/>
+						))}
 					</div>
 				)}
 				<video

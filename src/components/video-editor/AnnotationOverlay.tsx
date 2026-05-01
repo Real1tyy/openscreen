@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { Rnd } from "react-rnd";
 import { BRAND_GREEN } from "@/lib/constants/colors";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ interface AnnotationOverlayProps {
 	isSelectedBoost: boolean; // Boost z-index when selected for easy editing
 }
 
-export function AnnotationOverlay({
+export const AnnotationOverlay = memo(function AnnotationOverlay({
 	annotation,
 	isSelected,
 	containerWidth,
@@ -150,8 +150,9 @@ export function AnnotationOverlay({
 			}}
 			bounds="parent"
 			className={cn(
-				"cursor-move transition-all",
-				isSelected && "ring-2 ring-[#34B27B] ring-offset-2 ring-offset-transparent",
+				"cursor-move",
+				isSelected &&
+					"ring-2 ring-[#34B27B] ring-offset-2 ring-offset-transparent transition-shadow",
 			)}
 			style={{
 				zIndex: isSelectedBoost ? zIndex + 1000 : zIndex, // Boost selected annotation to ensure it's on top
@@ -218,4 +219,4 @@ export function AnnotationOverlay({
 			</div>
 		</Rnd>
 	);
-}
+});
