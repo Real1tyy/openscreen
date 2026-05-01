@@ -7,8 +7,9 @@ import {
 	findAdjacentAfter,
 	findAdjacentBefore,
 	mergeOverlapping,
+	mergeOverlappingSpeeds,
 } from "./trimActions";
-import type { TrimRegion } from "./types";
+import type { SpeedRegion, TrimRegion } from "./types";
 
 const trim = (id: string, startMs: number, endMs: number): TrimRegion => ({
 	id,
@@ -194,5 +195,59 @@ describe("computeLoopRegion", () => {
 	it("supports custom padding", () => {
 		const result = computeLoopRegion(trim("t1", 10000, 20000), 60000, 3000);
 		expect(result).toEqual({ startMs: 7000, endMs: 23000 });
+	});
+});
+
+const speed = (id: string, startMs: number, endMs: number, s: number): SpeedRegion => ({
+	id,
+	startMs,
+	endMs,
+	speed: s,
+});
+
+describe("mergeOverlappingSpeeds", () => {
+	it("merges overlapping speeds with same value", () => {
+		const regions = [speed("s1", 0, 5000, 2), speed("s2", 3000, 8000, 2)];
+		const { merged, absorbedIds } = mergeOverlappingSpeeds("s1", regions);
+		expect(absorbedIds).toEqual(["s2"]);
+		expect(merged).toEqual([{ id: "s1", startMs: 0, endMs: 8000, speed: 2 }]);
+	});
+
+	it("does not merge overlapping speeds with different values", () => {
+		const regions = [speed("s1", 0, 5000, 2), speed("s2", 3000, 8000, 3)];
+		const { merged, absorbedIds } = mergeOverlappingSpeeds("s1", regions);
+		expect(absorbedIds).toEqual([]);
+		expect(merged).toBe(regions);
+	});
+
+	it("merges multiple same-speed regions", () => {
+		const regions = [
+			speed("s1", 0, 10000, 1.5),
+			speed("s2", 5000, 7000, 1.5),
+			speed("s3", 8000, 15000, 1.5),
+		];
+		const { merged, absorbedIds } = mergeOverlappingSpeeds("s1", regions);
+		expect(absorbedIds).toEqual(["s2", "s3"]);
+		expect(merged).toEqual([{ id: "s1", startMs: 0, endMs: 15000, speed: 1.5 }]);
+	});
+
+	it("only merges same-speed among mixed", () => {
+		const regions = [
+			speed("s1", 0, 6000, 2),
+			speed("s2", 4000, 8000, 2),
+			speed("s3", 5000, 9000, 3),
+		];
+		const { merged, absorbedIds } = mergeOverlappingSpeeds("s1", regions);
+		expect(absorbedIds).toEqual(["s2"]);
+		expect(merged.length).toBe(2);
+		expect(merged[0]).toEqual({ id: "s1", startMs: 0, endMs: 8000, speed: 2 });
+		expect(merged[1]).toEqual({ id: "s3", startMs: 5000, endMs: 9000, speed: 3 });
+	});
+
+	it("returns unchanged when no overlaps", () => {
+		const regions = [speed("s1", 0, 3000, 2), speed("s2", 5000, 8000, 2)];
+		const { merged, absorbedIds } = mergeOverlappingSpeeds("s1", regions);
+		expect(absorbedIds).toEqual([]);
+		expect(merged).toBe(regions);
 	});
 });

@@ -1,4 +1,4 @@
-import type { TrimRegion } from "./types";
+import type { SpeedRegion, TrimRegion } from "./types";
 
 export function computeStartFromNow(trim: TrimRegion, nowMs: number): number {
 	return Math.max(0, Math.min(nowMs, trim.endMs - 100));
@@ -49,6 +49,36 @@ export function mergeOverlapping(
 	if (absorbed.length === 0) return { merged: trimRegions, absorbedIds: [] };
 
 	const merged = trimRegions
+		.filter((r) => !absorbed.includes(r.id))
+		.map((r) => (r.id === targetId ? { ...r, startMs, endMs } : r));
+
+	return { merged, absorbedIds: absorbed };
+}
+
+export function mergeOverlappingSpeeds(
+	targetId: string,
+	speedRegions: SpeedRegion[],
+): { merged: SpeedRegion[]; absorbedIds: string[] } {
+	const target = speedRegions.find((r) => r.id === targetId);
+	if (!target) return { merged: speedRegions, absorbedIds: [] };
+
+	const absorbed: string[] = [];
+	let startMs = target.startMs;
+	let endMs = target.endMs;
+
+	for (const r of speedRegions) {
+		if (r.id === targetId) continue;
+		if (r.speed !== target.speed) continue;
+		if (r.startMs < endMs && r.endMs > startMs) {
+			startMs = Math.min(startMs, r.startMs);
+			endMs = Math.max(endMs, r.endMs);
+			absorbed.push(r.id);
+		}
+	}
+
+	if (absorbed.length === 0) return { merged: speedRegions, absorbedIds: [] };
+
+	const merged = speedRegions
 		.filter((r) => !absorbed.includes(r.id))
 		.map((r) => (r.id === targetId ? { ...r, startMs, endMs } : r));
 

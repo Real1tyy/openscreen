@@ -1121,8 +1121,7 @@ export default function TimelineEditor({
 			}
 
 			if (isSpeedItem) {
-				// Speed cannot overlap other speeds OR trim regions
-				return checkOverlap(speedRegions) || checkOverlap(trimRegions);
+				return checkOverlap(trimRegions);
 			}
 
 			return false;

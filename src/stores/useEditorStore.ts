@@ -3,7 +3,7 @@ import { z } from "zod";
 import { temporal } from "zundo";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { mergeOverlapping } from "@/components/video-editor/trimActions";
+import { mergeOverlapping, mergeOverlappingSpeeds } from "@/components/video-editor/trimActions";
 import {
 	type AnnotationRegion,
 	type AnnotationType,
@@ -359,17 +359,35 @@ export const useEditorStore = create<EditorStore>()(
 						speed: DEFAULT_PLAYBACK_SPEED,
 					});
 				});
+				const { merged, absorbedIds } = mergeOverlappingSpeeds(id, get().speedRegions);
+				if (absorbedIds.length > 0) {
+					set({ speedRegions: merged });
+					for (const aid of absorbedIds) clearSelectionIf("Speed", aid);
+				}
 				return id;
 			},
 			addAndSelectSpeed: (span) => {
 				sel().selectSpeed(get().addSpeed(span));
 			},
-			setSpeedSpan: (id, span) => set({ speedRegions: setSpan(get().speedRegions, id, span) }),
-			setSpeed: (id, speed) =>
+			setSpeedSpan: (id, span) => {
+				set({ speedRegions: setSpan(get().speedRegions, id, span) });
+				const { merged, absorbedIds } = mergeOverlappingSpeeds(id, get().speedRegions);
+				if (absorbedIds.length > 0) {
+					set({ speedRegions: merged });
+					for (const aid of absorbedIds) clearSelectionIf("Speed", aid);
+				}
+			},
+			setSpeed: (id, speed) => {
 				set((s) => {
 					const r = s.speedRegions.find((sp) => sp.id === id);
 					if (r) r.speed = speed;
-				}),
+				});
+				const { merged, absorbedIds } = mergeOverlappingSpeeds(id, get().speedRegions);
+				if (absorbedIds.length > 0) {
+					set({ speedRegions: merged });
+					for (const aid of absorbedIds) clearSelectionIf("Speed", aid);
+				}
+			},
 			duplicateSpeed: (id) =>
 				set((s) => {
 					const src = s.speedRegions.find((sp) => sp.id === id);
