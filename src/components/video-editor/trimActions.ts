@@ -8,10 +8,7 @@ export function computeEndFromNow(trim: TrimRegion, nowMs: number): number {
 	return Math.max(trim.startMs + 100, nowMs);
 }
 
-export function findAdjacentBefore(
-	trimId: string,
-	trimRegions: TrimRegion[],
-): TrimRegion | null {
+export function findAdjacentBefore(trimId: string, trimRegions: TrimRegion[]): TrimRegion | null {
 	const trim = trimRegions.find((r) => r.id === trimId);
 	if (!trim) return null;
 	const preceding = trimRegions
@@ -20,16 +17,42 @@ export function findAdjacentBefore(
 	return preceding[0] ?? null;
 }
 
-export function findAdjacentAfter(
-	trimId: string,
-	trimRegions: TrimRegion[],
-): TrimRegion | null {
+export function findAdjacentAfter(trimId: string, trimRegions: TrimRegion[]): TrimRegion | null {
 	const trim = trimRegions.find((r) => r.id === trimId);
 	if (!trim) return null;
 	const following = trimRegions
 		.filter((r) => r.id !== trimId && r.startMs >= trim.endMs)
 		.sort((a, b) => a.startMs - b.startMs);
 	return following[0] ?? null;
+}
+
+export function mergeOverlapping(
+	targetId: string,
+	trimRegions: TrimRegion[],
+): { merged: TrimRegion[]; absorbedIds: string[] } {
+	const target = trimRegions.find((r) => r.id === targetId);
+	if (!target) return { merged: trimRegions, absorbedIds: [] };
+
+	const absorbed: string[] = [];
+	let startMs = target.startMs;
+	let endMs = target.endMs;
+
+	for (const r of trimRegions) {
+		if (r.id === targetId) continue;
+		if (r.startMs < endMs && r.endMs > startMs) {
+			startMs = Math.min(startMs, r.startMs);
+			endMs = Math.max(endMs, r.endMs);
+			absorbed.push(r.id);
+		}
+	}
+
+	if (absorbed.length === 0) return { merged: trimRegions, absorbedIds: [] };
+
+	const merged = trimRegions
+		.filter((r) => !absorbed.includes(r.id))
+		.map((r) => (r.id === targetId ? { ...r, startMs, endMs } : r));
+
+	return { merged, absorbedIds: absorbed };
 }
 
 export function computeLoopRegion(

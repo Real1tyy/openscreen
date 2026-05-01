@@ -3,6 +3,7 @@ import { z } from "zod";
 import { temporal } from "zundo";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { mergeOverlapping } from "@/components/video-editor/trimActions";
 import {
 	type AnnotationRegion,
 	type AnnotationType,
@@ -290,11 +291,23 @@ export const useEditorStore = create<EditorStore>()(
 				}),
 			setTrimStartToNow: (id, nowMs) => {
 				const r = get().trimRegions.find((t) => t.id === id);
-				if (r && nowMs < r.endMs) get().setTrimSpan(id, { start: nowMs, end: r.endMs });
+				if (!r || nowMs >= r.endMs) return;
+				get().setTrimSpan(id, { start: nowMs, end: r.endMs });
+				const { merged, absorbedIds } = mergeOverlapping(id, get().trimRegions);
+				if (absorbedIds.length > 0) {
+					set({ trimRegions: merged });
+					for (const aid of absorbedIds) clearSelectionIf("Trim", aid);
+				}
 			},
 			setTrimEndToNow: (id, nowMs) => {
 				const r = get().trimRegions.find((t) => t.id === id);
-				if (r && nowMs > r.startMs) get().setTrimSpan(id, { start: r.startMs, end: nowMs });
+				if (!r || nowMs <= r.startMs) return;
+				get().setTrimSpan(id, { start: r.startMs, end: nowMs });
+				const { merged, absorbedIds } = mergeOverlapping(id, get().trimRegions);
+				if (absorbedIds.length > 0) {
+					set({ trimRegions: merged });
+					for (const aid of absorbedIds) clearSelectionIf("Trim", aid);
+				}
 			},
 			setTrimStartFromAdjacent: (id) => {
 				const { trimRegions: regions } = get();

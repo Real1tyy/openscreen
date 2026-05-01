@@ -1,13 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import type { TrimRegion } from "./types";
 import {
 	computeEndFromNow,
 	computeLoopRegion,
 	computeStartFromNow,
 	findAdjacentAfter,
 	findAdjacentBefore,
+	mergeOverlapping,
 } from "./trimActions";
+import type { TrimRegion } from "./types";
 
 const trim = (id: string, startMs: number, endMs: number): TrimRegion => ({
 	id,
@@ -49,11 +50,7 @@ describe("computeEndFromNow", () => {
 
 describe("findAdjacentBefore", () => {
 	it("finds the closest preceding trim", () => {
-		const regions = [
-			trim("t1", 1000, 3000),
-			trim("t2", 5000, 8000),
-			trim("t3", 10000, 15000),
-		];
+		const regions = [trim("t1", 1000, 3000), trim("t2", 5000, 8000), trim("t3", 10000, 15000)];
 		const result = findAdjacentBefore("t3", regions);
 		expect(result?.id).toBe("t2");
 	});
@@ -93,11 +90,7 @@ describe("findAdjacentBefore", () => {
 
 describe("findAdjacentAfter", () => {
 	it("finds the closest following trim", () => {
-		const regions = [
-			trim("t1", 1000, 3000),
-			trim("t2", 5000, 8000),
-			trim("t3", 10000, 15000),
-		];
+		const regions = [trim("t1", 1000, 3000), trim("t2", 5000, 8000), trim("t3", 10000, 15000)];
 		const result = findAdjacentAfter("t1", regions);
 		expect(result?.id).toBe("t2");
 	});
@@ -123,6 +116,57 @@ describe("findAdjacentAfter", () => {
 		const regions = [trim("t1", 1000, 3000)];
 		const result = findAdjacentAfter("missing", regions);
 		expect(result).toBeNull();
+	});
+});
+
+describe("mergeOverlapping", () => {
+	it("merges a fully encompassed trim", () => {
+		const _regions = [trim("t1", 30000, 60000), trim("t2", 70000, 90000)];
+		// t1 extended to 100000, encompassing t2
+		const extended = [trim("t1", 30000, 100000), trim("t2", 70000, 90000)];
+		const { merged, absorbedIds } = mergeOverlapping("t1", extended);
+		expect(absorbedIds).toEqual(["t2"]);
+		expect(merged).toEqual([{ id: "t1", startMs: 30000, endMs: 100000 }]);
+	});
+
+	it("merges a partially overlapping trim", () => {
+		const regions = [trim("t1", 30000, 80000), trim("t2", 70000, 120000)];
+		const { merged, absorbedIds } = mergeOverlapping("t1", regions);
+		expect(absorbedIds).toEqual(["t2"]);
+		expect(merged).toEqual([{ id: "t1", startMs: 30000, endMs: 120000 }]);
+	});
+
+	it("merges multiple overlapping trims", () => {
+		const regions = [trim("t1", 30000, 100000), trim("t2", 70000, 90000), trim("t3", 85000, 95000)];
+		const { merged, absorbedIds } = mergeOverlapping("t1", regions);
+		expect(absorbedIds).toEqual(["t2", "t3"]);
+		expect(merged).toEqual([{ id: "t1", startMs: 30000, endMs: 100000 }]);
+	});
+
+	it("returns unchanged when no overlaps", () => {
+		const regions = [trim("t1", 30000, 60000), trim("t2", 70000, 90000)];
+		const { merged, absorbedIds } = mergeOverlapping("t1", regions);
+		expect(absorbedIds).toEqual([]);
+		expect(merged).toBe(regions);
+	});
+
+	it("returns unchanged for missing target", () => {
+		const regions = [trim("t1", 30000, 60000)];
+		const { merged, absorbedIds } = mergeOverlapping("missing", regions);
+		expect(absorbedIds).toEqual([]);
+		expect(merged).toBe(regions);
+	});
+
+	it("extends target span when absorbed trim reaches further", () => {
+		const regions = [trim("t1", 30000, 80000), trim("t2", 60000, 120000)];
+		const { merged } = mergeOverlapping("t1", regions);
+		expect(merged[0]).toEqual({ id: "t1", startMs: 30000, endMs: 120000 });
+	});
+
+	it("extends target start when merging earlier trim", () => {
+		const regions = [trim("t1", 20000, 90000), trim("t2", 10000, 50000)];
+		const { merged } = mergeOverlapping("t1", regions);
+		expect(merged[0]).toEqual({ id: "t1", startMs: 10000, endMs: 90000 });
 	});
 });
 
