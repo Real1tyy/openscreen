@@ -65,6 +65,8 @@ fn main() {
             commands::cli::get_cli_input_file,
             commands::cli::get_cli_editor_config,
             commands::cli::get_headless_export_config,
+            // Dead Zone Detection
+            commands::dead_zone::detect_dead_zones,
             // NVENC Export
             commands::export::check_nvenc_available,
             commands::export::start_nvenc_export,

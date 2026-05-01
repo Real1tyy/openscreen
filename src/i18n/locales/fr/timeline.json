@@ -4,7 +4,8 @@
 		"suggestZooms": "Suggérer des zooms depuis le curseur",
 		"addTrim": "Ajouter une coupe (T)",
 		"addAnnotation": "Ajouter une annotation (A)",
-		"addSpeed": "Ajouter une vitesse (S)"
+		"addSpeed": "Ajouter une vitesse (S)",
+		"detectDeadZones": "Détecter les zones mortes"
 	},
 	"hints": {
 		"pressZoom": "Appuyez sur Z pour ajouter un zoom",
@@ -43,7 +44,15 @@
 		"trimExistsAtLocation": "Une coupe existe déjà à cet emplacement ou l'espace disponible est insuffisant.",
 		"cannotPlaceSpeed": "Impossible de placer la vitesse ici",
 		"speedExistsAtLocation": "Une région de vitesse existe déjà à cet emplacement ou l'espace disponible est insuffisant.",
-		"cannotPlaceInsideTrim": "Cannot place effects inside a trimmed region. The trimmed section will be removed on export."
+		"cannotPlaceInsideTrim": "Cannot place effects inside a trimmed region. The trimmed section will be removed on export.",
+		"deadZoneDesktopOnly": "La détection des zones mortes nécessite l'application de bureau"
+	},
+	"deadZone": {
+		"noDeadZones": "Aucune zone morte détectée",
+		"noDeadZonesDescription": "Aucun segment trouvé avec à la fois du silence et un écran statique.",
+		"allOverlap": "Toutes les zones mortes détectées chevauchent des coupes existantes",
+		"added": "{{count}} sur {{total}} zones mortes ajoutées comme coupes",
+		"failed": "La détection des zones mortes a échoué"
 	},
 	"success": {
 		"addedZoomSuggestions": "{{count}} suggestion de zoom basée sur le curseur ajoutée",

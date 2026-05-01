@@ -4,7 +4,8 @@
 		"suggestZooms": "İmleçten Yakınlaştırma Öner",
 		"addTrim": "Kırpma Ekle (T)",
 		"addAnnotation": "Açıklama Ekle (A)",
-		"addSpeed": "Hız Ekle (S)"
+		"addSpeed": "Hız Ekle (S)",
+		"detectDeadZones": "Ölü Bölgeleri Algıla"
 	},
 	"hints": {
 		"pressZoom": "Yakınlaştırma eklemek için Z tuşuna basın",
@@ -43,7 +44,15 @@
 		"trimExistsAtLocation": "Bu konumda zaten bir kırpma var veya yeterli alan yok.",
 		"cannotPlaceSpeed": "Buraya hız yerleştirilemiyor",
 		"speedExistsAtLocation": "Bu konumda zaten bir hız bölgesi var veya yeterli alan yok.",
-		"cannotPlaceInsideTrim": "Cannot place effects inside a trimmed region. The trimmed section will be removed on export."
+		"cannotPlaceInsideTrim": "Cannot place effects inside a trimmed region. The trimmed section will be removed on export.",
+		"deadZoneDesktopOnly": "Ölü bölge algılama masaüstü uygulaması gerektirir"
+	},
+	"deadZone": {
+		"noDeadZones": "Ölü bölge algılanmadı",
+		"noDeadZonesDescription": "Hem sessizlik hem de durağan ekran içeren segment bulunamadı.",
+		"allOverlap": "Algılanan tüm ölü bölgeler mevcut kırpmalarla çakışıyor",
+		"added": "{{total}} ölü bölgeden {{count}} tanesi kırpma olarak eklendi",
+		"failed": "Ölü bölge algılama başarısız oldu"
 	},
 	"success": {
 		"addedZoomSuggestions": "{{count}} imleç tabanlı yakınlaştırma önerisi eklendi",

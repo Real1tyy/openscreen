@@ -3,6 +3,7 @@
 		"addZoom": "Add Zoom (Z)",
 		"suggestZooms": "Suggest Zooms from Cursor",
 		"addTrim": "Add Trim (T)",
+		"detectDeadZones": "Detect Dead Zones",
 		"addAnnotation": "Add Annotation (A)",
 		"addSpeed": "Add Speed (S)"
 	},
@@ -27,7 +28,15 @@
 		"noVideo": "No Video Loaded",
 		"dragAndDrop": "Drag and drop a video to start editing"
 	},
+	"deadZone": {
+		"noDeadZones": "No dead zones detected",
+		"noDeadZonesDescription": "No segments found with both silence and a static screen.",
+		"allOverlap": "All detected dead zones overlap existing trims",
+		"added": "Added {{count}} of {{total}} dead zones as trims",
+		"failed": "Dead zone detection failed"
+	},
 	"errors": {
+		"deadZoneDesktopOnly": "Dead zone detection requires the desktop app",
 		"cannotPlaceZoom": "Cannot place zoom here",
 		"zoomExistsAtLocation": "Zoom already exists at this location or not enough space available.",
 		"zoomSuggestionUnavailable": "Zoom suggestion handler unavailable",

@@ -12,6 +12,7 @@ import {
 	Play,
 	Plus,
 	Repeat,
+	ScanSearch,
 	Scissors,
 	SkipBack,
 	SkipForward,
@@ -30,7 +31,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
+import { detectDeadZones } from "@/lib/deadZoneDetection";
 import { matchesShortcut } from "@/lib/shortcuts";
+import { isTauri } from "@/lib/tauriBridge";
 import { cn } from "@/lib/utils";
 import { type RegionType, useContextMenuStore } from "@/stores/useContextMenuStore";
 import { useEditorPreferencesStore } from "@/stores/useEditorPreferencesStore";
@@ -876,6 +879,7 @@ export default function TimelineEditor({
 		pan: "Scroll",
 		zoom: "Ctrl + Scroll",
 	});
+	const [isDetectingDeadZones, setIsDetectingDeadZones] = useState(false);
 	const timelineContainerRef = useRef<HTMLDivElement>(null);
 	const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 
@@ -1265,6 +1269,54 @@ export default function TimelineEditor({
 		t,
 	]);
 
+	const handleDetectDeadZones = useCallback(async () => {
+		if (!videoDuration || videoDuration === 0 || totalMs === 0) return;
+		if (!isTauri()) {
+			toast.error(t("errors.deadZoneDesktopOnly"));
+			return;
+		}
+		if (isDetectingDeadZones) return;
+
+		setIsDetectingDeadZones(true);
+		try {
+			const result = await detectDeadZones();
+			if (result.deadZones.length === 0) {
+				toast.info(t("deadZone.noDeadZones"), {
+					description: t("deadZone.noDeadZonesDescription"),
+				});
+				return;
+			}
+
+			let addedCount = 0;
+			for (const zone of result.deadZones) {
+				const hasOverlap = trimRegions.some(
+					(r) => zone.endMs > r.startMs && zone.startMs < r.endMs,
+				);
+				if (!hasOverlap) {
+					store.addTrim({ start: zone.startMs, end: zone.endMs });
+					addedCount++;
+				}
+			}
+
+			if (addedCount === 0) {
+				toast.info(t("deadZone.allOverlap"));
+			} else {
+				toast.success(
+					t("deadZone.added", {
+						count: String(addedCount),
+						total: String(result.deadZones.length),
+					}),
+				);
+			}
+		} catch (err) {
+			toast.error(t("deadZone.failed"), {
+				description: String(err),
+			});
+		} finally {
+			setIsDetectingDeadZones(false);
+		}
+	}, [videoDuration, totalMs, isDetectingDeadZones, trimRegions, store, t]);
+
 	const handleAddTrim = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0) {
 			return;
@@ -1652,6 +1704,18 @@ export default function TimelineEditor({
 					>
 						<Scissors className="w-4 h-4" />
 					</Button>
+					{isTauri() && (
+						<Button
+							onClick={handleDetectDeadZones}
+							variant="ghost"
+							size="icon"
+							className="h-7 w-7 text-slate-400 hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-all"
+							disabled={isDetectingDeadZones}
+							title={t("buttons.detectDeadZones")}
+						>
+							<ScanSearch className={cn("w-4 h-4", isDetectingDeadZones && "animate-pulse")} />
+						</Button>
+					)}
 					<Button
 						onClick={handleAddAnnotation}
 						variant="ghost"

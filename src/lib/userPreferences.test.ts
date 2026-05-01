@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadUserPreferences, saveUserPreferences } from "./userPreferences";
+import { DEFAULT_PREFS, loadUserPreferences, saveUserPreferences } from "./userPreferences";
 
 const PREFS_KEY = "openscreen_user_preferences";
 
@@ -10,17 +10,7 @@ describe("loadUserPreferences", () => {
 
 	it("returns defaults when nothing is stored", () => {
 		const prefs = loadUserPreferences();
-		expect(prefs).toEqual({
-			padding: 50,
-			aspectRatio: "16:9",
-			exportQuality: "good",
-			exportFormat: "mp4",
-			seekSmallSeconds: 10,
-			seekLargeSeconds: 60,
-			defaultZoomDurationMs: 5000,
-			defaultTrimDurationMs: 5000,
-			defaultSpeedDurationMs: 5000,
-		});
+		expect(prefs).toEqual(DEFAULT_PREFS);
 	});
 
 	it("loads valid stored preferences", () => {
