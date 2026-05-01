@@ -889,7 +889,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							}
 						: undefined;
 				const { region, strength, blendedScale, transition } = findDominantRegion(
-					zoomRegionsRef.current,
+					zoomRegionsRef.current.filter((r) => !r.disabled),
 					currentTimeRef.current,
 					{
 						connectZooms: true,
@@ -1119,7 +1119,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 			const activeSpeedRegion =
 				speedRegions.find(
-					(region) => currentTime * 1000 >= region.startMs && currentTime * 1000 < region.endMs,
+					(region) =>
+						!region.disabled &&
+						currentTime * 1000 >= region.startMs &&
+						currentTime * 1000 < region.endMs,
 				) ?? null;
 			webcamVideo.playbackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
 
@@ -1227,6 +1230,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		const visibleAnnotations = useMemo(() => {
 			const filtered = (annotationRegions || []).filter((annotation) => {
+				if (annotation.disabled) return false;
 				if (typeof annotation.startMs !== "number" || typeof annotation.endMs !== "number")
 					return false;
 				if (annotation.id === selectedAnnotationId) return true;

@@ -291,7 +291,12 @@ export default function VideoEditor() {
 	});
 
 	const effectiveDurationMs = useMemo(
-		() => computeEffectiveMs(Math.round(duration * 1000), trimRegions, speedRegions),
+		() =>
+			computeEffectiveMs(
+				Math.round(duration * 1000),
+				trimRegions.filter((r) => !r.disabled),
+				speedRegions.filter((r) => !r.disabled),
+			),
 		[duration, trimRegions, speedRegions],
 	);
 

@@ -36,6 +36,7 @@ export interface ZoomRegion {
 	customScale?: number;
 	focus: ZoomFocus;
 	focusMode?: ZoomFocusMode;
+	disabled: boolean;
 }
 
 export function getZoomScale(region: { depth: ZoomDepth; customScale?: number }): number {
@@ -55,6 +56,7 @@ export interface TrimRegion {
 	id: string;
 	startMs: number;
 	endMs: number;
+	disabled: boolean;
 }
 
 export interface ChapterMarker {
@@ -116,6 +118,7 @@ export interface AnnotationRegion {
 	style: AnnotationTextStyle;
 	zIndex: number;
 	figureData?: FigureData;
+	disabled: boolean;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
@@ -175,6 +178,7 @@ export interface SpeedRegion {
 	startMs: number;
 	endMs: number;
 	speed: PlaybackSpeed;
+	disabled: boolean;
 }
 
 export const SPEED_OPTIONS: Array<{ speed: PlaybackSpeed; label: string }> = [

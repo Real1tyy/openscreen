@@ -138,6 +138,15 @@
 	z-index: 10;
 }
 
+.disabled {
+	opacity: 0.35;
+	filter: saturate(0.3);
+}
+
+.disabled:hover {
+	opacity: 0.5;
+}
+
 .zoomEndCap {
 	position: absolute;
 	top: 0;

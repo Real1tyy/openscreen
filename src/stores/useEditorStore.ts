@@ -89,6 +89,7 @@ interface EditorActions {
 	setZoomFocusMode: (id: string, mode: ZoomFocusMode) => void;
 	setZoomCustomScale: (id: string, customScale: number | undefined) => void;
 	duplicateZoom: (id: string) => void;
+	toggleZoomDisabled: (id: string) => void;
 	deleteZoom: (id: string) => void;
 
 	// Trim
@@ -101,6 +102,7 @@ interface EditorActions {
 	setTrimStartFromAdjacent: (id: string) => void;
 	setTrimEndFromAdjacent: (id: string) => void;
 	duplicateTrim: (id: string) => void;
+	toggleTrimDisabled: (id: string) => void;
 	deleteTrim: (id: string) => void;
 
 	// Speed
@@ -109,6 +111,7 @@ interface EditorActions {
 	setSpeedSpan: (id: string, span: Span) => void;
 	setSpeed: (id: string, speed: PlaybackSpeed) => void;
 	duplicateSpeed: (id: string) => void;
+	toggleSpeedDisabled: (id: string) => void;
 	deleteSpeed: (id: string) => void;
 
 	// Annotation
@@ -122,6 +125,7 @@ interface EditorActions {
 	setAnnotationPosition: (id: string, position: { x: number; y: number }) => void;
 	setAnnotationSize: (id: string, size: { width: number; height: number }) => void;
 	duplicateAnnotation: (id: string) => void;
+	toggleAnnotationDisabled: (id: string) => void;
 	deleteAnnotation: (id: string) => void;
 
 	// Chapter
@@ -203,6 +207,7 @@ export const useEditorStore = create<EditorStore>()(
 						endMs: Math.round(span.end),
 						depth: DEFAULT_ZOOM_DEPTH,
 						focus: { cx: 0.5, cy: 0.5 },
+						disabled: false,
 					});
 				});
 				return id;
@@ -217,6 +222,7 @@ export const useEditorStore = create<EditorStore>()(
 						endMs: Math.round(span.end),
 						depth: DEFAULT_ZOOM_DEPTH,
 						focus: clampFocusToDepth(focus, DEFAULT_ZOOM_DEPTH),
+						disabled: false,
 					});
 				});
 				return id;
@@ -264,6 +270,11 @@ export const useEditorStore = create<EditorStore>()(
 						endMs: src.endMs + dur,
 					});
 				}),
+			toggleZoomDisabled: (id) =>
+				set((s) => {
+					const r = s.zoomRegions.find((z) => z.id === id);
+					if (r) r.disabled = !r.disabled;
+				}),
 			deleteZoom: (id) => {
 				set((s) => {
 					s.zoomRegions = s.zoomRegions.filter((r) => r.id !== id);
@@ -276,7 +287,12 @@ export const useEditorStore = create<EditorStore>()(
 				const id = `trim-${get()._nextIds.trim}`;
 				set((s) => {
 					s._nextIds.trim++;
-					s.trimRegions.push({ id, startMs: Math.round(span.start), endMs: Math.round(span.end) });
+					s.trimRegions.push({
+						id,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+						disabled: false,
+					});
 				});
 				const { merged, absorbedIds } = mergeOverlapping(id, get().trimRegions);
 				if (absorbedIds.length > 0) {
@@ -335,10 +351,16 @@ export const useEditorStore = create<EditorStore>()(
 					if (!src) return;
 					const dur = src.endMs - src.startMs;
 					s.trimRegions.push({
+						...src,
 						id: `trim-${s._nextIds.trim++}`,
 						startMs: src.endMs,
 						endMs: src.endMs + dur,
 					});
+				}),
+			toggleTrimDisabled: (id) =>
+				set((s) => {
+					const r = s.trimRegions.find((t) => t.id === id);
+					if (r) r.disabled = !r.disabled;
 				}),
 			deleteTrim: (id) => {
 				set((s) => {
@@ -357,6 +379,7 @@ export const useEditorStore = create<EditorStore>()(
 						startMs: Math.round(span.start),
 						endMs: Math.round(span.end),
 						speed: DEFAULT_PLAYBACK_SPEED,
+						disabled: false,
 					});
 				});
 				const { merged, absorbedIds } = mergeOverlappingSpeeds(id, get().speedRegions);
@@ -400,6 +423,11 @@ export const useEditorStore = create<EditorStore>()(
 						endMs: src.endMs + dur,
 					});
 				}),
+			toggleSpeedDisabled: (id) =>
+				set((s) => {
+					const r = s.speedRegions.find((sp) => sp.id === id);
+					if (r) r.disabled = !r.disabled;
+				}),
 			deleteSpeed: (id) => {
 				set((s) => {
 					s.speedRegions = s.speedRegions.filter((r) => r.id !== id);
@@ -429,6 +457,7 @@ export const useEditorStore = create<EditorStore>()(
 							backgroundColor: prefs.defaultAnnotationBgColor,
 						},
 						zIndex,
+						disabled: false,
 					});
 				});
 				return id;
@@ -494,6 +523,11 @@ export const useEditorStore = create<EditorStore>()(
 						startMs: src.endMs,
 						endMs: src.endMs + dur,
 					});
+				}),
+			toggleAnnotationDisabled: (id) =>
+				set((s) => {
+					const r = s.annotationRegions.find((a) => a.id === id);
+					if (r) r.disabled = !r.disabled;
 				}),
 			deleteAnnotation: (id) => {
 				set((s) => {

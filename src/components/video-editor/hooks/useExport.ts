@@ -220,13 +220,18 @@ export function useExport({
 
 				const resolvedWallpaper = await resolveWallpaperPath(wallpaper);
 
+				const enabledZoomRegions = zoomRegions.filter((r) => !r.disabled);
+				const enabledTrimRegions = trimRegions.filter((r) => !r.disabled);
+				const enabledSpeedRegions = speedRegions.filter((r) => !r.disabled);
+				const enabledAnnotationRegions = annotationRegions.filter((r) => !r.disabled);
+
 				const commonConfig = {
 					videoUrl: videoPath,
 					webcamVideoUrl: webcamVideoPath || undefined,
 					wallpaper: resolvedWallpaper,
-					zoomRegions,
-					trimRegions,
-					speedRegions,
+					zoomRegions: enabledZoomRegions,
+					trimRegions: enabledTrimRegions,
+					speedRegions: enabledSpeedRegions,
 					showShadow: shadowIntensity > 0,
 					shadowIntensity,
 					showBlur,
@@ -234,7 +239,7 @@ export function useExport({
 					borderRadius,
 					padding,
 					cropRegion,
-					annotationRegions,
+					annotationRegions: enabledAnnotationRegions,
 					webcamLayoutPreset,
 					webcamMaskShape,
 					webcamSizePreset,
@@ -356,8 +361,8 @@ export function useExport({
 								(data) => setUnsavedExport(data),
 								(msg) => setExportError(msg),
 								chapters,
-								trimRegions,
-								speedRegions,
+								enabledTrimRegions,
+								enabledSpeedRegions,
 							);
 						} else {
 							const baseError = result.error || "Export failed";

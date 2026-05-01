@@ -226,6 +226,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 							cy: clamp(isFiniteNumber(region.focus?.cy) ? region.focus.cy : 0.5, 0, 1),
 						},
 						focusMode: region.focusMode === "auto" ? "auto" : "manual",
+						disabled: region.disabled,
 					};
 				})
 		: [];
@@ -242,6 +243,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
+						disabled: region.disabled,
 					};
 				})
 		: [];
@@ -267,6 +269,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						startMs,
 						endMs,
 						speed,
+						disabled: region.disabled,
 					};
 				})
 		: [];
@@ -333,6 +336,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 									...region.figureData,
 								}
 							: undefined,
+						disabled: region.disabled,
 					};
 				})
 		: [];

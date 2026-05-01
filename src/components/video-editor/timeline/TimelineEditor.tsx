@@ -6,6 +6,8 @@ import {
 	Clock,
 	Copy,
 	Crosshair,
+	Eye,
+	EyeOff,
 	Gauge,
 	LocateFixed,
 	MessageSquare,
@@ -91,6 +93,7 @@ interface TimelineRenderItem {
 	zoomDepth?: number;
 	speedValue?: number;
 	variant: "zoom" | "trim" | "annotation" | "speed";
+	disabled?: boolean;
 }
 
 function PlaybackCursor({
@@ -376,8 +379,10 @@ function TrimContextMenuItems({
 	onPlayFromEnd,
 	onToggleLoop,
 	onDuplicate,
+	onToggleDisabled,
 	onDelete,
 	isLooping,
+	isDisabled,
 	hasAdjacentBefore,
 	hasAdjacentAfter,
 }: {
@@ -391,8 +396,10 @@ function TrimContextMenuItems({
 	onPlayFromEnd?: (id: string) => void;
 	onToggleLoop?: (id: string) => void;
 	onDuplicate?: (id: string) => void;
+	onToggleDisabled?: (id: string) => void;
 	onDelete?: (id: string) => void;
 	isLooping: boolean;
+	isDisabled: boolean;
 	hasAdjacentBefore: boolean;
 	hasAdjacentAfter: boolean;
 }) {
@@ -455,6 +462,11 @@ function TrimContextMenuItems({
 			)}
 			<div className="h-[1px] bg-white/5 my-1" />
 			{item("Duplicate", <Copy className="w-3.5 h-3.5" />, () => onDuplicate?.(trimId))}
+			{item(
+				isDisabled ? "Enable" : "Disable",
+				isDisabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />,
+				() => onToggleDisabled?.(trimId),
+			)}
 			<div className="h-[1px] bg-white/5 my-1" />
 			{item(
 				"Delete trim",
@@ -525,7 +537,9 @@ function RegionContextMenuItems({
 	onSetStartToNow,
 	onSetEndToNow,
 	onDuplicate,
+	onToggleDisabled,
 	onDelete,
+	isDisabled,
 }: {
 	regionType: RegionType;
 	regionId: string;
@@ -533,7 +547,9 @@ function RegionContextMenuItems({
 	onSetStartToNow?: (id: string) => void;
 	onSetEndToNow?: (id: string) => void;
 	onDuplicate?: (id: string) => void;
+	onToggleDisabled?: (id: string) => void;
 	onDelete?: (id: string) => void;
+	isDisabled: boolean;
 }) {
 	const item = (label: string, icon: React.ReactNode, onClick: () => void, accent?: string) => (
 		<button
@@ -562,6 +578,11 @@ function RegionContextMenuItems({
 			{item("Set end to now", <Clock className="w-3.5 h-3.5" />, () => onSetEndToNow?.(regionId))}
 			<div className="h-[1px] bg-white/5 my-1" />
 			{item("Duplicate", <Copy className="w-3.5 h-3.5" />, () => onDuplicate?.(regionId))}
+			{item(
+				isDisabled ? "Enable" : "Disable",
+				isDisabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />,
+				() => onToggleDisabled?.(regionId),
+			)}
 			<div className="h-[1px] bg-white/5 my-1" />
 			{item(
 				`Delete ${regionType}`,
@@ -754,6 +775,7 @@ function Timeline({
 					rowId={item.rowId}
 					span={item.span}
 					isSelected={item.id === selectedId}
+					isDisabled={item.disabled}
 					onSelect={() => onSelect?.(item.id)}
 					variant={item.variant}
 					zoomDepth={item.zoomDepth}
@@ -782,6 +804,7 @@ function Timeline({
 					rowId={item.rowId}
 					span={item.span}
 					isSelected={item.id === selectedTrimId}
+					isDisabled={item.disabled}
 					onSelect={() => onSelectTrim?.(item.id)}
 					variant="trim"
 					onContextMenu={(e) => {
@@ -1009,6 +1032,15 @@ export default function TimelineEditor({
 		[ctxMenu.regionType, store],
 	);
 
+	const handleCtxToggleDisabled = useCallback(
+		(id: string) => {
+			if (ctxMenu.regionType === "zoom") store.toggleZoomDisabled(id);
+			else if (ctxMenu.regionType === "speed") store.toggleSpeedDisabled(id);
+			else if (ctxMenu.regionType === "annotation") store.toggleAnnotationDisabled(id);
+		},
+		[ctxMenu.regionType, store],
+	);
+
 	// Delete selected zoom item
 	const deleteSelectedZoom = useCallback(() => {
 		if (!selectedZoomId) return;
@@ -1136,7 +1168,7 @@ export default function TimelineEditor({
 
 	const isInsideTrimRegion = useCallback(
 		(posMs: number): boolean => {
-			return trimRegions.some((t) => posMs >= t.startMs && posMs < t.endMs);
+			return trimRegions.some((t) => !t.disabled && posMs >= t.startMs && posMs < t.endMs);
 		},
 		[trimRegions],
 	);
@@ -1614,6 +1646,7 @@ export default function TimelineEditor({
 			label: t("labels.zoomItem", { index: String(index + 1) }),
 			zoomDepth: region.depth,
 			variant: "zoom",
+			disabled: region.disabled,
 		}));
 
 		const trims: TimelineRenderItem[] = trimRegions.map((region, index) => ({
@@ -1622,6 +1655,7 @@ export default function TimelineEditor({
 			span: { start: region.startMs, end: region.endMs },
 			label: t("labels.trimItem", { index: String(index + 1) }),
 			variant: "trim",
+			disabled: region.disabled,
 		}));
 
 		const annotations: TimelineRenderItem[] = annotationRegions.map((region) => {
@@ -1643,6 +1677,7 @@ export default function TimelineEditor({
 				span: { start: region.startMs, end: region.endMs },
 				label,
 				variant: "annotation",
+				disabled: region.disabled,
 			};
 		});
 
@@ -1653,6 +1688,7 @@ export default function TimelineEditor({
 			label: t("labels.speedItem", { index: String(index + 1) }),
 			speedValue: region.speed,
 			variant: "speed",
+			disabled: region.disabled,
 		}));
 
 		return [...zooms, ...trims, ...annotations, ...speeds];
@@ -1914,8 +1950,10 @@ export default function TimelineEditor({
 						onPlayFromEnd={onTrimPlayFromEnd}
 						onToggleLoop={onTrimToggleLoop}
 						onDuplicate={store.duplicateTrim}
+						onToggleDisabled={store.toggleTrimDisabled}
 						onDelete={store.deleteTrim}
 						isLooping={loopingTrimId === ctxMenu.regionId}
+						isDisabled={trimRegions.find((r) => r.id === ctxMenu.regionId)?.disabled ?? false}
 						hasAdjacentBefore={trimRegions.some(
 							(r) =>
 								r.id !== ctxMenu.regionId &&
@@ -1941,7 +1979,9 @@ export default function TimelineEditor({
 						onSetStartToNow={handleCtxSetStartToNow}
 						onSetEndToNow={handleCtxSetEndToNow}
 						onDuplicate={handleCtxDuplicate}
+						onToggleDisabled={handleCtxToggleDisabled}
 						onDelete={handleCtxDelete}
+						isDisabled={findRegion(ctxMenu.regionType, ctxMenu.regionId)?.disabled ?? false}
 					/>
 				</ContextMenuPopover>
 			)}

@@ -12,6 +12,7 @@ interface ItemProps {
 	rowId: string;
 	children: React.ReactNode;
 	isSelected?: boolean;
+	isDisabled?: boolean;
 	onSelect?: () => void;
 	zoomDepth?: number;
 	speedValue?: number;
@@ -37,6 +38,7 @@ export default function Item({
 	span,
 	rowId,
 	isSelected = false,
+	isDisabled = false,
 	onSelect,
 	zoomDepth = 1,
 	speedValue,
@@ -100,6 +102,7 @@ export default function Item({
 						glassClass,
 						"w-full h-full overflow-hidden flex items-center justify-center gap-1.5 cursor-grab active:cursor-grabbing relative",
 						isSelected && glassStyles.selected,
+						isDisabled && glassStyles.disabled,
 					)}
 					style={{ height: 40, color: "#fff", minWidth: 24 }}
 					onClick={(event) => {

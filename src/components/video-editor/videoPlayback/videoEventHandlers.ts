@@ -42,7 +42,8 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 		const trimRegions = trimRegionsRef.current;
 		return (
 			trimRegions.find(
-				(region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
+				(region) =>
+					!region.disabled && currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
 			) || null
 		);
 	};
@@ -51,7 +52,8 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 	const findActiveSpeedRegion = (currentTimeMs: number): SpeedRegion | null => {
 		return (
 			speedRegionsRef.current.find(
-				(region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
+				(region) =>
+					!region.disabled && currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
 			) || null
 		);
 	};
