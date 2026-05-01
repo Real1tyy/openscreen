@@ -278,12 +278,24 @@ export const useEditorStore = create<EditorStore>()(
 					s._nextIds.trim++;
 					s.trimRegions.push({ id, startMs: Math.round(span.start), endMs: Math.round(span.end) });
 				});
+				const { merged, absorbedIds } = mergeOverlapping(id, get().trimRegions);
+				if (absorbedIds.length > 0) {
+					set({ trimRegions: merged });
+					for (const aid of absorbedIds) clearSelectionIf("Trim", aid);
+				}
 				return id;
 			},
 			addAndSelectTrim: (span) => {
 				sel().selectTrim(get().addTrim(span));
 			},
-			setTrimSpan: (id, span) => set({ trimRegions: setSpan(get().trimRegions, id, span) }),
+			setTrimSpan: (id, span) => {
+				set({ trimRegions: setSpan(get().trimRegions, id, span) });
+				const { merged, absorbedIds } = mergeOverlapping(id, get().trimRegions);
+				if (absorbedIds.length > 0) {
+					set({ trimRegions: merged });
+					for (const aid of absorbedIds) clearSelectionIf("Trim", aid);
+				}
+			},
 			setTrimField: (id, updater) =>
 				set((s) => {
 					const r = s.trimRegions.find((t) => t.id === id);
@@ -293,21 +305,11 @@ export const useEditorStore = create<EditorStore>()(
 				const r = get().trimRegions.find((t) => t.id === id);
 				if (!r || nowMs >= r.endMs) return;
 				get().setTrimSpan(id, { start: nowMs, end: r.endMs });
-				const { merged, absorbedIds } = mergeOverlapping(id, get().trimRegions);
-				if (absorbedIds.length > 0) {
-					set({ trimRegions: merged });
-					for (const aid of absorbedIds) clearSelectionIf("Trim", aid);
-				}
 			},
 			setTrimEndToNow: (id, nowMs) => {
 				const r = get().trimRegions.find((t) => t.id === id);
 				if (!r || nowMs <= r.startMs) return;
 				get().setTrimSpan(id, { start: r.startMs, end: nowMs });
-				const { merged, absorbedIds } = mergeOverlapping(id, get().trimRegions);
-				if (absorbedIds.length > 0) {
-					set({ trimRegions: merged });
-					for (const aid of absorbedIds) clearSelectionIf("Trim", aid);
-				}
 			},
 			setTrimStartFromAdjacent: (id) => {
 				const { trimRegions: regions } = get();
