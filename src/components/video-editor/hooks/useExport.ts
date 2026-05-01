@@ -96,6 +96,7 @@ export function useExport({
 	const [exportError, setExportError] = useState<string | null>(null);
 	const [showExportDialog, setShowExportDialog] = useState(false);
 	const [exportedFilePath, setExportedFilePath] = useState<string | null>(null);
+	const exportLockRef = useRef(false);
 	const [unsavedExport, setUnsavedExport] = useState<{
 		arrayBuffer: ArrayBuffer;
 		fileName: string;
@@ -174,6 +175,7 @@ export function useExport({
 
 	const handleExport = useCallback(
 		async (settings: ExportSettings) => {
+			if (exportLockRef.current) return;
 			if (!videoPath) {
 				toast.error("No video loaded");
 				return;
@@ -182,6 +184,17 @@ export function useExport({
 			if (!video) {
 				toast.error("Video not ready");
 				return;
+			}
+
+			exportLockRef.current = true;
+
+			// Prevent concurrent exports — if one is already running, cancel it first
+			if (exporterRef.current) {
+				console.warn("[Export] Cancelling previous export before starting new one");
+				exporterRef.current.cancel();
+				exporterRef.current = null;
+				// Small delay to let the previous export's cleanup complete
+				await new Promise((r) => setTimeout(r, 300));
 			}
 
 			setIsExporting(true);
@@ -365,6 +378,7 @@ export function useExport({
 				toast.error(`Export failed: ${msg}`);
 			} finally {
 				setIsExporting(false);
+				exportLockRef.current = false;
 				exporterRef.current = null;
 				setShowExportDialog(false);
 				setExportProgress(null);
@@ -399,6 +413,7 @@ export function useExport({
 	);
 
 	const handleOpenExportDialog = useCallback(() => {
+		if (isExporting) return;
 		if (!videoPath) {
 			toast.error("No video loaded");
 			return;
@@ -453,6 +468,7 @@ export function useExport({
 		cropRegion,
 		handleExport,
 		videoPlaybackRef,
+		isExporting,
 	]);
 
 	const handleCancelExport = useCallback(() => {
@@ -461,6 +477,7 @@ export function useExport({
 			toast.info("Export canceled");
 			setShowExportDialog(false);
 			setIsExporting(false);
+			exportLockRef.current = false;
 			setExportProgress(null);
 			setExportError(null);
 			setExportedFilePath(null);

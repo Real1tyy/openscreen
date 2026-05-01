@@ -151,7 +151,6 @@ export class FrameRenderer {
 				canvas.colorSpace = "srgb";
 			}
 		} catch (error) {
-			// Silently ignore colorSpace errors on platforms that don't support it
 			console.warn("[FrameRenderer] colorSpace not supported on this platform:", error);
 		}
 
@@ -175,14 +174,6 @@ export class FrameRenderer {
 
 		// Setup background (render separately, not in PixiJS)
 		await this.setupBackground();
-
-		// Setup blur filter for video container
-		this.blurFilter = new BlurFilter();
-		this.blurFilter.quality = 5;
-		this.blurFilter.resolution = this.app.renderer.resolution;
-		this.blurFilter.blur = 0;
-		this.motionBlurFilter = new MotionBlurFilter([0, 0], 5, 0);
-		this.videoContainer.filters = [this.blurFilter, this.motionBlurFilter];
 
 		// Setup composite canvas for final output with shadows
 		this.compositeCanvas = document.createElement("canvas");
@@ -223,15 +214,70 @@ export class FrameRenderer {
 		this.videoContainer.addChild(this.maskGraphics);
 		this.videoContainer.mask = this.maskGraphics;
 
-		// Probe whether drawImage(webglCanvas) works on this platform.
-		// On Linux/Wayland with EGL/Ozone, it can produce green/empty frames.
-		// We test once here and use readPixels fallback only when needed.
+		// Probe whether drawImage(webglCanvas) works on this platform BEFORE
+		// attaching filters — the probe render must not involve the filter system.
 		this.needsReadPixelsFallback = this.probeGpuReadbackBroken();
 		if (this.needsReadPixelsFallback) {
 			console.warn("[FrameRenderer] GPU→2D drawImage path broken, using readPixels fallback");
 		} else {
 			console.log("[FrameRenderer] GPU→2D drawImage path works, using fast composite path");
 		}
+
+		// Setup filters AFTER the probe render to avoid uninitialized filter resources.
+		// Only attach filters when motion blur is configured — no-op filters with zero
+		// settings cause PixiJS to skip GPU resource allocation, and when motion later
+		// triggers non-zero values the filter system crashes on null resources.
+		const useMotionBlur = (this.config.motionBlurAmount ?? 0) > 0;
+		if (useMotionBlur) {
+			this.blurFilter = new BlurFilter();
+			this.blurFilter.quality = 5;
+			this.blurFilter.resolution = this.app.renderer.resolution;
+			this.blurFilter.blur = 0;
+			this.motionBlurFilter = new MotionBlurFilter([0, 0], 5, 0);
+			this.videoContainer.filters = [this.blurFilter, this.motionBlurFilter];
+
+			// Force filter GPU resource allocation by rendering with non-zero settings.
+			// PixiJS 8 lazily allocates filter resources on first non-trivial render —
+			// without this warm-up, the first frame with actual motion crashes.
+			this.warmUpFilters();
+		}
+
+		console.log(
+			`[FrameRenderer] Initialized: ${this.config.width}x${this.config.height}, motionBlur=${useMotionBlur}`,
+		);
+	}
+
+	private warmUpFilters(): void {
+		if (!this.app || !this.videoContainer || !this.blurFilter || !this.motionBlurFilter) return;
+
+		// Temporarily add a visible sprite so the filter system actually processes content
+		const warmupGraphic = new Graphics();
+		warmupGraphic.rect(0, 0, this.config.width, this.config.height);
+		warmupGraphic.fill({ color: 0xff0000, alpha: 0.01 });
+		this.videoContainer.addChild(warmupGraphic);
+
+		// Temporarily unmask so the warm-up content is visible to the filter
+		const prevMask = this.videoContainer.mask;
+		this.videoContainer.mask = null;
+
+		// Set non-zero filter values to force GPU resource allocation
+		this.blurFilter.blur = 1;
+		this.motionBlurFilter.velocity = { x: 1, y: 0 };
+		this.motionBlurFilter.kernelSize = 5;
+
+		try {
+			this.app.renderer.render(this.app.stage);
+			console.log("[FrameRenderer] Filter warm-up render succeeded");
+		} catch (err) {
+			console.error("[FrameRenderer] Filter warm-up render failed:", err);
+		}
+
+		// Reset to zero-effect state
+		this.blurFilter.blur = 0;
+		this.motionBlurFilter.velocity = { x: 0, y: 0 };
+		this.videoContainer.mask = prevMask;
+		this.videoContainer.removeChild(warmupGraphic);
+		warmupGraphic.destroy();
 	}
 
 	private probeGpuReadbackBroken(): boolean {
@@ -410,17 +456,20 @@ export class FrameRenderer {
 
 		this.currentVideoTime = timestamp / 1000000;
 
-		// Create or update video sprite from VideoFrame
+		// Create or update video sprite from VideoFrame.
+		// Old texture destruction is deferred until after render() so that
+		// the FilterSystem's BindGroup has already rebound to the new source
+		// (destroying a source while the BindGroup still listens to it nukes
+		// its resources map, causing "null is not an object" in setResource).
+		let oldTexture: Texture | null = null;
 		if (!this.videoSprite) {
 			const texture = Texture.from(videoFrame as unknown as TextureSourceLike);
 			this.videoSprite = new Sprite(texture);
 			this.videoContainer.addChild(this.videoSprite);
 		} else {
-			// Destroy old texture to avoid memory leaks, then create new one
-			const oldTexture = this.videoSprite.texture;
+			oldTexture = this.videoSprite.texture;
 			const newTexture = Texture.from(videoFrame as unknown as TextureSourceLike);
 			this.videoSprite.texture = newTexture;
-			oldTexture.destroy(true);
 		}
 
 		// Apply layout
@@ -458,8 +507,13 @@ export class FrameRenderer {
 			frameTimeMs: timeMs,
 		});
 
-		// Render the PixiJS stage to its canvas (video only, transparent background)
+		// Render the PixiJS stage to its canvas (video only, transparent background).
 		this.app.renderer.render(this.app.stage);
+
+		// Now safe to destroy old texture — the FilterSystem has rebound to the new source
+		if (oldTexture) {
+			oldTexture.destroy(true);
+		}
 
 		// Composite with shadows to final output canvas
 		this.compositeWithShadows(webcamFrame);
