@@ -3,6 +3,7 @@ import { clamp } from "@/lib/mathUtils";
 import { ASPECT_RATIOS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import {
 	type AnnotationRegion,
+	type ChapterMarker,
 	type CropRegion,
 	clampPlaybackSpeed,
 	DEFAULT_ANNOTATION_POSITION,
@@ -78,6 +79,7 @@ export interface ProjectEditorState {
 	trimRegions: TrimRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
+	chapters: ChapterMarker[];
 	aspectRatio: AspectRatio;
 	webcamLayoutPreset: WebcamLayoutPreset;
 	webcamMaskShape: WebcamMaskShape;
@@ -335,6 +337,23 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				})
 		: [];
 
+	const normalizedChapters: ChapterMarker[] = Array.isArray(editor.chapters)
+		? editor.chapters
+				.filter((ch): ch is ChapterMarker => Boolean(ch && typeof ch.id === "string"))
+				.map((ch) => {
+					const rawStart = isFiniteNumber(ch.startMs) ? Math.round(ch.startMs) : 0;
+					const rawEnd = isFiniteNumber(ch.endMs) ? Math.round(ch.endMs) : rawStart + 1000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+					return {
+						id: ch.id,
+						startMs,
+						endMs,
+						name: typeof ch.name === "string" ? ch.name : "",
+					};
+				})
+		: [];
+
 	const rawCropX = isFiniteNumber(editor.cropRegion?.x)
 		? editor.cropRegion.x
 		: DEFAULT_CROP_REGION.x;
@@ -376,6 +395,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		trimRegions: normalizedTrimRegions,
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,
+		chapters: normalizedChapters,
 		aspectRatio:
 			editor.aspectRatio && validAspectRatios.has(editor.aspectRatio) ? editor.aspectRatio : "16:9",
 		webcamLayoutPreset:

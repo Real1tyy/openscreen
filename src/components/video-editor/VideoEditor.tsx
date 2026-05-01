@@ -45,6 +45,7 @@ import {
 	fromFileUrl,
 	hasProjectUnsavedChanges,
 	normalizeProjectEditor,
+	type ProjectEditorState,
 	type ProjectMedia,
 	resolveProjectMedia,
 	toFileUrl,
@@ -178,6 +179,19 @@ export default function VideoEditor() {
 	const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
 	const [gifLoop, setGifLoop] = useState(true);
 	const [gifSizePreset, setGifSizePreset] = useState<GifSizePreset>("medium");
+
+	const projectEditorState: ProjectEditorState = useMemo(
+		() => ({
+			...editorState,
+			exportQuality,
+			exportFormat,
+			gifFrameRate,
+			gifLoop,
+			gifSizePreset,
+		}),
+		[editorState, exportQuality, exportFormat, gifFrameRate, gifLoop, gifSizePreset],
+	);
+
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
 	const [isFullscreen, setIsFullscreen] = useState(false);
 	const [showPreferences, setShowPreferences] = useState(false);
@@ -353,51 +367,8 @@ export default function VideoEditor() {
 		if (!currentProjectMedia) {
 			return null;
 		}
-		return createProjectSnapshot(currentProjectMedia, {
-			wallpaper,
-			shadowIntensity,
-			showBlur,
-			motionBlurAmount,
-			borderRadius,
-			padding,
-			cropRegion,
-			zoomRegions,
-			trimRegions,
-			speedRegions,
-			annotationRegions,
-			aspectRatio,
-			webcamLayoutPreset,
-			webcamMaskShape,
-			webcamPosition,
-			exportQuality,
-			exportFormat,
-			gifFrameRate,
-			gifLoop,
-			gifSizePreset,
-		});
-	}, [
-		currentProjectMedia,
-		wallpaper,
-		shadowIntensity,
-		showBlur,
-		motionBlurAmount,
-		borderRadius,
-		padding,
-		cropRegion,
-		zoomRegions,
-		trimRegions,
-		speedRegions,
-		annotationRegions,
-		aspectRatio,
-		webcamLayoutPreset,
-		webcamMaskShape,
-		webcamPosition,
-		exportQuality,
-		exportFormat,
-		gifFrameRate,
-		gifLoop,
-		gifSizePreset,
-	]);
+		return createProjectSnapshot(currentProjectMedia, projectEditorState);
+	}, [currentProjectMedia, projectEditorState]);
 
 	const hasUnsavedChanges = hasProjectUnsavedChanges(currentProjectSnapshot, lastSavedSnapshot);
 
@@ -497,29 +468,7 @@ export default function VideoEditor() {
 				return false;
 			}
 
-			const projectData = createProjectData(currentProjectMedia, {
-				wallpaper,
-				shadowIntensity,
-				showBlur,
-				motionBlurAmount,
-				borderRadius,
-				padding,
-				cropRegion,
-				zoomRegions,
-				trimRegions,
-				speedRegions,
-				annotationRegions,
-				aspectRatio,
-				webcamLayoutPreset,
-				webcamMaskShape,
-				webcamSizePreset,
-				webcamPosition,
-				exportQuality,
-				exportFormat,
-				gifFrameRate,
-				gifLoop,
-				gifSizePreset,
-			});
+			const projectData = createProjectData(currentProjectMedia, projectEditorState);
 
 			const fileNameBase =
 				currentProjectMedia.screenVideoPath
@@ -551,33 +500,7 @@ export default function VideoEditor() {
 			toast.success(t("project.savedTo", { path: result.path ?? "" }));
 			return true;
 		},
-		[
-			currentProjectMedia,
-			currentProjectPath,
-			wallpaper,
-			shadowIntensity,
-			showBlur,
-			motionBlurAmount,
-			borderRadius,
-			padding,
-			cropRegion,
-			zoomRegions,
-			trimRegions,
-			speedRegions,
-			annotationRegions,
-			aspectRatio,
-			webcamLayoutPreset,
-			webcamMaskShape,
-			webcamSizePreset,
-			webcamPosition,
-			exportQuality,
-			exportFormat,
-			gifFrameRate,
-			gifLoop,
-			gifSizePreset,
-			videoPath,
-			t,
-		],
+		[currentProjectMedia, currentProjectPath, projectEditorState, videoPath, t],
 	);
 
 	useEffect(() => {

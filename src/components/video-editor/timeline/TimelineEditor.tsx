@@ -1117,7 +1117,7 @@ export default function TimelineEditor({
 			}
 
 			if (isTrimItem) {
-				return checkOverlap(trimRegions);
+				return false;
 			}
 
 			if (isSpeedItem) {
