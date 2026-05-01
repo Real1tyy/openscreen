@@ -103,9 +103,6 @@ export class NvencVideoExporter {
 			});
 			await renderer.initialize();
 
-			// Resolve temp dir once instead of per-frame
-			const frameTempDir = await nvencAPI.getFrameTempDir();
-
 			const startResult = await nvencAPI.startNvencExport({
 				width: this.config.width,
 				height: this.config.height,
@@ -149,6 +146,15 @@ export class NvencVideoExporter {
 						})()
 					: null;
 
+			const canvas = renderer!.getCanvas();
+			const ctx = canvas.getContext("2d")!;
+			const frameW = canvas.width;
+			const frameH = canvas.height;
+
+			// Single reusable buffer — avoids per-frame 8 MB allocations that
+			// overwhelm GC during long exports and cause WebView OOM crashes.
+			const reusableBuffer = new Uint8Array(frameW * frameH * 4);
+
 			await decoder.decodeAll(
 				this.config.frameRate,
 				this.config.trimRegions,
@@ -158,27 +164,20 @@ export class NvencVideoExporter {
 					try {
 						if (this.cancelled) return;
 
-						webcamFrame = webcamFrameQueue
-							? await webcamFrameQueue.dequeue()
-							: null;
+						webcamFrame = webcamFrameQueue ? await webcamFrameQueue.dequeue() : null;
 						if (this.cancelled) return;
 
 						const sourceTimestampUs = sourceTimestampMs * 1000;
 						await renderer!.renderFrame(videoFrame, sourceTimestampUs, webcamFrame);
 
-						const canvas = renderer!.getCanvas();
-						const ctx = canvas.getContext("2d")!;
-						const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+						const imageData = ctx.getImageData(0, 0, frameW, frameH);
+						reusableBuffer.set(imageData.data);
 
-						const { writeFile } = await import("@tauri-apps/plugin-fs");
-						const framePath = `${frameTempDir}nvenc-frame-${frameIndex}.raw`;
-						await writeFile(framePath, new Uint8Array(imageData.data.buffer));
-
-						const result = await nvencAPI.feedFrame(
+						const result = await nvencAPI.feedFrameBinary(
 							sessionId!,
-							framePath,
-							canvas.width,
-							canvas.height,
+							reusableBuffer,
+							frameW,
+							frameH,
 							frameIndex % 150 === 0,
 						);
 
@@ -219,10 +218,10 @@ export class NvencVideoExporter {
 			});
 
 			const finishResult = await nvencAPI.finishExport(
-					sessionId,
-					this.config.trimRegions,
-					this.config.speedRegions,
-				);
+				sessionId,
+				this.config.trimRegions,
+				this.config.speedRegions,
+			);
 			sessionId = null;
 
 			if (!finishResult.success) {
@@ -246,8 +245,16 @@ export class NvencVideoExporter {
 			console.error("[NvencExporter] Export failed:", message);
 			return { success: false, error: message };
 		} finally {
-			try { renderer?.destroy(); } catch (e) { console.warn("[NvencExporter] Renderer cleanup error (non-fatal):", e); }
-			try { decoder.destroy(); } catch (e) { console.warn("[NvencExporter] Decoder cleanup error:", e); }
+			try {
+				renderer?.destroy();
+			} catch (e) {
+				console.warn("[NvencExporter] Renderer cleanup error (non-fatal):", e);
+			}
+			try {
+				decoder.destroy();
+			} catch (e) {
+				console.warn("[NvencExporter] Decoder cleanup error:", e);
+			}
 			webcamFrameQueue?.destroy();
 			webcamDecoder?.cancel();
 		}

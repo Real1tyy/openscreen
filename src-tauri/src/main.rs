@@ -87,6 +87,7 @@ fn main() {
             commands::export::check_nvenc_available,
             commands::export::start_nvenc_export,
             commands::export::feed_frame,
+            commands::export::feed_frame_binary,
             commands::export::finish_export,
             commands::export::cancel_export,
             commands::export::get_frame_temp_dir,

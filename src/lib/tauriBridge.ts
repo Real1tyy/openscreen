@@ -216,6 +216,13 @@ export interface NvencExportAPI {
 		height: number,
 		isKeyframe: boolean,
 	) => Promise<{ success: boolean; frameCount: number; error?: string }>;
+	feedFrameBinary: (
+		sessionId: string,
+		rgbaData: Uint8Array,
+		width: number,
+		height: number,
+		isKeyframe: boolean,
+	) => Promise<{ success: boolean; frameCount: number; error?: string }>;
 	finishExport: (
 		sessionId: string,
 		trimRegions?: Array<{ id: string; startMs: number; endMs: number }>,
@@ -237,6 +244,15 @@ export function getNvencAPI(): NvencExportAPI | null {
 		startNvencExport: (config) => invoke("start_nvenc_export", { config }),
 		feedFrame: (sessionId, framePath, width, height, isKeyframe) =>
 			invoke("feed_frame", { sessionId, framePath, width, height, isKeyframe }),
+		feedFrameBinary: (sessionId, rgbaData, width, height, isKeyframe) =>
+			invoke("feed_frame_binary", rgbaData, {
+				headers: {
+					"x-session-id": sessionId,
+					"x-width": String(width),
+					"x-height": String(height),
+					"x-keyframe": isKeyframe ? "1" : "0",
+				},
+			}),
 		finishExport: (sessionId, trimRegions, speedRegions) =>
 			invoke("finish_export", {
 				sessionId,

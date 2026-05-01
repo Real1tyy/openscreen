@@ -180,7 +180,7 @@ export class FrameRenderer {
 		this.compositeCanvas.width = this.config.width;
 		this.compositeCanvas.height = this.config.height;
 		this.compositeCtx = this.compositeCanvas.getContext("2d", {
-			willReadFrequently: false,
+			willReadFrequently: true,
 		});
 
 		if (!this.compositeCtx) {

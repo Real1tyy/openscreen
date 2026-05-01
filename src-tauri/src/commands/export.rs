@@ -151,6 +151,86 @@ pub fn feed_frame(
     }
 }
 
+/// Accepts raw RGBA bytes via Tauri's binary IPC (no JSON serialization).
+/// Frame metadata is passed via IPC headers to avoid encoding overhead.
+#[tauri::command]
+pub fn feed_frame_binary(
+    request: tauri::ipc::Request,
+    export_state: tauri::State<'_, Mutex<ExportState>>,
+) -> FrameResult {
+    let headers = request.headers();
+
+    let session_id = match headers.get("x-session-id").and_then(|v| v.to_str().ok()) {
+        Some(id) => id.to_string(),
+        None => {
+            return FrameResult {
+                success: false,
+                frame_count: 0,
+                error: Some("Missing x-session-id header".to_string()),
+            }
+        }
+    };
+
+    let width: u32 = headers
+        .get("x-width")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let height: u32 = headers
+        .get("x-height")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let is_keyframe: bool = headers
+        .get("x-keyframe")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v == "1")
+        .unwrap_or(false);
+
+    let rgba_data = match request.body() {
+        tauri::ipc::InvokeBody::Raw(data) => data.clone(),
+        _ => {
+            return FrameResult {
+                success: false,
+                frame_count: 0,
+                error: Some("Expected raw binary body".to_string()),
+            }
+        }
+    };
+
+    if width == 0 || height == 0 {
+        return FrameResult {
+            success: false,
+            frame_count: 0,
+            error: Some("Missing or invalid x-width/x-height headers".to_string()),
+        };
+    }
+
+    let state = export_state.lock().unwrap();
+    let pipeline = match state.sessions.get(&session_id) {
+        Some(p) => p,
+        None => {
+            return FrameResult {
+                success: false,
+                frame_count: 0,
+                error: Some("Invalid session ID".to_string()),
+            }
+        }
+    };
+
+    match pipeline.send_frame(rgba_data, width, height, is_keyframe) {
+        Ok(count) => FrameResult {
+            success: true,
+            frame_count: count,
+            error: None,
+        },
+        Err(e) => FrameResult {
+            success: false,
+            frame_count: pipeline.frame_count(),
+            error: Some(e),
+        },
+    }
+}
 
 #[tauri::command]
 pub fn finish_export(

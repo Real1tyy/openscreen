@@ -1,8 +1,10 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(rtk grep *)",
-      "Bash(rtk vitest *)"
-    ]
-  }
+	"permissions": {
+		"allow": [
+			"Bash(rtk grep *)",
+			"Bash(rtk vitest *)",
+			"Bash(./node_modules/.bin/biome check *)",
+			"Bash(rtk tsc *)"
+		]
+	}
 }
